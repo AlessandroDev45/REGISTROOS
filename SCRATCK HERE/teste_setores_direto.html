@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Direto - Setores</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .section {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        select {
+            margin: 10px 0;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 300px;
+        }
+        
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Teste Direto - Dropdowns de Setores</h1>
+        
+        <div class="section info">
+            <h2>🎯 Simulação de Dropdown</h2>
+            <p>Este teste simula exatamente como os dropdowns deveriam funcionar no frontend React.</p>
+            
+            <label for="departamento">Departamento:</label>
+            <select id="departamento" onchange="loadSetoresPorDepartamento()">
+                <option value="">Selecione um departamento</option>
+                <option value="MOTORES">MOTORES</option>
+                <option value="TRANSFORMADORES">TRANSFORMADORES</option>
+            </select>
+            
+            <label for="setor">Setor:</label>
+            <select id="setor" disabled>
+                <option value="">Selecione um departamento primeiro</option>
+            </select>
+            
+            <div id="debug-info"></div>
+        </div>
+        
+        <div class="section">
+            <h2>📊 Dados Carregados</h2>
+            <button onclick="loadAllSetores()">🔄 Carregar Todos os Setores</button>
+            <div id="all-setores-result"></div>
+        </div>
+        
+        <div class="section">
+            <h2>🧪 Teste de Filtragem</h2>
+            <div id="filter-test-result"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api/admin';
+        let allSetores = [];
+        
+        async function loadAllSetores() {
+            const resultEl = document.getElementById('all-setores-result');
+            resultEl.innerHTML = '<p>⏳ Carregando setores...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/setores/`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const setores = await response.json();
+                allSetores = setores;
+                
+                // Agrupar por departamento
+                const setoresPorDept = {};
+                setores.forEach(setor => {
+                    const dept = setor.departamento || 'SEM_DEPARTAMENTO';
+                    if (!setoresPorDept[dept]) {
+                        setoresPorDept[dept] = [];
+                    }
+                    setoresPorDept[dept].push(setor);
+                });
+                
+                let html = `
+                    <div class="success">
+                        <h3>✅ Setores Carregados com Sucesso</h3>
+                        <p><strong>Total:</strong> ${setores.length} setores</p>
+                `;
+                
+                Object.entries(setoresPorDept).forEach(([dept, setoresDept]) => {
+                    const ativos = setoresDept.filter(s => s.ativo).length;
+                    html += `<p><strong>${dept}:</strong> ${setoresDept.length} total (${ativos} ativos)</p>`;
+                });
+                
+                html += `
+                        <h4>📋 Estrutura do primeiro setor:</h4>
+                        <pre>${JSON.stringify(setores[0], null, 2)}</pre>
+                    </div>
+                `;
+                
+                resultEl.innerHTML = html;
+                
+                // Testar filtragem
+                testFiltering();
+                
+            } catch (error) {
+                resultEl.innerHTML = `<div class="error"><h3>❌ Erro ao carregar setores</h3><p>${error.message}</p></div>`;
+            }
+        }
+        
+        async function loadSetoresPorDepartamento() {
+            const deptSelect = document.getElementById('departamento');
+            const setorSelect = document.getElementById('setor');
+            const debugInfo = document.getElementById('debug-info');
+            
+            const departamento = deptSelect.value;
+            
+            if (!departamento) {
+                setorSelect.disabled = true;
+                setorSelect.innerHTML = '<option value="">Selecione um departamento primeiro</option>';
+                debugInfo.innerHTML = '';
+                return;
+            }
+            
+            debugInfo.innerHTML = '<p>⏳ Carregando setores...</p>';
+            
+            try {
+                // Se ainda não carregamos todos os setores, carregar agora
+                if (allSetores.length === 0) {
+                    const response = await fetch(`${API_BASE}/setores/`);
+                    allSetores = await response.json();
+                }
+                
+                // Filtrar setores pelo departamento selecionado
+                const setoresFiltrados = allSetores.filter(setor => {
+                    const setorDept = setor.departamento?.trim();
+                    const formDept = departamento?.trim();
+                    return setorDept === formDept && setor.ativo;
+                });
+                
+                // Atualizar dropdown de setores
+                setorSelect.disabled = false;
+                setorSelect.innerHTML = '<option value="">Selecione um setor</option>';
+                
+                setoresFiltrados.forEach(setor => {
+                    const option = document.createElement('option');
+                    option.value = setor.nome;
+                    option.textContent = setor.nome;
+                    setorSelect.appendChild(option);
+                });
+                
+                // Mostrar informações de debug
+                debugInfo.innerHTML = `
+                    <div class="success">
+                        <h4>🔍 Debug da Filtragem</h4>
+                        <p><strong>Departamento selecionado:</strong> "${departamento}"</p>
+                        <p><strong>Setores encontrados:</strong> ${setoresFiltrados.length}</p>
+                        <p><strong>Setores ativos:</strong> ${setoresFiltrados.filter(s => s.ativo).length}</p>
+                        <h5>📋 Primeiros 5 setores:</h5>
+                        <ul>
+                            ${setoresFiltrados.slice(0, 5).map(setor => 
+                                `<li>${setor.nome} (ID: ${setor.id}, Ativo: ${setor.ativo})</li>`
+                            ).join('')}
+                        </ul>
+                    </div>
+                `;
+                
+            } catch (error) {
+                debugInfo.innerHTML = `<div class="error"><h3>❌ Erro ao filtrar setores</h3><p>${error.message}</p></div>`;
+                setorSelect.disabled = true;
+                setorSelect.innerHTML = '<option value="">Erro ao carregar setores</option>';
+            }
+        }
+        
+        function testFiltering() {
+            const resultEl = document.getElementById('filter-test-result');
+            
+            if (allSetores.length === 0) {
+                resultEl.innerHTML = '<p>⚠️ Carregue os setores primeiro</p>';
+                return;
+            }
+            
+            // Testar filtragem como o React faz
+            const motoresFilter = allSetores.filter(setor => setor.departamento === 'MOTORES' && setor.ativo);
+            const transformadoresFilter = allSetores.filter(setor => setor.departamento === 'TRANSFORMADORES' && setor.ativo);
+            
+            const html = `
+                <div class="success">
+                    <h3>🧪 Teste de Filtragem (como React)</h3>
+                    <p><strong>Filtro MOTORES:</strong> ${motoresFilter.length} setores</p>
+                    <p><strong>Filtro TRANSFORMADORES:</strong> ${transformadoresFilter.length} setores</p>
+                    
+                    <h4>🔧 Setores MOTORES (primeiros 5):</h4>
+                    <ul>
+                        ${motoresFilter.slice(0, 5).map(setor => 
+                            `<li>${setor.nome} (ID: ${setor.id})</li>`
+                        ).join('')}
+                    </ul>
+                    
+                    <h4>⚡ Setores TRANSFORMADORES (primeiros 5):</h4>
+                    <ul>
+                        ${transformadoresFilter.slice(0, 5).map(setor => 
+                            `<li>${setor.nome} (ID: ${setor.id})</li>`
+                        ).join('')}
+                    </ul>
+                </div>
+            `;
+            
+            resultEl.innerHTML = html;
+        }
+        
+        // Carregar setores automaticamente ao abrir a página
+        window.onload = () => {
+            loadAllSetores();
+        };
+    </script>
+</body>
+</html>

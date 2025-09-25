@@ -1,0 +1,2604 @@
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.orm import Session
+from sqlalchemy import func, and_, or_, desc, text
+from typing import List, Optional, Dict, Any
+from datetime import datetime, date, timedelta
+from pydantic import BaseModel
+import json
+
+from app.database_models import (
+    Usuario, OrdemServico, ApontamentoDetalhado, Programacao,
+    Pendencia, Setor, Departamento, TipoMaquina, Cliente, Equipamento,
+    TipoAtividade, DescricaoAtividade, CausaRetrabalho
+)
+from config.database_config import get_db
+from app.dependencies import get_current_user
+
+router = APIRouter(tags=["desenvolvimento"])
+
+# =============================================================================
+# MODELOS PYDANTIC
+# =============================================================================
+
+class ApontamentoCreate(BaseModel):
+    numero_os: str
+    cliente: str
+    equipamento: str
+    tipo_maquina: str
+    tipo_atividade: str
+    descricao_atividade: str
+    data_inicio: date
+    hora_inicio: str
+    data_fim: Optional[date] = None
+    hora_fim: Optional[str] = None
+    observacao: Optional[str] = None
+    resultado_global: Optional[str] = None
+    observacao_resultado: Optional[str] = None
+    status_os: Optional[str] = None
+    retrabalho: Optional[bool] = False
+    causa_retrabalho: Optional[str] = None
+
+class ProgramacaoCreate(BaseModel):
+    numero_os: str
+    cliente: str
+    equipamento: str
+    tipo_atividade: str
+    data_programada: date
+    hora_inicio: str
+    hora_fim: Optional[str] = None
+    observacoes: Optional[str] = None
+
+class PendenciaResolve(BaseModel):
+    observacao_resolucao: str
+
+# =============================================================================
+# ENDPOINTS DE SETORES E CONFIGURAÇÃO
+# =============================================================================
+
+@router.get("/admin/setores", operation_id="dev_get_admin_setores")
+async def get_setores_admin(
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Obter lista de setores para administração"""
+    try:
+        setores = db.query(Setor).filter(Setor.ativo == True).all()
+        
+        return [
+            {
+                "id": setor.id,
+                "nome": setor.nome,
+                "departamento": setor.departamento,
+                "ativo": setor.ativo,
+                "descricao": setor.descricao
+            }
+            for setor in setores
+        ]
+    except Exception as e:
+        print(f"Erro ao buscar setores: {e}")
+        return []
+
+@router.get("/setores/{setor_id}/configuracao", operation_id="dev_get_setores_setor_id_configuracao")
+async def get_setor_configuracao(
+    setor_id: int,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Obter configuração específica de um setor"""
+    try:
+        setor = db.query(Setor).filter(Setor.id == setor_id).first()
+        if not setor:
+            raise HTTPException(status_code=404, detail="Setor não encontrado")
+        
+        # Por enquanto, retorna configuração padrão
+        # Futuramente pode ser personalizada por setor
+        return {
+            "setor_id": setor.id,
+            "nome_setor": setor.nome,
+            "configuracao": {
+                "tipos_maquina": ["Motor Indução", "Motor Síncrono", "Transformador"],
+                "tipos_atividade": ["Testes Iniciais", "Testes Parciais", "Testes Finais"],
+                "status_os": ["Aberta", "Em Andamento", "Finalizada"]
+            }
+        }
+    except Exception as e:
+        print(f"Erro ao buscar configuração do setor: {e}")
+        raise HTTPException(status_code=404, detail="Configuração não encontrada")
+
+# =============================================================================
+# ENDPOINTS DE APONTAMENTOS
+# =============================================================================
+
+@router.get("/apontamentos", operation_id="dev_get_apontamentos")
+async def get_apontamentos(
+    status: Optional[str] = Query(None),
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Obter apontamentos do usuário com dados completos do formulário"""
+    try:
+        from sqlalchemy import text
+
+        # Filtrar por usuário se não for admin
+        where_clause = ""
+        if str(current_user.privilege_level) != 'ADMIN':
+            where_clause = f"WHERE a.id_usuario = {current_user.id}"
+            if status:
+                where_clause += f" AND a.status_apontamento = '{status}'"
+        elif status:
+            where_clause = f"WHERE a.status_apontamento = '{status}'"
+
+        sql = text(f"""
+            SELECT a.*, os.os_numero, os.descricao_maquina, os.testes_exclusivo,
+                   u.nome_completo, u.matricula
+            FROM apontamentos_detalhados a
+            LEFT JOIN ordens_servico os ON a.id_os = os.id
+            LEFT JOIN tipo_usuarios u ON a.id_usuario = u.id
+            {where_clause}
+            ORDER BY a.data_hora_inicio DESC
+            LIMIT 50
+        """)
+
+        result = db.execute(sql)
+        apontamentos = result.fetchall()
+
+        return [
+            {
+                "id": row[0],
+                "numero_os": row[22] or "",
+                "status_os": "EM ANDAMENTO",  # Status padrão
+                "cliente": "Cliente não informado",
+                "equipamento": row[23] or "",
+                "tipo_maquina": "Não informado",
+                "tipo_atividade": "Atividade padrão",
+                "data_inicio": str(row[5])[:10] if row[5] else None,
+                "hora_inicio": str(row[5])[11:16] if row[5] else None,
+                "data_fim": str(row[6])[:10] if row[6] else None,
+                "hora_fim": str(row[6])[11:16] if row[6] else None,
+                "eh_retrabalho": bool(row[10]) if row[10] is not None else False,
+                "observacao_geral": row[17] or "",
+                "resultado_global": row[7] or "PENDENTE",
+                "testes_exclusivo": row[24],
+                "usuario_nome": row[25] or "",
+                "matricula": row[26] or "",
+                "status_apontamento": row[7] or "PENDENTE",
+                "criado_por": row[18] or "",
+                "setor": row[20] or ""
+            }
+            for row in apontamentos
+        ]
+    except Exception as e:
+        print(f"Erro ao buscar apontamentos: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar apontamentos: {str(e)}")
+
+
+@router.get("/os/apontamentos/meus", operation_id="dev_get_os_apontamentos_meus")
+async def get_meus_apontamentos(
+    data: Optional[str] = Query(None),
+    setor: Optional[str] = Query(None),
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Obter apontamentos do usuário"""
+    try:
+        query = db.query(ApontamentoDetalhado)
+        
+        # Filtros baseados no privilégio
+        if current_user.privilege_level == 'USER':  # type: ignore
+            query = query.filter(ApontamentoDetalhado.id_usuario == current_user.id)
+        elif current_user.privilege_level == 'SUPERVISOR':  # type: ignore
+            # Supervisor vê do seu setor
+            query = query.join(Usuario).filter(Usuario.setor == current_user.setor)
+        # Admin vê tudo
+        
+        if data:
+            try:
+                data_filtro = datetime.strptime(data, '%Y-%m-%d').date()
+                query = query.filter(func.date(ApontamentoDetalhado.data_inicio) == data_filtro)
+            except ValueError:
+                pass
+        
+        apontamentos = query.order_by(desc(ApontamentoDetalhado.data_inicio)).limit(50).all()
+        
+        return [
+            {
+                "id": apt.id,
+                "numero_os": apt.numero_os,
+                "cliente": apt.cliente or "Cliente não informado",
+                "equipamento": apt.equipamento or "Equipamento não informado",
+                "data_inicio": apt.data_inicio.isoformat() if apt.data_inicio else None,
+                "hora_inicio": apt.hora_inicio,
+                "data_fim": apt.data_fim.isoformat() if apt.data_fim else None,
+                "hora_fim": apt.hora_fim,
+                "tempo_trabalhado": apt.tempo_trabalhado,
+                "tipo_atividade": apt.tipo_atividade or "Não informado",
+                "descricao_atividade": apt.descricao_atividade or "Não informado",
+                "status": "CONCLUIDO" if apt.data_fim else "EM_ANDAMENTO",
+                "setor_responsavel": current_user.setor
+            }
+            for apt in apontamentos
+        ]
+    except Exception as e:
+        print(f"Erro ao buscar apontamentos: {e}")
+        return []
+
+@router.post("/os/apontamentos", operation_id="dev_post_os_apontamentos")
+async def criar_apontamento(
+    apontamento: ApontamentoCreate,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Criar novo apontamento"""
+    try:
+        novo_apontamento = ApontamentoDetalhado(
+            numero_os=apontamento.numero_os,
+            cliente=apontamento.cliente,
+            equipamento=apontamento.equipamento,
+            tipo_maquina=apontamento.tipo_maquina,
+            tipo_atividade=apontamento.tipo_atividade,
+            descricao_atividade=apontamento.descricao_atividade,
+            data_inicio=apontamento.data_inicio,
+            hora_inicio=apontamento.hora_inicio,
+            observacao=apontamento.observacao,
+            id_usuario=current_user.id,
+            setor=current_user.setor,
+            departamento=current_user.departamento,
+            data_criacao=datetime.now()
+        )
+        
+        db.add(novo_apontamento)
+        db.commit()
+        db.refresh(novo_apontamento)
+        
+        return {
+            "message": "Apontamento criado com sucesso",
+            "id": novo_apontamento.id
+        }
+    except Exception as e:
+        db.rollback()
+        print(f"Erro ao criar apontamento: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao criar apontamento")
+
+@router.delete("/minhas-os", operation_id="dev_delete_minhas_os")
+async def deletar_minhas_os(
+    ids: List[int],
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Deletar OS selecionadas (apenas se não aprovadas pelo supervisor)"""
+    try:
+        # Verificar se as OS podem ser deletadas
+        apontamentos = db.query(ApontamentoDetalhado).filter(
+            ApontamentoDetalhado.id.in_(ids),
+            ApontamentoDetalhado.id_usuario == current_user.id
+        ).all()
+        
+        if not apontamentos:
+            raise HTTPException(status_code=404, detail="Nenhum apontamento encontrado")
+        
+        # Por enquanto, permitir deletar (futuramente verificar aprovação do supervisor)
+        for apt in apontamentos:
+            db.delete(apt)
+        
+        db.commit()
+        
+        return {"message": f"{len(apontamentos)} apontamento(s) deletado(s) com sucesso"}
+    except Exception as e:
+        db.rollback()
+        print(f"Erro ao deletar apontamentos: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao deletar apontamentos")
+
+# =============================================================================
+# ENDPOINTS PARA FORMULÁRIO DE APONTAMENTO
+# =============================================================================
+
+@router.get("/formulario/tipos-maquina", operation_id="dev_get_formulario_tipos_maquina")
+async def get_tipos_maquina_formulario(db: Session = Depends(get_db)):
+    """Obter tipos de máquina para o formulário de apontamento"""
+    try:
+        from sqlalchemy import text
+
+        sql = text("SELECT id, nome, descricao FROM tipos_maquina WHERE ativo = 1 ORDER BY nome")
+        result = db.execute(sql)
+        tipos = result.fetchall()
+
+        return [
+            {
+                "id": row[0],
+                "nome": row[1],
+                "descricao": row[2] or ""
+            }
+            for row in tipos
+        ]
+    except Exception as e:
+        print(f"Erro ao buscar tipos de máquina: {e}")
+        return []
+
+@router.get("/formulario/atividades/{tipo_maquina_id}", operation_id="dev_get_formulario_atividades")
+async def get_atividades_por_tipo_maquina(
+    tipo_maquina_id: int,
+    db: Session = Depends(get_db)
+):
+    """Obter atividades baseadas no tipo de máquina selecionado"""
+    try:
+        from sqlalchemy import text
+
+        # Retornar atividades padrão já que a tabela atividades não existe
+        # Usar tipos_teste como base para atividades
+        sql = text("SELECT id, nome, descricao FROM tipos_teste WHERE ativo = 1 ORDER BY nome LIMIT 70")
+        result = db.execute(sql)
+        atividades = result.fetchall()
+
+        return [
+            {
+                "id": row[0],
+                "nome": row[1],
+                "descricao": row[2] or "",
+                "tempo_estimado_horas": 1.0  # Valor padrão
+            }
+            for row in atividades
+        ]
+    except Exception as e:
+        print(f"Erro ao buscar atividades: {e}")
+        return []
+
+@router.get("/formulario/causas-retrabalho", operation_id="dev_get_formulario_causas_retrabalho")
+async def get_causas_retrabalho_formulario(db: Session = Depends(get_db)):
+    """Obter causas de retrabalho para o formulário"""
+    try:
+        from sqlalchemy import text
+
+        sql = text("SELECT id, codigo, descricao FROM tipo_causas_retrabalho WHERE ativo = 1 ORDER BY descricao")
+        result = db.execute(sql)
+        causas = result.fetchall()
+
+        return [
+            {
+                "id": row[0],
+                "codigo": row[1],
+                "descricao": row[2] or ""
+            }
+            for row in causas
+        ]
+    except Exception as e:
+        print(f"Erro ao buscar causas de retrabalho: {e}")
+        return []
+
+@router.get("/formulario/os/{numero_os}", operation_id="dev_get_formulario_os_detalhes")
+async def get_detalhes_os_formulario(
+    numero_os: str,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    """Obter detalhes da OS para preencher o formulário - com scraping automático"""
+    try:
+        from sqlalchemy import text
+        import sys
+        import os
+        from pathlib import Path
+
+        print(f"🔍 Buscando OS no banco: {numero_os}")
+
+        # 1. BUSCAR PRIMEIRO NO BANCO
+        sql = text("""
+            SELECT os.id, os.os_numero, os.status_os, os.descricao_maquina,
+                   os.horas_orcadas, os.testes_exclusivo,
+                   c.razao_social as cliente_nome, tm.nome_tipo as tipo_maquina_nome,
+                   tm.id as tipo_maquina_id, e.descricao as equipamento_nome
+            FROM ordens_servico os
+            LEFT JOIN clientes c ON os.id_cliente = c.id
+            LEFT JOIN tipos_maquina tm ON os.id_tipo_maquina = tm.id
+            LEFT JOIN equipamentos e ON os.id_equipamento = e.id
+            WHERE os.os_numero = :numero_os
+        """)
+
+        result = db.execute(sql, {"numero_os": numero_os}).fetchone()
+
+        if result:
+            print(f"✅ OS encontrada no banco: {numero_os}")
+            return {
+                "id": result[0],
+                "numero_os": result[1],
+                "status": result[2] or "ABERTA",
+                "status_os": result[2] or "ABERTA",
+                "equipamento": result[9] or result[3] or "",  # equipamento_nome ou descricao_maquina
+                "horas_orcadas": float(result[4]) if result[4] else 0.0,
+                "testes_exclusivo": result[5],
+                "cliente": result[6] or "Cliente não informado",
+                "tipo_maquina": result[7] or "Não informado",
+                "tipo_maquina_id": result[8]
+            }
+
+        # 2. SE NÃO ENCONTROU NO BANCO, FAZER SCRAPING
+        print(f"❌ OS não encontrada no banco: {numero_os}. Iniciando scraping...")
+
+        # Caminho para o script de scraping
+        script_path = Path(__file__).parent.parent / "scripts" / "scrape_os_data.py"
+        if not script_path.exists():
+            raise HTTPException(status_code=404, detail="OS não encontrada e script de scraping indisponível")
+
+        # Adicionar o caminho do script ao sys.path para importação
+        scripts_dir = str(script_path.parent)
+        if scripts_dir not in sys.path:
+            sys.path.append(scripts_dir)
+
+        try:
+            # Importar e executar a função de scraping
+            from scrape_os_data import execute_scraping
+
+            print(f"🚀 Executando scraping para OS: {numero_os}")
+            scraped_data = execute_scraping(numero_os)
+
+            if not scraped_data or len(scraped_data) == 0:
+                print(f"❌ Scraping não retornou dados para OS: {numero_os}")
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"OS {numero_os} não encontrada no banco de dados nem no sistema externo. Verifique se o número está correto."
+                )
+
+            # Verificar se os dados do scraping são válidos
+            scraped_os = scraped_data[0]
+            if not scraped_os.get("OS") and not scraped_os.get("NOME CLIENTE") and not scraped_os.get("CNPJ"):
+                print(f"❌ Dados do scraping inválidos para OS: {numero_os}")
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"OS {numero_os} encontrada mas com dados insuficientes. Tente novamente ou verifique o número."
+                )
+
+            # 3. CRIAR REGISTROS NO BANCO COM DADOS DO SCRAPING
+            print(f"📝 Criando registros no banco com dados do scraping...")
+
+            # Função para normalizar dados do scraping
+            def normalizar_dado_scraping(valor, default=""):
+                """Normaliza dados do scraping: remove caracteres especiais, converte para maiúscula, trata valores vazios"""
+                if not valor or valor in ["0", "vazio", "", None]:
+                    return default
+
+                # Converter para string e remover espaços extras
+                valor_str = str(valor).strip()
+
+                # Se ainda for "0" ou vazio após strip, retornar default
+                if valor_str in ["0", ""]:
+                    return default
+
+                # Converter para maiúscula
+                valor_str = valor_str.upper()
+
+                # Remover caracteres especiais comuns (manter apenas letras, números, espaços e alguns símbolos)
+                import re
+                valor_str = re.sub(r'[^\w\s\-\.\(\)\/]', '', valor_str)
+
+                # Remover espaços múltiplos
+                valor_str = re.sub(r'\s+', ' ', valor_str).strip()
+
+                return valor_str
+
+            # Extrair e normalizar dados do scraping
+            cliente_nome = normalizar_dado_scraping(scraped_os.get("CLIENTE"), "CLIENTE NAO INFORMADO")
+            cliente_cnpj = normalizar_dado_scraping(scraped_os.get("CNPJ"), "")
+            cliente_municipio = normalizar_dado_scraping(scraped_os.get("MUNICIPIO"), "")  # Para endereco
+            equipamento_descricao = normalizar_dado_scraping(scraped_os.get("DESCRIÇÃO"), "EQUIPAMENTO NAO INFORMADO")
+
+            # Para STATUS DA OS, usar TAREFA se STATUS estiver vazio
+            status_raw = scraped_os.get("STATUS DA OS", "")
+            if not status_raw or status_raw == "0":
+                status_raw = scraped_os.get("TAREFA", "ABERTA")
+            status_os = normalizar_dado_scraping(status_raw, "ABERTA")
+
+            print(f"🔍 Dados normalizados:")
+            print(f"   Cliente: {cliente_nome}")
+            print(f"   CNPJ: {cliente_cnpj}")
+            print(f"   Município: {cliente_municipio}")
+            print(f"   Equipamento: {equipamento_descricao}")
+            print(f"   Status: {status_os}")
+
+            # 3.1 CRIAR OU BUSCAR CLIENTE
+            cliente = None
+            if cliente_cnpj:  # Só buscar por CNPJ se não estiver vazio
+                cliente = db.query(Cliente).filter(Cliente.cnpj_cpf == cliente_cnpj).first()
+
+            if not cliente:
+                print(f"🏢 Criando novo cliente: {cliente_nome}")
+                cliente = Cliente(
+                    razao_social=cliente_nome,
+                    nome_fantasia=cliente_nome,
+                    cnpj_cpf=cliente_cnpj if cliente_cnpj else None,
+                    endereco=cliente_municipio if cliente_municipio else None,  # Município no endereco
+                    data_criacao=datetime.now()
+                )
+                db.add(cliente)
+                db.flush()  # Para obter o ID
+                print(f"✅ Cliente criado com ID: {cliente.id}")
+                if cliente_municipio:
+                    print(f"   📍 Endereço (Município): {cliente_municipio}")
+            else:
+                print(f"✅ Cliente encontrado: {cliente.razao_social}")
+
+            # 3.2 CRIAR OU BUSCAR EQUIPAMENTO
+            equipamento = db.query(Equipamento).filter(Equipamento.descricao == equipamento_descricao).first()
+            if not equipamento:
+                print(f"⚙️ Criando novo equipamento: {equipamento_descricao}")
+
+                # Normalizar dados adicionais do equipamento
+                tipo_equip = normalizar_dado_scraping(scraped_os.get("CLASSIFICACAO DO EQUIPAMENTO"), "MOTOR")
+                fabricante = normalizar_dado_scraping(scraped_os.get("FABRICANTE"), "")
+                modelo = normalizar_dado_scraping(scraped_os.get("MODELO"), "")
+                numero_serie = normalizar_dado_scraping(scraped_os.get("NUMERO DE SERIE"), "")
+
+                equipamento = Equipamento(
+                    descricao=equipamento_descricao,
+                    tipo=tipo_equip,
+                    fabricante=fabricante if fabricante else None,
+                    modelo=modelo if modelo else None,
+                    numero_serie=numero_serie if numero_serie else None,
+                    data_criacao=datetime.now()
+                )
+                db.add(equipamento)
+                db.flush()  # Para obter o ID
+                print(f"✅ Equipamento criado com ID: {equipamento.id}")
+            else:
+                print(f"✅ Equipamento encontrado: {equipamento.descricao}")
+
+            # 3.3 CRIAR ORDEM DE SERVIÇO
+            print(f"📋 Criando nova OS: {numero_os}")
+            nova_os = OrdemServico(
+                os_numero=numero_os,
+                status_os=status_os,
+                prioridade="NORMAL",
+                id_responsavel_registro=current_user.id,
+                descricao_maquina=equipamento_descricao,
+                id_cliente=cliente.id,
+                id_equipamento=equipamento.id,
+                id_setor=current_user.id_setor,
+                id_departamento=current_user.id_departamento,
+                data_criacao=datetime.now(),
+                horas_orcadas=0.0
+            )
+            db.add(nova_os)
+            db.commit()
+            print(f"✅ OS criada com ID: {nova_os.id}")
+
+            # 4. RETORNAR DADOS FORMATADOS E NORMALIZADOS
+            tipo_maquina_normalizado = normalizar_dado_scraping(scraped_os.get("CLASSIFICACAO DO EQUIPAMENTO"), "MOTOR")
+
+            return {
+                "id": nova_os.id,
+                "numero_os": numero_os,
+                "status": status_os,
+                "status_os": status_os,
+                "equipamento": equipamento_descricao,
+                "horas_orcadas": 0.0,
+                "testes_exclusivo": False,
+                "cliente": cliente_nome,
+                "tipo_maquina": tipo_maquina_normalizado,
+                "tipo_maquina_id": None,
+                "fonte": "scraping"  # Indicador de que veio do scraping
+            }
+
+        except Exception as scraping_error:
+            print(f"❌ Erro durante scraping: {scraping_error}")
+
+            # Tratamento específico para diferentes tipos de erro
+            error_message = str(scraping_error).lower()
+
+            if "não encontrada" in error_message or "not found" in error_message:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"OS {numero_os} não foi encontrada no sistema externo. Verifique se o número está correto."
+                )
+            elif "timeout" in error_message or "connection" in error_message:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Erro de conexão ao consultar OS {numero_os}. Tente novamente em alguns minutos."
+                )
+            elif "login" in error_message or "authentication" in error_message:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Erro de autenticação no sistema externo. Contate o administrador."
+                )
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Erro interno ao consultar OS {numero_os}. Contate o suporte técnico."
+                )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Erro ao buscar detalhes da OS: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar OS: {str(e)}")
+
+@router.get("/programacao", operation_id="dev_get_programacao")
+async def get_programacao_desenvolvimento(
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Obter programações para o desenvolvimento"""
+    try:
+        from sqlalchemy import text
+
+        # Buscar programações relacionadas ao usuário
+        sql = text("""
+            SELECT p.id, p.id_ordem_servico, p.responsavel_id, p.inicio_previsto,
+                   p.fim_previsto, p.status, p.criado_por_id, p.observacoes,
+                   p.created_at, p.updated_at, p.id_setor,
+                   os.os_numero, os.status_os, os.prioridade, u.nome_completo as responsavel_nome
+            FROM programacoes p
+            LEFT JOIN ordens_servico os ON p.id_ordem_servico = os.id
+            LEFT JOIN tipo_usuarios u ON p.responsavel_id = u.id
+            WHERE p.responsavel_id = :user_id OR p.criado_por_id = :user_id
+            ORDER BY p.inicio_previsto DESC
+            LIMIT 50
+        """)
+
+        result = db.execute(sql, {"user_id": current_user.id})
+        programacoes = result.fetchall()
+
+        return [
+            {
+                "id": row[0],
+                "numero": row[11] or str(row[0]),  # os_numero como numero (apenas números)
+                "cliente": "Cliente não informado",
+                "equipamento": "Equipamento não informado",
+                "prioridade": row[13] or "MEDIA",  # os.prioridade
+                "status": row[5] or "PROGRAMADA",  # p.status
+                "data_prevista": str(row[3])[:10] if row[3] else None,  # inicio_previsto como data
+                "responsavel_atual": row[14] or "Não informado",  # responsavel_nome
+                "tempo_estimado": 8,  # valor padrão
+                "descricao": row[7] or "Programação automática",  # observacoes
+                # Campos originais para compatibilidade
+                "id_ordem_servico": row[1],
+                "responsavel_id": row[2],
+                "inicio_previsto": str(row[3]) if row[3] else None,
+                "fim_previsto": str(row[4]) if row[4] else None,
+                "observacoes": row[7] or "",
+                "criado_por_id": row[6],
+                "created_at": str(row[8]) if row[8] else None,
+                "updated_at": str(row[9]) if row[9] else None,
+                "id_setor": row[10],
+                "os_numero": row[11] or "",
+                "responsavel_nome": row[14] or "Não informado"
+            }
+            for row in programacoes
+        ]
+
+    except Exception as e:
+        print(f"Erro ao buscar programação: {e}")
+        return []
+
+# =============================================================================
+# ENDPOINTS DE PENDÊNCIAS
+# =============================================================================
+
+@router.get("/pendencias", operation_id="dev_get_pendencias")
+async def get_pendencias(
+    data: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    setor: Optional[str] = Query(None),
+    departamento: Optional[str] = Query(None),
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Obter pendências baseadas no privilégio do usuário"""
+    try:
+        query = db.query(Pendencia)
+        
+        # Filtros baseados no privilégio usando id_apontamento_origem
+        if current_user.privilege_level in ['SUPERVISOR', 'USER']:  # type: ignore
+            # Filtrar por setor através do apontamento origem
+            apontamento_ids = db.query(ApontamentoDetalhado.id).filter(
+                ApontamentoDetalhado.id_setor == current_user.id_setor
+            ).all()
+            ids_list = [apt_id[0] for apt_id in apontamento_ids]
+            if ids_list:
+                query = query.filter(Pendencia.id_apontamento_origem.in_(ids_list))
+        elif current_user.privilege_level == 'ADMIN':  # type: ignore
+            # Admin pode filtrar por setor através do apontamento
+            if setor:
+                # Buscar id_setor pelo nome do setor
+                setor_obj = db.query(Setor).filter(Setor.nome == setor).first()
+                if setor_obj:
+                    apontamento_ids = db.query(ApontamentoDetalhado.id).filter(
+                        ApontamentoDetalhado.id_setor == setor_obj.id
+                    ).all()
+                    ids_list = [apt_id[0] for apt_id in apontamento_ids]
+                    if ids_list:
+                        query = query.filter(Pendencia.id_apontamento_origem.in_(ids_list))
+        
+        if status:
+            query = query.filter(Pendencia.status == status)
+        
+        if data:
+            try:
+                data_filtro = datetime.strptime(data, '%Y-%m-%d').date()
+                query = query.filter(func.date(Pendencia.data_inicio) == data_filtro)
+            except ValueError:
+                pass
+        
+        pendencias = query.order_by(desc(Pendencia.data_inicio)).limit(50).all()
+        
+        # Buscar informações do setor através do apontamento origem
+        resultado = []
+        for pend in pendencias:
+            # Buscar apontamento origem para obter setor
+            apontamento = None
+            setor_nome = "Não informado"
+            if pend.id_apontamento_origem is not None:
+                apontamento = db.query(ApontamentoDetalhado).filter(
+                    ApontamentoDetalhado.id == pend.id_apontamento_origem
+                ).first()
+                if apontamento:
+                    setor_nome = apontamento.setor or "Não informado"
+
+            resultado.append({
+                "id": pend.id,
+                "numero_os": pend.numero_os,
+                "cliente": pend.cliente,
+                "equipamento": pend.descricao_maquina,
+                "tipo_pendencia": pend.tipo_maquina,
+                "descricao": pend.descricao_pendencia,
+                "status": pend.status,
+                "prioridade": pend.prioridade or "NORMAL",
+                "data_criacao": pend.data_inicio.isoformat() if pend.data_inicio is not None else None,
+                "data_resolucao": pend.data_fechamento.isoformat() if pend.data_fechamento is not None else None,
+                "responsavel": f"Usuário {pend.id_responsavel_inicio}",
+                "setor": setor_nome,
+                "id_apontamento_origem": pend.id_apontamento_origem,
+                "observacoes": pend.observacoes_fechamento or "",
+                "tempo_aberto_horas": float(getattr(pend, 'tempo_aberto_horas', 0) or 0)
+            })
+
+        return resultado
+    except Exception as e:
+        print(f"Erro ao buscar pendências: {e}")
+        return []
+
+@router.patch("/pendencias/{pendencia_id}/resolver", operation_id="dev_patch_pendencias_pendencia_id_resolver")
+async def resolver_pendencia(
+    pendencia_id: int,
+    dados: PendenciaResolve,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Resolver uma pendência"""
+    try:
+        pendencia = db.query(Pendencia).filter(Pendencia.id == pendencia_id).first()
+        if not pendencia:
+            raise HTTPException(status_code=404, detail="Pendência não encontrada")
+        
+        # Verificar permissões - USER, SUPERVISOR e ADMIN podem resolver pendências
+        if current_user.privilege_level not in ['ADMIN', 'SUPERVISOR', 'USER']:  # type: ignore
+            raise HTTPException(status_code=403, detail="Sem permissão para resolver pendências")
+
+        # USER e SUPERVISOR só podem resolver pendências do seu setor
+        if current_user.privilege_level in ['SUPERVISOR', 'USER'] and pendencia.setor != current_user.setor:  # type: ignore
+            raise HTTPException(status_code=403, detail="Sem permissão para resolver esta pendência")
+        
+        # Atualizar pendência
+        pendencia.status = 'FECHADA'  # type: ignore
+        pendencia.data_fechamento = datetime.now()  # type: ignore
+        pendencia.responsavel_fechamento_id = current_user.id  # type: ignore
+        pendencia.observacoes_fechamento = dados.observacao_resolucao  # type: ignore
+        pendencia.solucao_aplicada = dados.observacao_resolucao  # type: ignore
+        
+        db.commit()
+        
+        return {"message": "Pendência resolvida com sucesso"}
+    except Exception as e:
+        db.rollback()
+        print(f"Erro ao resolver pendência: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao resolver pendência")
+
+# =============================================================================
+# ENDPOINTS DE PROGRAMAÇÃO
+# =============================================================================
+
+@router.get("/programacoes-lista", operation_id="dev_get_programacoes_lista")
+async def get_programacoes(
+    status: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """Obter programações usando SQL direto"""
+    try:
+        from sqlalchemy import text
+
+        where_clause = ""
+        if status:
+            where_clause = f"WHERE p.status = '{status}'"
+
+        sql = text(f"""
+            SELECT p.id, p.id_ordem_servico, p.responsavel_id, p.inicio_previsto,
+                   p.fim_previsto, p.status, p.criado_por_id, p.observacoes,
+                   p.created_at, p.updated_at, p.id_setor,
+                   os.os_numero, os.descricao_maquina, u.nome_completo
+            FROM programacoes p
+            LEFT JOIN ordens_servico os ON p.id_ordem_servico = os.id
+            LEFT JOIN tipo_usuarios u ON p.criado_por_id = u.id
+            {where_clause}
+            ORDER BY p.inicio_previsto DESC
+            LIMIT 50
+        """)
+
+        result = db.execute(sql)
+        programacoes = result.fetchall()
+
+        return [
+            {
+                "id": row[0],
+                "id_ordem_servico": row[1],
+                "responsavel_id": row[2],
+                "inicio_previsto": str(row[3]) if row[3] else None,
+                "fim_previsto": str(row[4]) if row[4] else None,
+                "status": row[5] or "PROGRAMADA",
+                "criado_por_id": row[6],
+                "observacoes": row[7] or "",
+                "created_at": str(row[8]) if row[8] else None,
+                "updated_at": str(row[9]) if row[9] else None,
+                "id_setor": row[10],
+                "os_numero": row[11] or "",
+                "descricao_maquina": row[12] or "",
+                "criado_por_nome": row[13] or f"Usuário {row[6]}",
+                "data_programada": str(row[3])[:10] if row[3] else None,
+                "hora_inicio": str(row[3])[11:16] if row[3] else None,
+                "hora_fim": str(row[4])[11:16] if row[4] else None
+            }
+            for row in programacoes
+        ]
+    except Exception as e:
+        print(f"Erro ao buscar programações: {e}")
+        return [{"erro": str(e)}]
+
+@router.post("/programacao", operation_id="dev_post_programacao")
+async def criar_programacao(
+    programacao: ProgramacaoCreate,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Criar nova programação (apenas supervisores)"""
+    if current_user.privilege_level not in ['ADMIN', 'SUPERVISOR']:
+        raise HTTPException(status_code=403, detail="Apenas supervisores podem criar programações")
+    
+    try:
+        nova_programacao = Programacao(
+            numero_os=programacao.numero_os,
+            cliente=programacao.cliente,
+            equipamento=programacao.equipamento,
+            tipo_atividade=programacao.tipo_atividade,
+            data_programada=programacao.data_programada,
+            hora_inicio=programacao.hora_inicio,
+            hora_fim=programacao.hora_fim,
+            observacoes=programacao.observacoes,
+            responsavel_id=current_user.id,
+            setor=current_user.setor,
+            departamento=current_user.departamento,
+            status='PROGRAMADA',
+            data_criacao=datetime.now()
+        )
+        
+        db.add(nova_programacao)
+        db.commit()
+        db.refresh(nova_programacao)
+        
+        return {
+            "message": "Programação criada com sucesso",
+            "id": nova_programacao.id
+        }
+    except Exception as e:
+        db.rollback()
+        print(f"Erro ao criar programação: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao criar programação")
+
+@router.patch("/programacao/{programacao_id}/atribuir", operation_id="dev_patch_programacao_programacao_id_atribuir")
+async def atribuir_colaboradores(
+    programacao_id: int,
+    colaboradores: List[str],
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Atribuir colaboradores a uma programação"""
+    if current_user.privilege_level not in ['ADMIN', 'SUPERVISOR']:
+        raise HTTPException(status_code=403, detail="Apenas supervisores podem atribuir colaboradores")
+    
+    try:
+        programacao = db.query(Programacao).filter(Programacao.id == programacao_id).first()
+        if not programacao:
+            raise HTTPException(status_code=404, detail="Programação não encontrada")
+        
+        # Por enquanto, apenas atualizar observações com os nomes dos colaboradores
+        programacao.observacoes = f"Colaboradores atribuídos: {', '.join(colaboradores)}"  # type: ignore
+        
+        db.commit()
+        
+        return {"message": "Colaboradores atribuídos com sucesso"}
+    except Exception as e:
+        db.rollback()
+        print(f"Erro ao atribuir colaboradores: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao atribuir colaboradores")
+
+@router.get("/colaboradores", operation_id="dev_get_colaboradores")
+async def get_colaboradores(
+    setor: Optional[str] = Query(None),
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Obter lista de colaboradores do setor"""
+    try:
+        query = db.query(Usuario).filter(Usuario.is_approved == True)
+        
+        if setor:
+            query = query.filter(Usuario.setor == setor)
+        elif current_user.privilege_level != 'ADMIN':  # type: ignore
+            query = query.filter(Usuario.setor == current_user.setor)
+        
+        colaboradores = query.all()
+        
+        return [
+            {
+                "id": colab.id,
+                "nome_completo": colab.nome_completo,
+                "setor": colab.setor,
+                "departamento": colab.departamento
+            }
+            for colab in colaboradores
+        ]
+    except Exception as e:
+        print(f"Erro ao buscar colaboradores: {e}")
+        return []
+
+# =============================================================================
+# ENDPOINTS PARA DROPDOWNS - DADOS DO BANCO
+# =============================================================================
+
+@router.get("/tipos-maquina", operation_id="dev_get_tipos_maquina")
+async def get_tipos_maquina(
+    departamento: Optional[str] = Query(None),
+    setor: Optional[str] = Query(None),
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Obter tipos de máquina do banco de dados"""
+    try:
+        query = db.query(TipoMaquina).filter(TipoMaquina.ativo == True)
+
+        # Filtrar por departamento/setor do usuário se não for admin
+        if current_user.privilege_level != 'ADMIN':  # type: ignore
+            if current_user.setor:  # type: ignore
+                query = query.filter(TipoMaquina.setor == current_user.setor)
+        else:
+            # Admin pode filtrar por parâmetros
+            if setor:
+                query = query.filter(TipoMaquina.setor == setor)
+
+        tipos_maquina = query.order_by(TipoMaquina.nome_tipo).all()
+
+        return [
+            {
+                "id": tipo.id,
+                "nome_tipo": tipo.nome_tipo,
+                "categoria": tipo.categoria,
+                "descricao": tipo.descricao,
+                "setor": tipo.setor,
+                "ativo": tipo.ativo
+            }
+            for tipo in tipos_maquina
+        ]
+    except Exception as e:
+        print(f"Erro ao buscar tipos de máquina: {e}")
+        return []
+
+@router.get("/tipos-atividade", operation_id="dev_get_tipos_atividade")
+async def get_tipos_atividade(
+    tipo_maquina_id: Optional[int] = Query(None),
+    departamento: Optional[str] = Query(None),
+    setor: Optional[str] = Query(None),
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Obter tipos de atividade do banco de dados, filtrados por tipo de máquina"""
+    try:
+        query = db.query(TipoAtividade).filter(TipoAtividade.ativo == True)
+
+        # Filtrar por tipo de máquina se especificado
+        if tipo_maquina_id:
+            query = query.filter(TipoAtividade.id_tipo_maquina == tipo_maquina_id)
+
+        # TipoAtividade não tem campos departamento/setor diretos
+        # Removendo filtros por enquanto para fazer a rota funcionar
+        # TODO: Implementar filtro usando relacionamento se necessário
+
+        tipos_atividade = query.order_by(TipoAtividade.nome_tipo).all()
+
+        return [
+            {
+                "id": tipo.id,
+                "nome_tipo": tipo.nome_tipo,
+                "descricao": tipo.descricao,
+                "ativo": tipo.ativo,
+                "id_tipo_maquina": tipo.id_tipo_maquina
+            }
+            for tipo in tipos_atividade
+        ]
+    except Exception as e:
+        print(f"Erro ao buscar tipos de atividade: {e}")
+        return []
+
+@router.get("/descricoes-atividade", operation_id="dev_get_descricoes_atividade")
+async def get_descricoes_atividade(
+    setor: Optional[str] = Query(None),
+    tipo_atividade: Optional[str] = Query(None),
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Obter descrições de atividade do banco de dados"""
+    try:
+        query = db.query(DescricaoAtividade).filter(DescricaoAtividade.ativo == True)
+
+        # DescricaoAtividade não tem campo setor direto
+        # Removendo filtros por enquanto para fazer a rota funcionar
+        # TODO: Implementar filtro usando relacionamento se necessário
+
+        # REMOVIDO: Filtro por tipo de atividade não funciona corretamente
+        # Não há relacionamento direto entre TipoAtividade e DescricaoAtividade
+        # O frontend deve mostrar todas as descrições disponíveis
+        # TODO: Implementar relacionamento adequado no banco se necessário
+
+        descricoes = query.order_by(DescricaoAtividade.codigo).all()
+
+        return [
+            {
+                "id": desc.id,
+                "codigo": desc.codigo,
+                "descricao": desc.descricao,
+                "ativo": desc.ativo
+            }
+            for desc in descricoes
+        ]
+    except Exception as e:
+        print(f"Erro ao buscar descrições de atividade: {e}")
+        return []
+
+@router.get("/causas-retrabalho", operation_id="dev_get_causas_retrabalho")
+async def get_causas_retrabalho(
+    departamento: Optional[str] = Query(None),
+    setor: Optional[str] = Query(None),
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Obter causas de retrabalho do banco de dados"""
+    try:
+        query = db.query(CausaRetrabalho).filter(CausaRetrabalho.ativo == True)
+
+        # CausaRetrabalho não tem campo departamento direto, apenas id_departamento
+        # Removendo filtros por enquanto para fazer a rota funcionar
+        # TODO: Implementar filtro usando relacionamento com Departamento se necessário
+
+        causas = query.order_by(CausaRetrabalho.codigo).all()
+
+        return [
+            {
+                "id": causa.id,
+                "codigo": causa.codigo,
+                "descricao": causa.descricao,
+                "id_departamento": causa.id_departamento
+            }
+            for causa in causas
+        ]
+    except Exception as e:
+        print(f"Erro ao buscar causas de retrabalho: {e}")
+        return []
+
+# =============================================================================
+# ENDPOINTS PARA ORDENS DE SERVIÇO
+# =============================================================================
+
+@router.get("/ordens-lista", operation_id="dev_get_ordens_lista")
+async def get_ordens_servico(
+    status: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """Obter ordens de serviço - versão simplificada sem autenticação para debug"""
+    try:
+        # SQL direto sem filtros de usuário para debug
+        from sqlalchemy import text
+
+        where_clause = ""
+        if status:
+            where_clause = f"WHERE status_os = '{status}'"
+
+        sql = text(f"""
+            SELECT id, os_numero, status_os, prioridade, id_setor, id_departamento,
+                   data_criacao, descricao_maquina, horas_orcadas, horas_reais,
+                   testes_exclusivo
+            FROM ordens_servico
+            {where_clause}
+            ORDER BY data_criacao DESC
+            LIMIT 20
+        """)
+
+        result = db.execute(sql)
+        ordens = result.fetchall()
+
+        return [
+            {
+                "id": row[0],
+                "os_numero": row[1],
+                "status_os": row[2] or "ABERTA",
+                "prioridade": row[3] or "NORMAL",
+                "id_setor": row[4],
+                "id_departamento": row[5],
+                "data_criacao": str(row[6]) if row[6] else None,
+                "descricao_maquina": row[7] or "",
+                "horas_orcadas": float(row[8]) if row[8] else 0.0,
+                "horas_reais": float(row[9]) if row[9] else 0.0,
+                "testes_exclusivo": row[10]
+            }
+            for row in ordens
+        ]
+    except Exception as e:
+        print(f"Erro ao buscar ordens de serviço: {e}")
+        return [{"erro": str(e), "debug": "Erro na consulta SQL"}]
+
+@router.get("/status-os", operation_id="dev_get_status_os")
+async def get_status_os_disponiveis(
+    db: Session = Depends(get_db)
+):
+    """Obter status únicos disponíveis na tabela ordens_servico"""
+    try:
+        from sqlalchemy import distinct
+
+        # Buscar status únicos
+        status_list = db.query(distinct(OrdemServico.status_os)).filter(
+            OrdemServico.status_os.isnot(None)
+        ).all()
+
+        status_values = [status[0] for status in status_list if status[0]]
+
+        return {
+            "status_disponiveis": sorted(status_values),
+            "total": len(status_values)
+        }
+    except Exception as e:
+        print(f"Erro ao buscar status OS: {e}")
+        return {
+            "status_disponiveis": ["ABERTA", "EM ANDAMENTO", "CONCLUIDA", "CANCELADA"],
+            "total": 4,
+            "erro": str(e)
+        }
+
+@router.post("/ordens-servico", operation_id="dev_post_ordens_servico")
+async def create_ordem_servico(
+    os_data: dict,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Criar nova ordem de serviço"""
+    try:
+        # Verificar permissões
+        if current_user.privilege_level not in ['ADMIN', 'SUPERVISOR']:  # type: ignore
+            raise HTTPException(status_code=403, detail="Sem permissão para criar OS")
+
+        # Gerar número da OS no formato correto (5 dígitos)
+        from utils.validators import generate_next_os
+        os_numero = generate_next_os(db, OrdemServico)
+
+        nova_os = OrdemServico(
+            os_numero=os_numero,
+            status_os=os_data.get('status_os', 'ABERTA'),
+            prioridade=os_data.get('prioridade', 'NORMAL'),
+            id_responsavel_registro=current_user.id,
+            descricao_maquina=os_data.get('descricao_maquina'),
+            id_setor=current_user.id_setor,
+            id_departamento=current_user.id_departamento,
+            data_criacao=datetime.now(),
+            horas_orcadas=os_data.get('horas_orcadas', 0)
+        )
+
+        db.add(nova_os)
+        db.commit()
+        db.refresh(nova_os)
+
+        return {"message": "OS criada com sucesso", "os_numero": os_numero, "id": nova_os.id}
+
+    except Exception as e:
+        db.rollback()
+        print(f"Erro ao criar OS: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao criar OS: {str(e)}")
+
+# =============================================================================
+# ENDPOINTS PARA APONTAMENTOS COMPLETOS
+# =============================================================================
+
+@router.post("/apontamentos", operation_id="dev_post_apontamentos")
+async def create_apontamento(
+    apontamento_data: dict,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Criar novo apontamento completo"""
+    try:
+        print(f"💾 Criando apontamento: {apontamento_data}")
+        print(f"👤 Usuário atual: {current_user.nome_completo} (ID: {current_user.id})")
+        print(f"🏢 Setor: {current_user.setor} (ID: {getattr(current_user, 'id_setor', 'N/A')})")
+        print(f"🏭 Departamento: {current_user.departamento} (ID: {getattr(current_user, 'id_departamento', 'N/A')})")
+
+        # Validar dados obrigatórios
+        numero_os = apontamento_data.get('numero_os')
+        if not numero_os:
+            raise HTTPException(status_code=400, detail="Número da OS é obrigatório")
+
+        # Buscar ou criar OS COMPLETA
+        ordem_servico = db.query(OrdemServico).filter(OrdemServico.os_numero == numero_os).first()
+        if not ordem_servico:
+            print(f"🆕 Criando nova OS: {numero_os}")
+            try:
+                # Buscar IDs válidos para setor e departamento
+                id_setor_valido = None
+                id_departamento_valido = None
+
+                # Buscar primeiro setor disponível
+                primeiro_setor = db.query(Setor).first()
+                if primeiro_setor:
+                    id_setor_valido = primeiro_setor.id
+
+                # Buscar primeiro departamento disponível
+                primeiro_departamento = db.query(Departamento).first()
+                if primeiro_departamento:
+                    id_departamento_valido = primeiro_departamento.id
+
+                # Criar nova OS COMPLETA se não existir (usando apenas campos que existem)
+                ordem_servico = OrdemServico(
+                    os_numero=numero_os,
+                    status_os=apontamento_data.get('status_os', 'ABERTA'),
+                    prioridade='MEDIA',
+                    id_responsavel_registro=current_user.id,
+                    descricao_maquina=apontamento_data.get('equipamento', ''),
+                    id_setor=id_setor_valido,
+                    id_departamento=id_departamento_valido,
+                    observacoes_gerais=f"Cliente: {apontamento_data.get('cliente', '')}\nTipo Máquina: {apontamento_data.get('tipo_maquina', '')}\nAtividade: {apontamento_data.get('tipo_atividade', '')}\nDescrição: {apontamento_data.get('descricao_atividade', '')}\nObservação: {apontamento_data.get('observacao_geral', '')}\nResultado: {apontamento_data.get('resultado_global', '')}",
+                    horas_orcadas=float(apontamento_data.get('supervisor_horas_orcadas', 0)) if apontamento_data.get('supervisor_horas_orcadas') else 0
+                )
+                db.add(ordem_servico)
+                db.flush()
+                print(f"✅ OS criada com ID: {ordem_servico.id}")
+            except Exception as e:
+                print(f"❌ Erro ao criar OS: {e}")
+                raise HTTPException(status_code=500, detail=f"Erro ao criar OS: {str(e)}")
+        else:
+            print(f"📋 OS existente encontrada: {ordem_servico.id}")
+            # Atualizar dados da OS existente se necessário
+            if apontamento_data.get('equipamento'):
+                setattr(ordem_servico, 'descricao_maquina', apontamento_data.get('equipamento'))
+            if apontamento_data.get('status_os'):
+                setattr(ordem_servico, 'status_os', apontamento_data.get('status_os'))
+            # Atualizar observações com informações do apontamento
+            obs_atual = getattr(ordem_servico, 'observacoes_gerais', '') or ''
+            nova_obs = f"\n--- APONTAMENTO {datetime.now().strftime('%d/%m/%Y %H:%M')} ---\nCliente: {apontamento_data.get('cliente', '')}\nObservação: {apontamento_data.get('observacao_geral', '')}\nResultado: {apontamento_data.get('resultado_global', '')}"
+            setattr(ordem_servico, 'observacoes_gerais', obs_atual + nova_obs)
+
+        # Buscar setor
+        setor = db.query(Setor).filter(Setor.nome == current_user.setor).first()
+        setor_id = setor.id if setor else 1  # ID padrão se não encontrar
+
+        # Criar data/hora de início e fim
+        data_hora_inicio = datetime.now()
+        if apontamento_data.get('data_inicio') and apontamento_data.get('hora_inicio'):
+            try:
+                data_str = f"{apontamento_data['data_inicio']} {apontamento_data['hora_inicio']}"
+                data_hora_inicio = datetime.strptime(data_str, '%Y-%m-%d %H:%M')
+            except:
+                pass
+
+        data_hora_fim = None
+        if apontamento_data.get('data_fim') and apontamento_data.get('hora_fim'):
+            try:
+                data_str = f"{apontamento_data['data_fim']} {apontamento_data['hora_fim']}"
+                data_hora_fim = datetime.strptime(data_str, '%Y-%m-%d %H:%M')
+            except:
+                pass
+
+        # Processar testes exclusivos selecionados
+        testes_exclusivos_selecionados = apontamento_data.get("testes_exclusivos_selecionados", {})
+        if testes_exclusivos_selecionados:
+            import json
+            from app.database_models import TipoTeste
+
+            # Buscar testes exclusivos selecionados
+            testes_selecionados_ids = [int(teste_id) for teste_id, selecionado in testes_exclusivos_selecionados.items() if selecionado]
+
+            if testes_selecionados_ids:
+                # Buscar dados dos testes
+                testes_dados = db.query(TipoTeste).filter(TipoTeste.id.in_(testes_selecionados_ids)).all()
+
+                # Preparar dados JSON
+                agora = datetime.now()
+                testes_json = {
+                    "testes": [
+                        {
+                            "id": teste.id,
+                            "nome": teste.nome,
+                            "descricao": teste.descricao_teste_exclusivo or teste.nome,
+                            "usuario": current_user.nome_completo,
+                            "setor": current_user.setor,
+                            "departamento": current_user.departamento,
+                            "data": agora.strftime('%Y-%m-%d'),
+                            "hora": agora.strftime('%H:%M:%S')
+                        }
+                        for teste in testes_dados
+                    ]
+                }
+
+                # Salvar na coluna testes_exclusivo da OS
+                setattr(ordem_servico, 'testes_exclusivo', json.dumps(testes_json, ensure_ascii=False))
+
+        # Processar testes selecionados (testes normais com resultados)
+        testes_selecionados = apontamento_data.get("testes_selecionados", {})
+        print(f"🧪 DEBUG: Dados recebidos - testes_selecionados: {testes_selecionados}")
+        print(f"🧪 DEBUG: Tipo: {type(testes_selecionados)}, Tamanho: {len(testes_selecionados) if testes_selecionados else 0}")
+
+        # Extrair dados das etapas do supervisor_config
+        supervisor_config = apontamento_data.get('supervisor_config', {})
+
+        # Verificar se é serviço de campo baseado na descrição da atividade
+        descricao_atividade = apontamento_data.get('descricao_atividade', '')
+        descricao_upper = descricao_atividade.upper().strip()
+
+        # Verificar múltiplas variações de "serviço de campo"
+        is_servico_de_campo = (
+            descricao_upper == 'SVC - SERVICO DE CAMPO' or
+            descricao_upper == 'SERVICO DE CAMPO' or
+            'SERVICO DE CAMPO' in descricao_upper or
+            'SVC' in descricao_upper
+        )
+
+        print(f"🔍 Verificando serviço de campo:")
+        print(f"   Descrição da atividade: '{descricao_atividade}'")
+        print(f"   Descrição normalizada: '{descricao_upper}'")
+        print(f"   É serviço de campo: {is_servico_de_campo}")
+
+        # Criar apontamento detalhado COMPLETO
+        novo_apontamento = ApontamentoDetalhado(
+            id_os=ordem_servico.id,
+            id_usuario=current_user.id,
+            id_setor=setor_id,
+            data_hora_inicio=data_hora_inicio,
+            data_hora_fim=data_hora_fim,
+            status_apontamento='FINALIZADO',
+            foi_retrabalho=apontamento_data.get('retrabalho', False),
+            causa_retrabalho=apontamento_data.get('causa_retrabalho', ''),
+            observacao_os=apontamento_data.get('observacao_geral', ''),
+            observacoes_gerais=apontamento_data.get('resultado_global', ''),
+            criado_por=current_user.nome_completo,
+            criado_por_email=current_user.email,
+            setor=current_user.setor,
+            # Campos do formulário
+            tipo_maquina=apontamento_data.get('tipo_maquina', ''),
+            tipo_atividade=apontamento_data.get('tipo_atividade', ''),
+            descricao_atividade=apontamento_data.get('descricao_atividade', ''),
+            # Campos de etapas COMPLETOS
+            horas_orcadas=float(supervisor_config.get('horas_orcadas', 0)) if supervisor_config.get('horas_orcadas') else 0,
+            etapa_inicial=supervisor_config.get('testes_iniciais', False),
+            etapa_parcial=supervisor_config.get('testes_parciais', False),
+            etapa_final=supervisor_config.get('testes_finais', False),
+            horas_etapa_inicial=float(supervisor_config.get('horas_etapa_inicial', 0)) if supervisor_config.get('horas_etapa_inicial') else 0,
+            horas_etapa_parcial=float(supervisor_config.get('horas_etapa_parcial', 0)) if supervisor_config.get('horas_etapa_parcial') else 0,
+            horas_etapa_final=float(supervisor_config.get('horas_etapa_final', 0)) if supervisor_config.get('horas_etapa_final') else 0,
+            observacoes_etapa_inicial=supervisor_config.get('observacoes_etapa_inicial', ''),
+            observacoes_etapa_parcial=supervisor_config.get('observacoes_etapa_parcial', ''),
+            observacoes_etapa_final=supervisor_config.get('observacoes_etapa_final', ''),
+            data_etapa_inicial=datetime.now() if supervisor_config.get('testes_iniciais', False) else None,
+            data_etapa_parcial=datetime.now() if supervisor_config.get('testes_parciais', False) else None,
+            data_etapa_final=datetime.now() if supervisor_config.get('testes_finais', False) else None,
+            supervisor_etapa_inicial=current_user.nome_completo if supervisor_config.get('testes_iniciais', False) else None,
+            supervisor_etapa_parcial=current_user.nome_completo if supervisor_config.get('testes_parciais', False) else None,
+            supervisor_etapa_final=current_user.nome_completo if supervisor_config.get('testes_finais', False) else None,
+            # Campos de aprovação
+            aprovado_supervisor=supervisor_config.get('aprovado_supervisor', False) if current_user.privilege_level in ['SUPERVISOR', 'ADMIN'] else None,
+            data_aprovacao_supervisor=datetime.now() if supervisor_config.get('aprovado_supervisor', False) and current_user.privilege_level in ['SUPERVISOR', 'ADMIN'] else None,
+            supervisor_aprovacao=current_user.nome_completo if supervisor_config.get('aprovado_supervisor', False) and current_user.privilege_level in ['SUPERVISOR', 'ADMIN'] else None,
+            # Campos de finalização
+            servico_de_campo=is_servico_de_campo or supervisor_config.get('servico_de_campo', False),
+            data_processo_finalizado=datetime.now() if supervisor_config.get('os_finalizada', False) else None
+        )
+
+        db.add(novo_apontamento)
+        db.commit()
+        db.refresh(novo_apontamento)
+
+        # Salvar resultados dos testes selecionados na tabela resultados_teste (UM ÚNICO REGISTRO)
+        if testes_selecionados:
+            from app.database_models import ResultadoTeste, TipoTeste
+            import json
+
+            # Filtrar apenas testes selecionados com resultado
+            testes_com_resultado = {}
+            testes_detalhados = []
+
+            for teste_id_str, dados_teste in testes_selecionados.items():
+                if dados_teste.get('selecionado', False) and dados_teste.get('resultado'):
+                    try:
+                        teste_id = int(teste_id_str)
+
+                        # Buscar dados do teste
+                        teste_info = db.query(TipoTeste).filter(TipoTeste.id == teste_id).first()
+
+                        teste_detalhado = {
+                            "id_teste": teste_id,
+                            "nome_teste": teste_info.nome if teste_info else f"Teste {teste_id}",
+                            "tipo_teste": teste_info.tipo_teste if teste_info else "ESTATICO",
+                            "resultado": dados_teste['resultado'],
+                            "observacao": dados_teste.get('observacao', '')
+                        }
+
+                        testes_detalhados.append(teste_detalhado)
+                        testes_com_resultado[teste_id_str] = dados_teste
+
+                    except Exception as e:
+                        print(f"❌ Erro ao processar teste {teste_id_str}: {e}")
+
+            # Salvar UM ÚNICO REGISTRO com todos os testes como JSON
+            if testes_detalhados:
+                resultado_json = {
+                    "apontamento_id": novo_apontamento.id,
+                    "data_registro": datetime.now().isoformat(),
+                    "total_testes": len(testes_detalhados),
+                    "testes": testes_detalhados
+                }
+
+                resultado_teste = ResultadoTeste(
+                    id_apontamento=novo_apontamento.id,
+                    id_teste=0,  # 0 indica que é um registro consolidado
+                    resultado="CONSOLIDADO",
+                    observacao=json.dumps(resultado_json, ensure_ascii=False),
+                    data_registro=datetime.now()
+                )
+
+                db.add(resultado_teste)
+                db.commit()
+                print(f"✅ REGISTRO ÚNICO salvo com {len(testes_detalhados)} testes consolidados")
+
+        return {
+            "message": "Apontamento criado com sucesso",
+            "id": novo_apontamento.id,
+            "numero_os": numero_os,
+            "servico_de_campo": novo_apontamento.servico_de_campo
+        }
+
+    except Exception as e:
+        db.rollback()
+        print(f"Erro ao criar apontamento: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao criar apontamento: {str(e)}")
+
+@router.post("/apontamentos-pendencia", operation_id="dev_post_apontamentos_pendencia")
+async def create_apontamento_with_pendencia(
+    apontamento_data: dict,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Criar apontamento e pendência simultaneamente"""
+    try:
+        print(f"📋 Criando apontamento com pendência: {apontamento_data}")
+
+        # Validar dados obrigatórios
+        numero_os = apontamento_data.get('numero_os')
+        if not numero_os:
+            raise HTTPException(status_code=400, detail="Número da OS é obrigatório")
+
+        # Buscar ou criar OS COMPLETA
+        ordem_servico = db.query(OrdemServico).filter(OrdemServico.os_numero == numero_os).first()
+        if not ordem_servico:
+            print(f"🆕 Criando nova OS com pendência: {numero_os}")
+            # Buscar IDs válidos para setor e departamento
+            id_setor_valido = None
+            id_departamento_valido = None
+
+            # Buscar primeiro setor disponível
+            primeiro_setor = db.query(Setor).first()
+            if primeiro_setor:
+                id_setor_valido = primeiro_setor.id
+
+            # Buscar primeiro departamento disponível
+            primeiro_departamento = db.query(Departamento).first()
+            if primeiro_departamento:
+                id_departamento_valido = primeiro_departamento.id
+
+            # Criar nova OS COMPLETA se não existir
+            ordem_servico = OrdemServico(
+                os_numero=numero_os,
+                status_os=apontamento_data.get('status_os', 'ABERTA'),
+                prioridade='ALTA',  # Pendência = prioridade alta
+                id_responsavel_registro=current_user.id,
+                descricao_maquina=apontamento_data.get('equipamento', ''),
+                id_setor=id_setor_valido,
+                id_departamento=id_departamento_valido,
+                observacoes_gerais=f"OS CRIADA COM PENDÊNCIA\nCliente: {apontamento_data.get('cliente', '')}\nTipo Máquina: {apontamento_data.get('tipo_maquina', '')}\nAtividade: {apontamento_data.get('tipo_atividade', '')}\nDescrição: {apontamento_data.get('descricao_atividade', '')}\nObservação: {apontamento_data.get('observacao_geral', '')}\nResultado: {apontamento_data.get('resultado_global', '')}",
+                horas_orcadas=float(apontamento_data.get('supervisor_horas_orcadas', 0)) if apontamento_data.get('supervisor_horas_orcadas') else 0
+            )
+            db.add(ordem_servico)
+            db.flush()
+            print(f"✅ OS com pendência criada com ID: {ordem_servico.id}")
+        else:
+            print(f"📋 OS existente - adicionando pendência: {ordem_servico.id}")
+            # Atualizar prioridade para ALTA por causa da pendência
+            setattr(ordem_servico, 'prioridade', 'ALTA')
+            # Adicionar informação da pendência nas observações
+            obs_atual = getattr(ordem_servico, 'observacoes_gerais', '') or ''
+            nova_obs = f"\n--- PENDÊNCIA CRIADA {datetime.now().strftime('%d/%m/%Y %H:%M')} ---\nMotivo: {apontamento_data.get('observacao_geral', '')}\nResultado: {apontamento_data.get('resultado_global', '')}"
+            setattr(ordem_servico, 'observacoes_gerais', obs_atual + nova_obs)
+
+        # Buscar setor
+        setor = db.query(Setor).filter(Setor.nome == current_user.setor).first()
+        setor_id = setor.id if setor else 1  # ID padrão se não encontrar
+
+        # Criar data/hora de início e fim
+        data_hora_inicio = datetime.now()
+        if apontamento_data.get('data_inicio') and apontamento_data.get('hora_inicio'):
+            try:
+                data_str = f"{apontamento_data['data_inicio']} {apontamento_data['hora_inicio']}"
+                data_hora_inicio = datetime.strptime(data_str, '%Y-%m-%d %H:%M')
+            except:
+                pass
+
+        data_hora_fim = None
+        if apontamento_data.get('data_fim') and apontamento_data.get('hora_fim'):
+            try:
+                data_str = f"{apontamento_data['data_fim']} {apontamento_data['hora_fim']}"
+                data_hora_fim = datetime.strptime(data_str, '%Y-%m-%d %H:%M')
+            except:
+                pass
+
+        # Extrair dados das etapas do supervisor_config
+        supervisor_config = apontamento_data.get('supervisor_config', {})
+
+        # Verificar se é serviço de campo baseado na descrição da atividade
+        descricao_atividade = apontamento_data.get('descricao_atividade', '')
+        descricao_upper = descricao_atividade.upper().strip()
+
+        # Verificar múltiplas variações de "serviço de campo"
+        is_servico_de_campo = (
+            descricao_upper == 'SVC - SERVICO DE CAMPO' or
+            descricao_upper == 'SERVICO DE CAMPO' or
+            'SERVICO DE CAMPO' in descricao_upper or
+            'SVC' in descricao_upper
+        )
+
+        print(f"🔍 Verificando serviço de campo (endpoint alternativo):")
+        print(f"   Descrição da atividade: '{descricao_atividade}'")
+        print(f"   Descrição normalizada: '{descricao_upper}'")
+        print(f"   É serviço de campo: {is_servico_de_campo}")
+
+        # Criar apontamento detalhado
+        novo_apontamento = ApontamentoDetalhado(
+            id_os=ordem_servico.id,
+            id_usuario=current_user.id,
+            id_setor=setor_id,
+            data_hora_inicio=data_hora_inicio,
+            data_hora_fim=data_hora_fim,
+            status_apontamento='FINALIZADO',
+            foi_retrabalho=apontamento_data.get('retrabalho', False),
+            causa_retrabalho=apontamento_data.get('causa_retrabalho', ''),
+            observacao_os=apontamento_data.get('observacao_geral', ''),
+            observacoes_gerais=apontamento_data.get('resultado_global', ''),
+            criado_por=current_user.nome_completo,
+            criado_por_email=current_user.email,
+            setor=current_user.setor,
+            # Campos de etapas
+            horas_orcadas=float(supervisor_config.get('horas_orcadas', 0)) if supervisor_config.get('horas_orcadas') else 0,
+            etapa_inicial=supervisor_config.get('testes_iniciais', False),
+            etapa_parcial=supervisor_config.get('testes_parciais', False),
+            etapa_final=supervisor_config.get('testes_finais', False),
+            data_etapa_inicial=datetime.now() if supervisor_config.get('testes_iniciais', False) else None,
+            data_etapa_parcial=datetime.now() if supervisor_config.get('testes_parciais', False) else None,
+            data_etapa_final=datetime.now() if supervisor_config.get('testes_finais', False) else None,
+            supervisor_etapa_inicial=current_user.nome_completo if supervisor_config.get('testes_iniciais', False) else None,
+            supervisor_etapa_parcial=current_user.nome_completo if supervisor_config.get('testes_parciais', False) else None,
+            supervisor_etapa_final=current_user.nome_completo if supervisor_config.get('testes_finais', False) else None,
+            # Campos de finalização
+            servico_de_campo=is_servico_de_campo or supervisor_config.get('servico_de_campo', False)
+        )
+
+        db.add(novo_apontamento)
+        db.flush()  # Para obter o ID do apontamento
+
+        # Criar pendência relacionada
+        nova_pendencia = Pendencia(
+            numero_os=numero_os,
+            cliente=apontamento_data.get('cliente', 'Cliente não informado'),
+            id_responsavel_inicio=current_user.id,
+            tipo_maquina=apontamento_data.get('tipo_maquina', 'Não informado'),
+            descricao_maquina=apontamento_data.get('equipamento', 'Equipamento não informado'),
+            descricao_pendencia=apontamento_data.get('observacao_geral', 'Pendência criada automaticamente'),
+            prioridade='NORMAL',
+            status='ABERTA',
+            id_apontamento_origem=novo_apontamento.id
+        )
+
+        db.add(nova_pendencia)
+        db.commit()
+        db.refresh(novo_apontamento)
+        db.refresh(nova_pendencia)
+
+        return {
+            "message": "Apontamento e pendência criados com sucesso",
+            "id_apontamento": novo_apontamento.id,
+            "numero_os": numero_os,
+            "numero_pendencia": f"PEN-{nova_pendencia.id:06d}"
+        }
+
+    except Exception as e:
+        db.rollback()
+        print(f"Erro ao criar apontamento com pendência: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao criar apontamento com pendência: {str(e)}")
+
+# =============================================================================
+# ENDPOINTS PARA PROGRAMAÇÃO COMPLETA
+# =============================================================================
+
+@router.put("/programacao/{programacao_id}/atribuir", operation_id="dev_put_programacao_programacao_id_atribuir")
+async def atribuir_colaborador(
+    programacao_id: int,
+    atribuicao_data: dict,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Atribuir colaborador à programação"""
+    try:
+        # Verificar permissões
+        if current_user.privilege_level not in ['ADMIN', 'SUPERVISOR']:  # type: ignore
+            raise HTTPException(status_code=403, detail="Sem permissão para atribuir colaboradores")
+
+        programacao = db.query(Programacao).filter(Programacao.id == programacao_id).first()
+        if not programacao:
+            raise HTTPException(status_code=404, detail="Programação não encontrada")
+
+        # Verificar se é do mesmo setor (para SUPERVISOR)
+        if current_user.privilege_level == 'SUPERVISOR' and programacao.setor != current_user.setor:  # type: ignore
+            raise HTTPException(status_code=403, detail="Sem permissão para esta programação")
+
+        programacao.responsavel_id = atribuicao_data.get('responsavel_id')  # type: ignore
+        programacao.updated_at = datetime.now()  # type: ignore
+
+        db.commit()
+
+        return {"message": "Colaborador atribuído com sucesso"}
+
+    except Exception as e:
+        db.rollback()
+        print(f"Erro ao atribuir colaborador: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao atribuir colaborador: {str(e)}")
+
+# =============================================================================
+# ENDPOINTS PARA GERENCIAMENTO DE APONTAMENTOS
+# =============================================================================
+
+@router.put("/apontamentos/{apontamento_id}/aprovar")
+async def aprovar_apontamento(
+    apontamento_id: int,
+    aprovacao_data: dict,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Aprovar um apontamento (apenas supervisores, gestores e admins)"""
+
+    # Verificar permissões
+    if current_user.privilege_level not in ['SUPERVISOR', 'GESTAO', 'ADMIN']:
+        raise HTTPException(status_code=403, detail="Acesso negado: apenas supervisores, gestores e administradores podem aprovar apontamentos")
+
+    try:
+        # Buscar o apontamento
+        apontamento = db.query(ApontamentoDetalhado).filter(ApontamentoDetalhado.id == apontamento_id).first()
+        if not apontamento:
+            raise HTTPException(status_code=404, detail="Apontamento não encontrado")
+
+        # Verificar se o usuário pode aprovar este apontamento (mesmo setor/departamento)
+        if current_user.privilege_level == 'SUPERVISOR':
+            if apontamento.setor != current_user.setor:
+                raise HTTPException(status_code=403, detail="Você só pode aprovar apontamentos do seu setor")
+        elif current_user.privilege_level == 'GESTAO':
+            # Buscar usuário do apontamento para verificar departamento
+            usuario_apontamento = db.query(Usuario).filter(Usuario.id == apontamento.id_usuario).first()
+            if usuario_apontamento and usuario_apontamento.departamento != current_user.departamento:
+                raise HTTPException(status_code=403, detail="Você só pode aprovar apontamentos do seu departamento")
+
+        # Atualizar campos de aprovação
+        apontamento.aprovado_supervisor = True
+        apontamento.data_aprovacao_supervisor = datetime.now()
+        apontamento.supervisor_aprovacao = current_user.nome_completo or current_user.primeiro_nome
+
+        db.commit()
+        db.refresh(apontamento)
+
+        print(f"✅ Apontamento {apontamento_id} aprovado por {current_user.nome_completo}")
+
+        return {
+            "message": "Apontamento aprovado com sucesso",
+            "apontamento_id": apontamento_id,
+            "aprovado_por": current_user.nome_completo,
+            "data_aprovacao": apontamento.data_aprovacao_supervisor
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Erro ao aprovar apontamento {apontamento_id}: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
+
+@router.put("/apontamentos/{apontamento_id}/rejeitar")
+async def rejeitar_apontamento(
+    apontamento_id: int,
+    rejeicao_data: dict,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Rejeitar um apontamento (apenas supervisores, gestores e admins)"""
+
+    # Verificar permissões
+    if current_user.privilege_level not in ['SUPERVISOR', 'GESTAO', 'ADMIN']:
+        raise HTTPException(status_code=403, detail="Acesso negado: apenas supervisores, gestores e administradores podem rejeitar apontamentos")
+
+    try:
+        # Buscar o apontamento
+        apontamento = db.query(ApontamentoDetalhado).filter(ApontamentoDetalhado.id == apontamento_id).first()
+        if not apontamento:
+            raise HTTPException(status_code=404, detail="Apontamento não encontrado")
+
+        # Verificar se o usuário pode rejeitar este apontamento (mesmo setor/departamento)
+        if current_user.privilege_level == 'SUPERVISOR':
+            if apontamento.setor != current_user.setor:
+                raise HTTPException(status_code=403, detail="Você só pode rejeitar apontamentos do seu setor")
+        elif current_user.privilege_level == 'GESTAO':
+            # Buscar usuário do apontamento para verificar departamento
+            usuario_apontamento = db.query(Usuario).filter(Usuario.id == apontamento.id_usuario).first()
+            if usuario_apontamento and usuario_apontamento.departamento != current_user.departamento:
+                raise HTTPException(status_code=403, detail="Você só pode rejeitar apontamentos do seu departamento")
+
+        # Atualizar campos de rejeição
+        apontamento.aprovado_supervisor = False
+        apontamento.data_aprovacao_supervisor = datetime.now()
+        apontamento.supervisor_aprovacao = current_user.nome_completo or current_user.primeiro_nome
+
+        # Adicionar motivo da rejeição nas observações
+        motivo_rejeicao = rejeicao_data.get('motivo_rejeicao', 'Rejeitado pelo supervisor')
+        if apontamento.observacoes_gerais:
+            apontamento.observacoes_gerais += f"\n\n[REJEITADO] {motivo_rejeicao}"
+        else:
+            apontamento.observacoes_gerais = f"[REJEITADO] {motivo_rejeicao}"
+
+        db.commit()
+        db.refresh(apontamento)
+
+        print(f"❌ Apontamento {apontamento_id} rejeitado por {current_user.nome_completo}")
+
+        return {
+            "message": "Apontamento rejeitado com sucesso",
+            "apontamento_id": apontamento_id,
+            "rejeitado_por": current_user.nome_completo,
+            "motivo": motivo_rejeicao,
+            "data_rejeicao": apontamento.data_aprovacao_supervisor
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Erro ao rejeitar apontamento {apontamento_id}: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
+
+@router.put("/apontamentos/{apontamento_id}")
+async def atualizar_apontamento(
+    apontamento_id: int,
+    update_data: dict,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Atualizar um apontamento (apenas supervisores, gestores e admins)"""
+
+    # Verificar permissões
+    if current_user.privilege_level not in ['SUPERVISOR', 'GESTAO', 'ADMIN']:
+        raise HTTPException(status_code=403, detail="Acesso negado: apenas supervisores, gestores e administradores podem editar apontamentos")
+
+    try:
+        # Buscar o apontamento
+        apontamento = db.query(ApontamentoDetalhado).filter(ApontamentoDetalhado.id == apontamento_id).first()
+        if not apontamento:
+            raise HTTPException(status_code=404, detail="Apontamento não encontrado")
+
+        # Verificar se o apontamento já foi aprovado
+        if apontamento.aprovado_supervisor:
+            raise HTTPException(
+                status_code=403,
+                detail="Apontamento já aprovado não pode ser editado. Apenas apontamentos pendentes podem ser modificados."
+            )
+
+        # Verificar se o usuário pode editar este apontamento (mesmo setor/departamento)
+        if current_user.privilege_level == 'SUPERVISOR':
+            if apontamento.setor != current_user.setor:
+                raise HTTPException(status_code=403, detail="Você só pode editar apontamentos do seu setor")
+        elif current_user.privilege_level == 'GESTAO':
+            # Buscar usuário do apontamento para verificar departamento
+            usuario_apontamento = db.query(Usuario).filter(Usuario.id == apontamento.id_usuario).first()
+            if usuario_apontamento and usuario_apontamento.departamento != current_user.departamento:
+                raise HTTPException(status_code=403, detail="Você só pode editar apontamentos do seu departamento")
+
+        # Atualizar campos permitidos
+        if 'data_hora_inicio' in update_data:
+            apontamento.data_hora_inicio = datetime.fromisoformat(update_data['data_hora_inicio'].replace('Z', '+00:00'))
+
+        if 'data_hora_fim' in update_data and update_data['data_hora_fim']:
+            apontamento.data_hora_fim = datetime.fromisoformat(update_data['data_hora_fim'].replace('Z', '+00:00'))
+
+        if 'tempo_trabalhado' in update_data:
+            apontamento.tempo_trabalhado = float(update_data['tempo_trabalhado'])
+
+        if 'observacoes' in update_data:
+            apontamento.observacoes_gerais = update_data['observacoes']
+
+        if 'tipo_atividade' in update_data:
+            apontamento.tipo_atividade = update_data['tipo_atividade']
+
+        if 'descricao_atividade' in update_data:
+            apontamento.descricao_atividade = update_data['descricao_atividade']
+
+        # Atualizar data de última modificação
+        apontamento.data_ultima_atualizacao = datetime.now()
+
+        db.commit()
+        db.refresh(apontamento)
+
+        print(f"✅ Apontamento {apontamento_id} atualizado por {current_user.nome_completo}")
+
+        return {
+            "message": "Apontamento atualizado com sucesso",
+            "apontamento_id": apontamento_id,
+            "atualizado_por": current_user.nome_completo,
+            "data_atualizacao": apontamento.data_ultima_atualizacao
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Erro ao atualizar apontamento {apontamento_id}: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
+
+# =============================================================================
+# ENDPOINTS PARA APONTAMENTOS DETALHADOS (MINHAS OS)
+# =============================================================================
+
+@router.get("/apontamentos-detalhados", operation_id="dev_get_apontamentos_detalhados")
+async def get_apontamentos_detalhados(
+    usuario_id: Optional[int] = Query(None),
+    setor: Optional[str] = Query(None),
+    departamento: Optional[str] = Query(None),
+    usuario_setor: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    data_inicio: Optional[str] = Query(None),
+    data_fim: Optional[str] = Query(None),
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Obter apontamentos detalhados com filtros baseados no privilégio do usuário"""
+    try:
+        query = db.query(ApontamentoDetalhado)
+
+        # Aplicar filtros baseados no privilégio do usuário
+        if current_user.privilege_level == 'USER':  # type: ignore
+            # USER vê apenas seus próprios apontamentos
+            query = query.filter(ApontamentoDetalhado.id_usuario == current_user.id)
+            query = query.filter(ApontamentoDetalhado.setor == current_user.setor)
+            # Filtro por departamento removido - campo não existe mais
+
+        elif current_user.privilege_level == 'SUPERVISOR':  # type: ignore
+            # SUPERVISOR vê apontamentos do seu setor/departamento
+            query = query.filter(ApontamentoDetalhado.setor == current_user.setor)
+            # Filtro por departamento removido - campo não existe mais
+
+            # Se filtrar por usuário específico, verificar se é do mesmo setor
+            if usuario_id:  # type: ignore
+                usuario_filtrado = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+                if usuario_filtrado and usuario_filtrado.setor == current_user.setor:  # type: ignore
+                    query = query.filter(ApontamentoDetalhado.id_usuario == usuario_id)
+                else:
+                    # Se o usuário não é do mesmo setor, retornar vazio
+                    return []
+
+        elif current_user.privilege_level == 'ADMIN':  # type: ignore
+            # ADMIN vê tudo, aplicar filtros opcionais
+            if usuario_id:
+                query = query.filter(ApontamentoDetalhado.id_usuario == usuario_id)
+            if setor:
+                query = query.filter(ApontamentoDetalhado.setor == setor)
+            if departamento:
+                # Filtro por departamento removido - campo não existe mais
+                pass
+
+        # Aplicar filtros comuns
+        if status:
+            query = query.filter(ApontamentoDetalhado.status_apontamento == status)
+
+        if data_inicio:
+            query = query.filter(func.date(ApontamentoDetalhado.data_hora_inicio) >= data_inicio)
+
+        if data_fim:
+            query = query.filter(func.date(ApontamentoDetalhado.data_hora_inicio) <= data_fim)
+
+        # Ordenar por data mais recente
+        apontamentos = query.order_by(desc(ApontamentoDetalhado.data_hora_inicio)).limit(100).all()
+
+
+
+        # Buscar informações adicionais das OS
+        resultado = []
+        for apt in apontamentos:
+            try:
+                # Buscar OS relacionada
+                ordem_servico = None
+                cliente_nome = "Cliente não informado"
+                if apt.id_os:  # type: ignore
+                    ordem_servico = db.query(OrdemServico).filter(OrdemServico.id == apt.id_os).first()
+
+                    # Buscar cliente da OS
+                    if ordem_servico and ordem_servico.id_cliente:
+                        cliente = db.query(Cliente).filter(Cliente.id == ordem_servico.id_cliente).first()
+                        if cliente:
+                            cliente_nome = cliente.razao_social or cliente.nome_fantasia or "Cliente não informado"
+
+                # Buscar usuário
+                usuario = db.query(Usuario).filter(Usuario.id == apt.id_usuario).first()
+
+                # Calcular tempo trabalhado se não estiver definido
+                tempo_trabalhado = 0
+                if hasattr(apt, 'tempo_trabalhado') and apt.tempo_trabalhado:
+                    tempo_trabalhado = float(apt.tempo_trabalhado)
+                elif apt.data_hora_inicio and apt.data_hora_fim:
+                    # Calcular diferença em horas
+                    delta = apt.data_hora_fim - apt.data_hora_inicio
+                    tempo_trabalhado = delta.total_seconds() / 3600
+
+                    resultado.append({
+                    "id": apt.id,
+                    "numero_os": ordem_servico.os_numero if ordem_servico else f"APT-{apt.id}",
+                    "cliente": cliente_nome,
+                    "equipamento": ordem_servico.descricao_maquina if ordem_servico else "Equipamento não informado",
+                    "data_hora_inicio": apt.data_hora_inicio.isoformat() if apt.data_hora_inicio else None,  # type: ignore
+                    "data_hora_fim": apt.data_hora_fim.isoformat() if apt.data_hora_fim else None,  # type: ignore
+                    "tempo_trabalhado": round(tempo_trabalhado, 2),
+                    "status_apontamento": apt.status_apontamento,
+                    "setor": apt.setor,
+                    "departamento": current_user.departamento,
+                    "nome_tecnico": usuario.nome_completo if usuario else apt.criado_por,
+                    "tipo_atividade": apt.tipo_atividade,
+                    "descricao_atividade": apt.descricao_atividade,
+                    "observacoes": apt.observacoes_gerais,
+                    "observacao_os": apt.observacao_os,
+                    "foi_retrabalho": apt.foi_retrabalho,
+                    "causa_retrabalho": apt.causa_retrabalho,
+                    "aprovado_supervisor": apt.aprovado_supervisor,
+                    "data_aprovacao_supervisor": apt.data_aprovacao_supervisor.isoformat() if apt.data_aprovacao_supervisor else None,  # type: ignore
+                    "servico_de_campo": apt.servico_de_campo if hasattr(apt, 'servico_de_campo') else False
+                })
+            except Exception as e:
+                print(f"❌ Erro ao processar apontamento {apt.id}: {str(e)}")
+                continue
+
+        return resultado
+
+    except Exception as e:
+        print(f"Erro ao buscar apontamentos detalhados: {e}")
+        return []
+
+# =============================================================================
+# ENDPOINTS PARA GERENCIAR APONTAMENTOS
+# =============================================================================
+
+@router.get("/apontamentos/{apontamento_id}", operation_id="dev_get_apontamentos_apontamento_id")
+async def get_apontamento(
+    apontamento_id: int,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Obter detalhes de um apontamento específico"""
+    try:
+        apontamento = db.query(ApontamentoDetalhado).filter(ApontamentoDetalhado.id == apontamento_id).first()
+        if not apontamento:
+            raise HTTPException(status_code=404, detail="Apontamento não encontrado")
+
+        # Verificar permissões
+        if current_user.privilege_level == 'USER' and apontamento.id_usuario != current_user.id:  # type: ignore
+            raise HTTPException(status_code=403, detail="Sem permissão para ver este apontamento")
+
+        return {
+            "id": apontamento.id,
+            "id_os": apontamento.id_os,
+            "id_usuario": apontamento.id_usuario,
+            "status_apontamento": apontamento.status_apontamento,
+            "aprovado_supervisor": apontamento.aprovado_supervisor,
+            "data_aprovacao_supervisor": apontamento.data_aprovacao_supervisor.isoformat() if apontamento.data_aprovacao_supervisor else None,  # type: ignore
+            "observacoes": apontamento.observacoes,
+            "foi_retrabalho": apontamento.foi_retrabalho,
+            "causa_retrabalho": apontamento.causa_retrabalho
+        }
+
+    except Exception as e:
+        print(f"Erro ao buscar apontamento: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar apontamento: {str(e)}")
+
+@router.delete("/apontamentos/{apontamento_id}", operation_id="dev_delete_apontamentos_apontamento_id")
+async def delete_apontamento(
+    apontamento_id: int,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Deletar um apontamento"""
+    try:
+        apontamento = db.query(ApontamentoDetalhado).filter(ApontamentoDetalhado.id == apontamento_id).first()
+        if not apontamento:
+            raise HTTPException(status_code=404, detail="Apontamento não encontrado")
+
+        # Verificar permissões
+        if current_user.privilege_level == 'USER':  # type: ignore
+            # USER só pode deletar seus próprios apontamentos não aprovados
+            if apontamento.id_usuario != current_user.id:  # type: ignore
+                raise HTTPException(status_code=403, detail="Sem permissão para deletar este apontamento")
+            if apontamento.aprovado_supervisor:  # type: ignore
+                raise HTTPException(status_code=403, detail="Não é possível deletar apontamento já aprovado")
+        elif current_user.privilege_level == 'SUPERVISOR':  # type: ignore
+            # SUPERVISOR pode deletar apontamentos do seu setor
+            if apontamento.setor != current_user.setor:  # type: ignore
+                raise HTTPException(status_code=403, detail="Sem permissão para deletar este apontamento")
+        # ADMIN pode deletar qualquer apontamento
+
+        db.delete(apontamento)
+        db.commit()
+
+        return {"message": "Apontamento deletado com sucesso"}
+
+    except Exception as e:
+        db.rollback()
+        print(f"Erro ao deletar apontamento: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao deletar apontamento: {str(e)}")
+
+# =============================================================================
+# ENDPOINTS PARA DASHBOARD E ESTATÍSTICAS
+# =============================================================================
+
+@router.get("/dashboard/estatisticas", operation_id="dev_get_dashboard_estatisticas")
+async def get_dashboard_stats(
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Obter estatísticas para o dashboard"""
+    try:
+        stats = {}
+
+        # Filtros baseados no privilégio
+        if current_user.privilege_level == 'USER':  # type: ignore
+            # USER vê apenas seus dados
+            apontamentos_query = db.query(ApontamentoDetalhado).filter(ApontamentoDetalhado.id_usuario == current_user.id)
+            os_query = db.query(OrdemServico).filter(OrdemServico.setor == current_user.setor)
+            pendencias_query = db.query(Pendencia).filter(Pendencia.numero_os.in_(
+                db.query(OrdemServico.os_numero).filter(OrdemServico.setor == current_user.setor)
+            ))
+        elif current_user.privilege_level == 'SUPERVISOR':  # type: ignore
+            # SUPERVISOR vê dados do seu setor
+            apontamentos_query = db.query(ApontamentoDetalhado).filter(ApontamentoDetalhado.setor == current_user.setor)
+            os_query = db.query(OrdemServico).filter(OrdemServico.setor == current_user.setor)
+            pendencias_query = db.query(Pendencia).filter(Pendencia.numero_os.in_(
+                db.query(OrdemServico.os_numero).filter(OrdemServico.setor == current_user.setor)
+            ))
+        else:
+            # ADMIN vê tudo
+            apontamentos_query = db.query(ApontamentoDetalhado)
+            os_query = db.query(OrdemServico)
+            pendencias_query = db.query(Pendencia)
+
+        # Calcular estatísticas
+        stats['total_apontamentos'] = apontamentos_query.count()
+        stats['apontamentos_hoje'] = apontamentos_query.filter(
+            func.date(ApontamentoDetalhado.data_hora_inicio) == date.today()
+        ).count()
+
+        stats['total_os'] = os_query.count()
+        stats['os_abertas'] = os_query.filter(OrdemServico.status_os == 'ABERTA').count()
+        stats['os_em_andamento'] = os_query.filter(OrdemServico.status_os == 'EM_ANDAMENTO').count()
+        stats['os_finalizadas'] = os_query.filter(OrdemServico.status_os == 'FINALIZADA').count()
+
+        stats['total_pendencias'] = pendencias_query.count()
+        stats['pendencias_abertas'] = pendencias_query.filter(Pendencia.status == 'ABERTA').count()
+
+        return stats
+
+    except Exception as e:
+        print(f"Erro ao buscar estatísticas: {e}")
+        return {
+            'total_apontamentos': 0,
+            'apontamentos_hoje': 0,
+            'total_os': 0,
+            'os_abertas': 0,
+            'os_em_andamento': 0,
+            'os_finalizadas': 0,
+            'total_pendencias': 0,
+            'pendencias_abertas': 0
+        }
+
+# =============================================================================
+# ENDPOINTS PARA VALIDAÇÕES DE APONTAMENTO
+# =============================================================================
+
+@router.get("/apontamentos/verificar-atividade", operation_id="dev_get_apontamentos_verificar_atividade")
+async def verificar_atividade_anterior(
+    numero_os: str = Query(...),
+    tipo_atividade: str = Query(...),
+    data_atual: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    """
+    Verifica se já existe um registro da mesma atividade em data diferente
+    """
+    try:
+        print(f"🔍 Verificando atividade anterior: OS={numero_os}, Atividade={tipo_atividade}, Data={data_atual}")
+
+        # Buscar a OS primeiro
+        os = db.query(OrdemServico).filter(OrdemServico.os_numero == numero_os.strip()).first()
+        if not os:
+            return {"encontrado": False, "data_anterior": None, "id_anterior": None}
+
+        # Buscar apontamentos anteriores da mesma OS
+        apontamento_anterior = db.query(ApontamentoDetalhado).filter(
+            and_(
+                ApontamentoDetalhado.id_os == os.id,
+                # Não podemos filtrar por tipo_atividade pois o modelo não tem esse campo
+                ApontamentoDetalhado.data_hora_inicio != data_atual
+            )
+        ).first()
+
+        if apontamento_anterior:
+            print(f"✅ Encontrado registro anterior: {apontamento_anterior.data_inicio}")
+            return {
+                "encontrado": True,
+                "data_anterior": str(apontamento_anterior.data_inicio),
+                "id_anterior": apontamento_anterior.id
+            }
+        else:
+            print("❌ Nenhum registro anterior encontrado")
+            return {
+                "encontrado": False,
+                "data_anterior": None,
+                "id_anterior": None
+            }
+
+    except Exception as e:
+        print(f"❌ Erro ao verificar atividade anterior: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao verificar atividade anterior: {str(e)}"
+        )
+
+@router.get("/apontamentos/status-testes/{numero_os}", operation_id="dev_get_apontamentos_status_testes_numero_os")
+async def get_status_testes_os(
+    numero_os: str,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    """
+    Retorna o status dos testes de uma OS
+    """
+    try:
+        print(f"🔍 Verificando status dos testes da OS: {numero_os}")
+
+        # Buscar a OS
+        os = db.query(OrdemServico).filter(OrdemServico.os_numero == numero_os.strip()).first()
+
+        if not os:
+            print(f"❌ OS não encontrada: {numero_os}")
+            raise HTTPException(
+                status_code=404,
+                detail="OS não encontrada"
+            )
+
+        # Verificar status dos testes (assumindo que existem campos na OS ou em apontamentos)
+        # Por enquanto, vou retornar valores padrão - você pode ajustar conforme sua estrutura
+        status_testes = {
+            "testes_iniciais": getattr(os, 'testes_iniciais_finalizados', False),
+            "testes_parciais": getattr(os, 'testes_parciais_finalizados', False),
+            "testes_finais": getattr(os, 'testes_finais_finalizados', False)
+        }
+
+        print(f"✅ Status dos testes: {status_testes}")
+        return status_testes
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Erro ao verificar status dos testes: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao verificar status dos testes: {str(e)}"
+        )
+
+@router.get("/apontamentos/contar-retrabalhos", operation_id="dev_get_apontamentos_contar_retrabalhos")
+async def contar_retrabalhos(
+    numero_os: str = Query(...),
+    causa_retrabalho: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    """
+    Conta quantos retrabalhos já foram feitos pela mesma causa
+    """
+    try:
+        print(f"🔍 Contando retrabalhos: OS={numero_os}, Causa={causa_retrabalho}")
+
+        # Buscar a OS primeiro
+        os = db.query(OrdemServico).filter(OrdemServico.os_numero == numero_os.strip()).first()
+        if not os:
+            return {"count": 0}
+
+        # Contar apontamentos de retrabalho com a mesma causa
+        count = db.query(ApontamentoDetalhado).filter(
+            and_(
+                ApontamentoDetalhado.id_os == os.id,
+                ApontamentoDetalhado.foi_retrabalho == True,
+                ApontamentoDetalhado.causa_retrabalho == causa_retrabalho.strip()
+            )
+        ).count()
+
+        print(f"✅ Encontrados {count} retrabalhos pela mesma causa")
+        return {"count": count}
+
+    except Exception as e:
+        print(f"❌ Erro ao contar retrabalhos: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao contar retrabalhos: {str(e)}"
+        )
+
+@router.get("/ordens-servico/{numero_os}", operation_id="dev_get_ordens_servico_numero_os")
+async def get_ordem_servico(
+    numero_os: str,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    """
+    Busca uma OS pelo número e retorna seus dados
+    """
+    try:
+        print(f"🔍 Buscando OS: {numero_os}")
+
+        # Buscar a OS
+        os = db.query(OrdemServico).filter(OrdemServico.os_numero == numero_os.strip()).first()
+
+        if not os:
+            print(f"❌ OS não encontrada: {numero_os}")
+            raise HTTPException(
+                status_code=404,
+                detail="OS não encontrada"
+            )
+
+        # Retornar dados da OS
+        os_data = {
+            "numero": os.os_numero,
+            "status": getattr(os, 'status_os', 'ABERTA'),
+            "cliente": "Cliente não informado",  # Campo não existe no modelo
+            "equipamento": getattr(os, 'descricao_maquina', ''),
+            "descricao": getattr(os, 'descricao_maquina', ''),
+            "data_abertura": getattr(os, 'data_criacao', None),
+            "data_prevista": None  # Campo não existe no modelo
+        }
+
+        print(f"✅ OS encontrada: {os_data}")
+        return os_data
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Erro ao buscar OS: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao buscar OS: {str(e)}"
+        )
+
+# =============================================================================
+# ROTAS PARA ESTRUTURA HIERÁRQUICA
+# =============================================================================
+
+@router.get("/tipos-maquina/{tipo_maquina_id}/partes")
+async def get_partes_tipo_maquina(
+    tipo_maquina_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Buscar partes de um tipo de máquina"""
+    try:
+        # Buscar tipo de máquina com estrutura de partes
+        query = text("""
+            SELECT id, nome_tipo, descricao_partes
+            FROM tipos_maquina
+            WHERE id = :tipo_maquina_id
+        """)
+
+        result = db.execute(query, {"tipo_maquina_id": tipo_maquina_id}).fetchone()
+
+        if not result:
+            raise HTTPException(status_code=404, detail="Tipo de máquina não encontrado")
+
+        partes = []
+        if result[2]:  # descricao_partes
+            try:
+                estrutura = json.loads(result[2])
+                partes = estrutura.get("partes", [])
+            except json.JSONDecodeError:
+                print(f"Erro ao decodificar JSON das partes para tipo_maquina_id {tipo_maquina_id}")
+
+        return {
+            "tipo_maquina_id": result[0],
+            "nome_tipo": result[1],
+            "partes": partes
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Erro ao buscar partes: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar partes: {str(e)}")
+
+@router.get("/atividades-por-categoria")
+async def get_atividades_por_categoria(
+    categoria: Optional[str] = None,
+    subcategoria: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Buscar atividades filtradas por categoria e subcategoria"""
+    try:
+        query = text("""
+            SELECT id, nome, descricao, categoria, subcategoria
+            FROM tipos_teste
+            WHERE 1=1
+            """ + (
+                " AND categoria = :categoria" if categoria else ""
+            ) + (
+                " AND subcategoria = :subcategoria" if subcategoria else ""
+            ) + """
+            ORDER BY categoria, subcategoria, nome
+        """)
+
+        params = {}
+        if categoria:
+            params["categoria"] = categoria
+        if subcategoria:
+            params["subcategoria"] = subcategoria
+
+        result = db.execute(query, params).fetchall()
+
+        atividades = []
+        for row in result:
+            atividades.append({
+                "id": row[0],
+                "nome": row[1],
+                "descricao": row[2] or "",
+                "categoria": row[3] or "",
+                "subcategoria": row[4] or ""
+            })
+
+        return {
+            "atividades": atividades,
+            "total": len(atividades),
+            "filtros": {
+                "categoria": categoria,
+                "subcategoria": subcategoria
+            }
+        }
+
+    except Exception as e:
+        print(f"Erro ao buscar atividades: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar atividades: {str(e)}")
+
+@router.get("/categorias-subcategorias")
+async def get_categorias_subcategorias(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Buscar todas as categorias e subcategorias disponíveis"""
+    try:
+        query = text("""
+            SELECT DISTINCT categoria, subcategoria
+            FROM tipos_teste
+            WHERE categoria IS NOT NULL AND categoria != ''
+            ORDER BY categoria, subcategoria
+        """)
+
+        result = db.execute(query).fetchall()
+
+        categorias = {}
+        for row in result:
+            categoria = row[0]
+            subcategoria = row[1] or ""
+
+            if categoria not in categorias:
+                categorias[categoria] = []
+
+            if subcategoria and subcategoria not in categorias[categoria]:
+                categorias[categoria].append(subcategoria)
+
+        return {
+            "categorias": categorias,
+            "categorias_lista": list(categorias.keys())
+        }
+
+    except Exception as e:
+        print(f"Erro ao buscar categorias: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar categorias: {str(e)}")
+
+@router.get("/categorias-maquina")
+async def get_categorias_maquina(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Buscar todas as categorias de máquina disponíveis (MOTOR, GERADOR, etc.)"""
+    try:
+        query = text("""
+            SELECT DISTINCT categoria
+            FROM tipos_maquina
+            WHERE categoria IS NOT NULL AND categoria != '' AND ativo = 1
+            ORDER BY categoria
+        """)
+
+        result = db.execute(query).fetchall()
+
+        categorias = []
+        for row in result:
+            if row[0]:  # Verificar se não é None
+                categorias.append(row[0])
+
+        # Se não houver categorias na DB, retornar categorias padrão
+        if not categorias:
+            categorias = ['MOTOR', 'GERADOR', 'TRANSFORMADOR', 'BOMBA', 'COMPRESSOR', 'VENTILADOR']
+
+        return {
+            "categorias": categorias,
+            "total": len(categorias)
+        }
+
+    except Exception as e:
+        print(f"Erro ao buscar categorias de máquina: {e}")
+
+@router.get("/subcategorias-por-categoria")
+async def get_subcategorias_por_categoria(
+    categoria: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Buscar subcategorias (partes) baseadas na categoria da máquina"""
+    try:
+        # Mapeamento de categorias para suas subcategorias/partes
+        subcategorias_map = {
+            'MOTOR': [
+                'Campo Shunt',
+                'Campo Série',
+                'Interpolos',
+                'Armadura',
+                'Escovas',
+                'Comutador',
+                'Rolamentos',
+                'Ventilação'
+            ],
+            'GERADOR': [
+                'Estator',
+                'Rotor',
+                'Excitatriz',
+                'Regulador de Tensão',
+                'Rolamentos',
+                'Ventilação',
+                'Sistema de Refrigeração'
+            ],
+            'TRANSFORMADOR': [
+                'Núcleo',
+                'Bobinas',
+                'Isolação',
+                'Óleo Isolante',
+                'Buchas',
+                'Comutador de Derivação',
+                'Sistema de Refrigeração'
+            ],
+            'BOMBA': [
+                'Rotor',
+                'Estator',
+                'Carcaça',
+                'Vedações',
+                'Rolamentos',
+                'Acoplamento'
+            ],
+            'COMPRESSOR': [
+                'Pistão',
+                'Cilindro',
+                'Válvulas',
+                'Cabeçote',
+                'Sistema de Lubrificação',
+                'Sistema de Refrigeração'
+            ],
+            'VENTILADOR': [
+                'Hélice',
+                'Motor',
+                'Carcaça',
+                'Rolamentos',
+                'Sistema de Transmissão'
+            ]
+        }
+
+        # Buscar subcategorias para a categoria especificada
+        subcategorias = subcategorias_map.get(categoria.upper(), [])
+
+        return {
+            "categoria": categoria,
+            "subcategorias": subcategorias,
+            "total": len(subcategorias)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar subcategorias: {str(e)}")
+
+@router.get("/tipos-maquina/categorias")
+async def get_categorias_tipos_maquina(
+    departamento: str = Query(None),
+    setor: str = Query(None),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Buscar categorias distintas de tipos de máquina por departamento e setor"""
+    try:
+        query = db.query(TipoMaquina.categoria).distinct()
+
+        if departamento:
+            query = query.filter(TipoMaquina.departamento == departamento)
+        if setor:
+            query = query.filter(TipoMaquina.setor == setor)
+
+        categorias = [row.categoria for row in query.all() if row.categoria]
+
+        return categorias
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar categorias: {str(e)}")
+
+@router.get("/tipos-maquina/subcategorias")
+async def get_subcategorias_tipos_maquina(
+    categoria: str = Query(...),
+    departamento: str = Query(None),
+    setor: str = Query(None),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Buscar subcategorias (descricao_partes) de tipos de máquina por categoria, departamento e setor"""
+    try:
+        query = db.query(TipoMaquina.descricao_partes).filter(TipoMaquina.categoria == categoria)
+
+        if departamento:
+            query = query.filter(TipoMaquina.departamento == departamento)
+        if setor:
+            query = query.filter(TipoMaquina.setor == setor)
+
+        # Buscar todas as descrições de partes e processar
+        descricoes_partes = [row.descricao_partes for row in query.all() if row.descricao_partes]
+
+        # Processar as descrições de partes (podem estar separadas por vírgula ou quebra de linha)
+        subcategorias = []
+        for descricao in descricoes_partes:
+            if descricao:
+                # Dividir por vírgula ou quebra de linha e limpar espaços
+                partes = [parte.strip() for parte in descricao.replace('\n', ',').split(',') if parte.strip()]
+                subcategorias.extend(partes)
+
+        # Remover duplicatas e ordenar
+        subcategorias_unicas = sorted(list(set(subcategorias)))
+
+        return subcategorias_unicas
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar subcategorias: {str(e)}")
+        # Em caso de erro, retornar categorias padrão
+        categorias_padrao = ['MOTOR', 'GERADOR', 'TRANSFORMADOR', 'BOMBA', 'COMPRESSOR', 'VENTILADOR']
+        return {
+            "categorias": categorias_padrao,
+            "total": len(categorias_padrao)
+        }

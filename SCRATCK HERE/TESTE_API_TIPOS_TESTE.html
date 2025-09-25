@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧪 Teste API Tipos de Teste</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .params {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        input, select {
+            margin: 5px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Teste API Tipos de Teste</h1>
+        <p>Este teste verifica se a API de tipos de teste está funcionando corretamente.</p>
+
+        <div class="test-section">
+            <h3>📋 Parâmetros de Teste</h3>
+            <div class="params">
+                <label>Departamento:</label>
+                <input type="text" id="departamento" value="MANUTENCAO" placeholder="MANUTENCAO">
+                
+                <label>Setor:</label>
+                <input type="text" id="setor" value="ELETRICA" placeholder="ELETRICA">
+                
+                <label>Tipo de Máquina:</label>
+                <select id="tipoMaquina">
+                    <option value="">Selecione...</option>
+                    <option value="MOTOR">MOTOR</option>
+                    <option value="GERADOR">GERADOR</option>
+                    <option value="TRANSFORMADOR">TRANSFORMADOR</option>
+                    <option value="BOMBA">BOMBA</option>
+                    <option value="COMPRESSOR">COMPRESSOR</option>
+                </select>
+            </div>
+            
+            <button onclick="testarTiposTeste()">🧪 Testar Tipos de Teste</button>
+            <button onclick="testarTiposMaquina()">🔧 Testar Tipos de Máquina</button>
+            <button onclick="limparResultados()">🗑️ Limpar</button>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 Resultados</h3>
+            <div id="resultados"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        
+        function adicionarResultado(titulo, conteudo, tipo = 'info') {
+            const resultados = document.getElementById('resultados');
+            const div = document.createElement('div');
+            div.className = `result ${tipo}`;
+            div.innerHTML = `<strong>${titulo}</strong>\n${conteudo}`;
+            resultados.appendChild(div);
+        }
+
+        function limparResultados() {
+            document.getElementById('resultados').innerHTML = '';
+        }
+
+        async function testarTiposMaquina() {
+            try {
+                adicionarResultado('🔧 Testando Tipos de Máquina...', 'Fazendo requisição para /tipos-maquina');
+                
+                const response = await fetch(`${API_BASE}/tipos-maquina`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    adicionarResultado(
+                        '✅ Tipos de Máquina - SUCESSO',
+                        `Status: ${response.status}\nTotal: ${data.length} tipos\n\nDados:\n${JSON.stringify(data, null, 2)}`,
+                        'success'
+                    );
+                } else {
+                    adicionarResultado(
+                        '❌ Tipos de Máquina - ERRO',
+                        `Status: ${response.status}\nErro: ${JSON.stringify(data, null, 2)}`,
+                        'error'
+                    );
+                }
+            } catch (error) {
+                adicionarResultado(
+                    '❌ Tipos de Máquina - ERRO DE CONEXÃO',
+                    `Erro: ${error.message}`,
+                    'error'
+                );
+            }
+        }
+
+        async function testarTiposTeste() {
+            try {
+                const departamento = document.getElementById('departamento').value;
+                const setor = document.getElementById('setor').value;
+                const tipoMaquina = document.getElementById('tipoMaquina').value;
+                
+                if (!departamento || !setor || !tipoMaquina) {
+                    adicionarResultado(
+                        '⚠️ Parâmetros Incompletos',
+                        'Por favor, preencha todos os campos: departamento, setor e tipo de máquina.',
+                        'error'
+                    );
+                    return;
+                }
+
+                const params = new URLSearchParams({
+                    departamento: departamento,
+                    setor: setor,
+                    tipo_maquina: tipoMaquina
+                });
+
+                const url = `${API_BASE}/tipos-teste?${params.toString()}`;
+                
+                adicionarResultado(
+                    '🧪 Testando Tipos de Teste...',
+                    `URL: ${url}\nParâmetros:\n- Departamento: ${departamento}\n- Setor: ${setor}\n- Tipo Máquina: ${tipoMaquina}`
+                );
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    adicionarResultado(
+                        '✅ Tipos de Teste - SUCESSO',
+                        `Status: ${response.status}\nTotal: ${data.length} testes\n\nPrimeiros 3 registros:\n${JSON.stringify(data.slice(0, 3), null, 2)}`,
+                        'success'
+                    );
+                    
+                    if (data.length === 0) {
+                        adicionarResultado(
+                            '⚠️ Nenhum Teste Encontrado',
+                            'A API retornou uma lista vazia. Verifique se:\n1. Existem testes cadastrados para este tipo de máquina\n2. O usuário tem permissão para acessar estes dados\n3. Os parâmetros estão corretos',
+                            'error'
+                        );
+                    }
+                } else {
+                    adicionarResultado(
+                        '❌ Tipos de Teste - ERRO',
+                        `Status: ${response.status}\nErro: ${JSON.stringify(data, null, 2)}`,
+                        'error'
+                    );
+                }
+            } catch (error) {
+                adicionarResultado(
+                    '❌ Tipos de Teste - ERRO DE CONEXÃO',
+                    `Erro: ${error.message}`,
+                    'error'
+                );
+            }
+        }
+
+        // Teste inicial ao carregar a página
+        window.onload = function() {
+            adicionarResultado(
+                '🚀 Teste Iniciado',
+                'Página carregada. Clique nos botões para testar as APIs.',
+                'info'
+            );
+        };
+    </script>
+</body>
+</html>

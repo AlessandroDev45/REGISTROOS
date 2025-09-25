@@ -1,0 +1,98 @@
+{
+  "total_programacoes": 5,
+  "por_status": {
+    "EM_ANDAMENTO": 1,
+    "PROGRAMADO": 3,
+    "CONCLUIDO": 1
+  },
+  "por_prioridade": {
+    "ALTA": 2,
+    "NORMAL": 1,
+    "URGENTE": 2
+  },
+  "departamento": "TESTE",
+  "setor": "TESTES",
+  "gerado_em": "2025-09-23T02:12:07.505162",
+  "programacoes_detalhadas": [
+    {
+      "id": 1,
+      "codigo": "PROG_TESTE_001",
+      "titulo": "Teste Completo - Equipamento A",
+      "descricao": "Bateria completa de testes para validação do Equipamento Teste A",
+      "data_inicio": "2025-09-24",
+      "hora_inicio": "08:00:00.000000",
+      "data_fim": "2025-09-24",
+      "hora_fim": "17:00:00.000000",
+      "status": "EM_ANDAMENTO",
+      "prioridade": "ALTA",
+      "testes_programados": "[{\"id\": 347, \"nome\": \"TESTE FUNCIONAL BÁSICO\", \"tipo\": \"FUNCIONAL\"}, {\"id\": 348, \"nome\": \"TESTE DE PERFORMANCE\", \"tipo\": \"PERFORMANCE\"}, {\"id\": 349, \"nome\": \"TESTE DE SEGURANÇA\", \"tipo\": \"SEGURANCA\"}]",
+      "tipo_maquina": "EQUIPAMENTO TESTE A",
+      "departamento": "TESTE",
+      "setor": "TESTES"
+    },
+    {
+      "id": 2,
+      "codigo": "PROG_TESTE_002",
+      "titulo": "Teste de Durabilidade - Equipamento B",
+      "descricao": "Teste de durabilidade prolongado para Equipamento Teste B",
+      "data_inicio": "2025-09-25",
+      "hora_inicio": "09:00:00.000000",
+      "data_fim": "2025-09-27",
+      "hora_fim": "16:00:00.000000",
+      "status": "PROGRAMADO",
+      "prioridade": "NORMAL",
+      "testes_programados": "[{\"id\": 350, \"nome\": \"TESTE DE DURABILIDADE\", \"tipo\": \"DURABILIDADE\"}, {\"id\": 351, \"nome\": \"TESTE DE CALIBRAÇÃO\", \"tipo\": \"CALIBRACAO\"}]",
+      "tipo_maquina": "EQUIPAMENTO TESTE B",
+      "departamento": "TESTE",
+      "setor": "TESTES"
+    },
+    {
+      "id": 3,
+      "codigo": "PROG_TESTE_003",
+      "titulo": "Validação Rápida - Equipamento C",
+      "descricao": "Validação rápida para liberação do Equipamento Teste C",
+      "data_inicio": "2025-09-26",
+      "hora_inicio": "14:00:00.000000",
+      "data_fim": "2025-09-26",
+      "hora_fim": "18:00:00.000000",
+      "status": "PROGRAMADO",
+      "prioridade": "URGENTE",
+      "testes_programados": "[{\"id\": 347, \"nome\": \"TESTE FUNCIONAL BÁSICO\", \"tipo\": \"FUNCIONAL\"}, {\"id\": 349, \"nome\": \"TESTE DE SEGURANÇA\", \"tipo\": \"SEGURANCA\"}]",
+      "tipo_maquina": "EQUIPAMENTO TESTE C",
+      "departamento": "TESTE",
+      "setor": "TESTES"
+    },
+    {
+      "id": 4,
+      "codigo": "PROG_TESTE_004",
+      "titulo": "Bateria Completa - Todos Equipamentos",
+      "descricao": "Teste comparativo entre todos os equipamentos",
+      "data_inicio": "2025-09-30",
+      "hora_inicio": "08:00:00.000000",
+      "data_fim": "2025-10-03",
+      "hora_fim": "17:00:00.000000",
+      "status": "PROGRAMADO",
+      "prioridade": "ALTA",
+      "testes_programados": "[{\"id\": 347, \"nome\": \"TESTE FUNCIONAL BÁSICO\", \"tipo\": \"FUNCIONAL\"}, {\"id\": 348, \"nome\": \"TESTE DE PERFORMANCE\", \"tipo\": \"PERFORMANCE\"}, {\"id\": 349, \"nome\": \"TESTE DE SEGURANÇA\", \"tipo\": \"SEGURANCA\"}, {\"id\": 350, \"nome\": \"TESTE DE DURABILIDADE\", \"tipo\": \"DURABILIDADE\"}, {\"id\": 351, \"nome\": \"TESTE DE CALIBRAÇÃO\", \"tipo\": \"CALIBRACAO\"}]",
+      "tipo_maquina": "EQUIPAMENTO TESTE A",
+      "departamento": "TESTE",
+      "setor": "TESTES"
+    },
+    {
+      "id": 5,
+      "codigo": "PROG_TESTE_005",
+      "titulo": "Bateria Completa de Validação - Todos Equipamentos",
+      "descricao": "Programação avançada para validação completa de todos os equipamentos do departamento TESTE com bateria completa de testes",
+      "data_inicio": "2025-10-07",
+      "hora_inicio": "07:00:00",
+      "data_fim": "2025-10-12",
+      "hora_fim": "18:00:00",
+      "status": "CONCLUIDO",
+      "prioridade": "URGENTE",
+      "testes_programados": "[{\"id\": 347, \"nome\": \"TESTE FUNCIONAL BÁSICO\", \"tipo\": \"FUNCIONAL\", \"categoria\": \"BASICO\", \"descricao\": \"Teste básico de funcionamento do equipamento\"}, {\"id\": 348, \"nome\": \"TESTE DE PERFORMANCE\", \"tipo\": \"PERFORMANCE\", \"categoria\": \"AVANCADO\", \"descricao\": \"Teste de performance e eficiência\"}, {\"id\": 349, \"nome\": \"TESTE DE SEGURANÇA\", \"tipo\": \"SEGURANCA\", \"categoria\": \"CRITICO\", \"descricao\": \"Teste de segurança e proteções\"}, {\"id\": 350, \"nome\": \"TESTE DE DURABILIDADE\", \"tipo\": \"DURABILIDADE\", \"categoria\": \"AVANCADO\", \"descricao\": \"Teste de resistência e durabilidade\"}, {\"id\": 351, \"nome\": \"TESTE DE CALIBRAÇÃO\", \"tipo\": \"CALIBRACAO\", \"categoria\": \"BASICO\", \"descricao\": \"Teste de calibração e precisão\"}]",
+      "tipo_maquina": "EQUIPAMENTO TESTE A",
+      "departamento": "TESTE",
+      "setor": "TESTES"
+    }
+  ]
+}

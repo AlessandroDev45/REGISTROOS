@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Frontend PCP</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Teste Frontend PCP - RegistroOS</h1>
+        
+        <div class="info">
+            <strong>Objetivo:</strong> Verificar se a página PCP está carregando corretamente e se os componentes estão funcionando.
+        </div>
+
+        <div class="test-section">
+            <h2>📋 Status dos Serviços</h2>
+            <div id="service-status">
+                <div class="loading"></div> Verificando serviços...
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🔗 Testes de Conectividade</h2>
+            <button onclick="testBackend()">Testar Backend</button>
+            <button onclick="testFrontend()">Testar Frontend</button>
+            <button onclick="testPCPPage()">Testar Página PCP</button>
+            <div id="connectivity-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📊 Testes de API PCP</h2>
+            <button onclick="testPendenciasAPI()">Testar API Pendências</button>
+            <button onclick="testProgramacoesAPI()">Testar API Programações</button>
+            <button onclick="testDashboardAPI()">Testar API Dashboard</button>
+            <div id="api-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>🎯 Instruções de Acesso</h2>
+            <div class="info">
+                <p><strong>URL da Aplicação:</strong> <a href="http://localhost:3001" target="_blank">http://localhost:3001</a></p>
+                <p><strong>URL da Página PCP:</strong> <a href="http://localhost:3001/pcp" target="_blank">http://localhost:3001/pcp</a></p>
+                <p><strong>Credenciais de Teste:</strong></p>
+                <ul>
+                    <li>Email: admin@registroos.com</li>
+                    <li>Senha: admin123</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>📝 Log de Testes</h2>
+            <pre id="test-log"></pre>
+        </div>
+    </div>
+
+    <script>
+        let testLog = '';
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            testLog += `[${timestamp}] ${message}\n`;
+            document.getElementById('test-log').textContent = testLog;
+        }
+
+        function showResult(elementId, message, isSuccess) {
+            const element = document.getElementById(elementId);
+            const div = document.createElement('div');
+            div.className = `status ${isSuccess ? 'success' : 'error'}`;
+            div.innerHTML = message;
+            element.appendChild(div);
+        }
+
+        async function testBackend() {
+            log('Testando conectividade com backend...');
+            try {
+                const response = await fetch('http://localhost:8000/health');
+                if (response.ok) {
+                    const data = await response.json();
+                    showResult('connectivity-results', `✅ Backend OK: ${data.service}`, true);
+                    log('Backend respondeu corretamente');
+                } else {
+                    showResult('connectivity-results', `❌ Backend erro: ${response.status}`, false);
+                    log(`Backend retornou erro: ${response.status}`);
+                }
+            } catch (error) {
+                showResult('connectivity-results', `❌ Backend inacessível: ${error.message}`, false);
+                log(`Erro ao conectar com backend: ${error.message}`);
+            }
+        }
+
+        async function testFrontend() {
+            log('Testando frontend...');
+            try {
+                const response = await fetch('http://localhost:3001');
+                if (response.ok) {
+                    showResult('connectivity-results', '✅ Frontend OK', true);
+                    log('Frontend respondeu corretamente');
+                } else {
+                    showResult('connectivity-results', `❌ Frontend erro: ${response.status}`, false);
+                    log(`Frontend retornou erro: ${response.status}`);
+                }
+            } catch (error) {
+                showResult('connectivity-results', `❌ Frontend inacessível: ${error.message}`, false);
+                log(`Erro ao conectar com frontend: ${error.message}`);
+            }
+        }
+
+        async function testPCPPage() {
+            log('Testando página PCP...');
+            try {
+                const response = await fetch('http://localhost:3001/pcp');
+                if (response.ok) {
+                    showResult('connectivity-results', '✅ Página PCP OK', true);
+                    log('Página PCP carregou corretamente');
+                } else {
+                    showResult('connectivity-results', `❌ Página PCP erro: ${response.status}`, false);
+                    log(`Página PCP retornou erro: ${response.status}`);
+                }
+            } catch (error) {
+                showResult('connectivity-results', `❌ Página PCP inacessível: ${error.message}`, false);
+                log(`Erro ao acessar página PCP: ${error.message}`);
+            }
+        }
+
+        async function testPendenciasAPI() {
+            log('Testando API de pendências...');
+            try {
+                const response = await fetch('http://localhost:8000/api/pcp/pendencias');
+                if (response.ok) {
+                    const data = await response.json();
+                    showResult('api-results', `✅ API Pendências OK: ${data.total} pendências`, true);
+                    log(`API Pendências funcionando: ${data.total} pendências encontradas`);
+                } else {
+                    showResult('api-results', `❌ API Pendências erro: ${response.status}`, false);
+                    log(`API Pendências retornou erro: ${response.status}`);
+                }
+            } catch (error) {
+                showResult('api-results', `❌ API Pendências falhou: ${error.message}`, false);
+                log(`Erro na API Pendências: ${error.message}`);
+            }
+        }
+
+        async function testProgramacoesAPI() {
+            log('Testando API de programações...');
+            try {
+                const response = await fetch('http://localhost:8000/api/pcp/programacoes');
+                if (response.ok) {
+                    const data = await response.json();
+                    showResult('api-results', `✅ API Programações OK: ${data.length || 0} programações`, true);
+                    log(`API Programações funcionando: ${data.length || 0} programações encontradas`);
+                } else {
+                    showResult('api-results', `❌ API Programações erro: ${response.status}`, false);
+                    log(`API Programações retornou erro: ${response.status}`);
+                }
+            } catch (error) {
+                showResult('api-results', `❌ API Programações falhou: ${error.message}`, false);
+                log(`Erro na API Programações: ${error.message}`);
+            }
+        }
+
+        async function testDashboardAPI() {
+            log('Testando API do dashboard...');
+            try {
+                const response = await fetch('http://localhost:8000/api/pcp/dashboard/avancado?periodo_dias=30');
+                if (response.ok) {
+                    const data = await response.json();
+                    showResult('api-results', '✅ API Dashboard OK', true);
+                    log('API Dashboard funcionando corretamente');
+                } else {
+                    showResult('api-results', `❌ API Dashboard erro: ${response.status}`, false);
+                    log(`API Dashboard retornou erro: ${response.status}`);
+                }
+            } catch (error) {
+                showResult('api-results', `❌ API Dashboard falhou: ${error.message}`, false);
+                log(`Erro na API Dashboard: ${error.message}`);
+            }
+        }
+
+        // Verificação automática inicial
+        window.onload = async function() {
+            log('Iniciando verificação automática dos serviços...');
+            
+            const statusDiv = document.getElementById('service-status');
+            statusDiv.innerHTML = '';
+            
+            // Testar backend
+            try {
+                const backendResponse = await fetch('http://localhost:8000/health');
+                if (backendResponse.ok) {
+                    statusDiv.innerHTML += '<div class="success">✅ Backend: Online</div>';
+                } else {
+                    statusDiv.innerHTML += '<div class="error">❌ Backend: Erro</div>';
+                }
+            } catch (error) {
+                statusDiv.innerHTML += '<div class="error">❌ Backend: Offline</div>';
+            }
+            
+            // Testar frontend
+            try {
+                const frontendResponse = await fetch('http://localhost:3001');
+                if (frontendResponse.ok) {
+                    statusDiv.innerHTML += '<div class="success">✅ Frontend: Online</div>';
+                } else {
+                    statusDiv.innerHTML += '<div class="error">❌ Frontend: Erro</div>';
+                }
+            } catch (error) {
+                statusDiv.innerHTML += '<div class="error">❌ Frontend: Offline</div>';
+            }
+            
+            log('Verificação inicial concluída');
+        };
+    </script>
+</body>
+</html>

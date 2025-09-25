@@ -1,0 +1,46 @@
+{
+  "apontamento": {
+    "id": 18,
+    "data_inicio": "2025-01-16T00:00:00",
+    "data_fim": null,
+    "status": "PENDENTE",
+    "foi_retrabalho": false,
+    "causa_retrabalho": null,
+    "observacao_os": "Apontamento com pendência - Análise incompleta",
+    "observacoes_gerais": "Teste de durabilidade iniciado mas necessita análise adicional",
+    "resultado_global": "INCONCLUSIVO",
+    "setor": "GERAL",
+    "criado_por_email": "admin@registroos.com"
+  },
+  "ordem_servico": {
+    "numero": "TEST002",
+    "status": "AGUARDANDO",
+    "descricao_maquina": "OS criada automaticamente via apontamento - CLIENTE TESTE PENDENCIA",
+    "prioridade": "NORMAL"
+  },
+  "testes_realizados": [
+    {
+      "id": 350,
+      "nome": "TESTE DE DURABILIDADE",
+      "tipo": "DURABILIDADE",
+      "resultado": "INCONCLUSIVO",
+      "observacao": "Teste de durabilidade interrompido - necessita continuação"
+    },
+    {
+      "id": 351,
+      "nome": "TESTE DE CALIBRAÇÃO",
+      "tipo": "CALIBRACAO",
+      "resultado": "REPROVADO",
+      "observacao": "Calibração fora dos parâmetros - necessita ajuste"
+    }
+  ],
+  "resumo": {
+    "total_testes": 2,
+    "testes_aprovados": 0,
+    "testes_reprovados": 1,
+    "testes_inconclusivos": 1,
+    "percentual_aprovacao": 0.0
+  },
+  "gerado_em": "2025-09-23T02:08:10.435781",
+  "gerado_por": "admin@registroos.com"
+}

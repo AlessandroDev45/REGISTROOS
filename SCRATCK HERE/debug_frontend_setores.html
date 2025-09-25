@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Frontend Setores</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 300px;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        .dropdown {
+            margin: 10px 0;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 300px;
+        }
+        
+        .filter-section {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Debug Frontend - Setores</h1>
+        
+        <div class="section info">
+            <h2>📊 Status da Conexão</h2>
+            <p id="connection-status">Testando conexão...</p>
+            <button onclick="testConnection()">🔄 Testar Conexão</button>
+        </div>
+        
+        <div class="section">
+            <h2>🏭 Teste de Setores</h2>
+            <button onclick="loadSetores()">📥 Carregar Setores</button>
+            <button onclick="clearResults()">🗑️ Limpar</button>
+            
+            <div class="filter-section">
+                <label>Filtrar por Departamento:</label>
+                <select id="dept-filter" class="dropdown" onchange="filterSetores()">
+                    <option value="">Todos</option>
+                    <option value="MOTORES">MOTORES</option>
+                    <option value="TRANSFORMADORES">TRANSFORMADORES</option>
+                </select>
+                
+                <label>Apenas Ativos:</label>
+                <input type="checkbox" id="active-filter" checked onchange="filterSetores()">
+            </div>
+            
+            <div id="setores-result"></div>
+        </div>
+        
+        <div class="section">
+            <h2>🧪 Teste de Tipos de Teste</h2>
+            <button onclick="loadTiposTeste()">📥 Carregar Tipos de Teste</button>
+            <div id="tipos-teste-result"></div>
+        </div>
+        
+        <div class="section">
+            <h2>🎯 Simulação do useCachedSetores</h2>
+            <button onclick="simulateUseCachedSetores()">🔄 Simular Hook</button>
+            <div id="hook-simulation-result"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api/admin';
+        let allSetores = [];
+        let filteredSetores = [];
+        
+        async function testConnection() {
+            const statusEl = document.getElementById('connection-status');
+            try {
+                const response = await fetch(`${API_BASE}/departamentos/`);
+                if (response.ok) {
+                    const data = await response.json();
+                    statusEl.innerHTML = `✅ Conexão OK - ${data.length} departamentos encontrados`;
+                    statusEl.parentElement.className = 'section success';
+                } else {
+                    statusEl.innerHTML = `❌ Erro HTTP: ${response.status}`;
+                    statusEl.parentElement.className = 'section error';
+                }
+            } catch (error) {
+                statusEl.innerHTML = `❌ Erro de conexão: ${error.message}`;
+                statusEl.parentElement.className = 'section error';
+            }
+        }
+        
+        async function loadSetores() {
+            const resultEl = document.getElementById('setores-result');
+            resultEl.innerHTML = '<p>⏳ Carregando setores...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/setores/`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const setores = await response.json();
+                allSetores = setores;
+                
+                // Verificar estrutura dos dados
+                const sampleSetor = setores[0] || {};
+                const hasRequiredFields = ['id', 'nome', 'departamento', 'ativo'].every(field => field in sampleSetor);
+                
+                let html = `
+                    <div class="info">
+                        <h3>📊 Resumo dos Dados</h3>
+                        <p><strong>Total de setores:</strong> ${setores.length}</p>
+                        <p><strong>Campos obrigatórios:</strong> ${hasRequiredFields ? '✅ Presentes' : '❌ Ausentes'}</p>
+                        <p><strong>Estrutura do primeiro setor:</strong></p>
+                        <pre>${JSON.stringify(sampleSetor, null, 2)}</pre>
+                    </div>
+                `;
+                
+                // Agrupar por departamento
+                const setoresPorDept = {};
+                setores.forEach(setor => {
+                    const dept = setor.departamento || 'SEM_DEPARTAMENTO';
+                    if (!setoresPorDept[dept]) {
+                        setoresPorDept[dept] = [];
+                    }
+                    setoresPorDept[dept].push(setor);
+                });
+                
+                html += '<div class="success"><h3>🏢 Setores por Departamento</h3>';
+                Object.entries(setoresPorDept).forEach(([dept, setoresDept]) => {
+                    const ativos = setoresDept.filter(s => s.ativo).length;
+                    html += `<p><strong>${dept}:</strong> ${setoresDept.length} total (${ativos} ativos)</p>`;
+                });
+                html += '</div>';
+                
+                resultEl.innerHTML = html;
+                filterSetores(); // Aplicar filtros iniciais
+                
+            } catch (error) {
+                resultEl.innerHTML = `<div class="error"><h3>❌ Erro ao carregar setores</h3><p>${error.message}</p></div>`;
+            }
+        }
+        
+        function filterSetores() {
+            if (!allSetores.length) return;
+            
+            const deptFilter = document.getElementById('dept-filter').value;
+            const activeFilter = document.getElementById('active-filter').checked;
+            
+            filteredSetores = allSetores.filter(setor => {
+                const matchesDept = !deptFilter || setor.departamento === deptFilter;
+                const matchesActive = !activeFilter || setor.ativo;
+                return matchesDept && matchesActive;
+            });
+            
+            const resultEl = document.getElementById('setores-result');
+            const existingContent = resultEl.innerHTML;
+            
+            let filterHtml = `
+                <div class="warning">
+                    <h3>🔍 Setores Filtrados</h3>
+                    <p><strong>Filtros aplicados:</strong> 
+                        Departamento: ${deptFilter || 'Todos'}, 
+                        Apenas ativos: ${activeFilter ? 'Sim' : 'Não'}
+                    </p>
+                    <p><strong>Resultados:</strong> ${filteredSetores.length} setores</p>
+                    <div style="max-height: 200px; overflow-y: auto;">
+            `;
+            
+            filteredSetores.slice(0, 10).forEach(setor => {
+                filterHtml += `<p>• ${setor.nome} (${setor.departamento}) - ${setor.ativo ? 'Ativo' : 'Inativo'}</p>`;
+            });
+            
+            if (filteredSetores.length > 10) {
+                filterHtml += `<p><em>... e mais ${filteredSetores.length - 10} setores</em></p>`;
+            }
+            
+            filterHtml += '</div></div>';
+            
+            // Adicionar resultado filtrado ao final
+            if (!existingContent.includes('Setores Filtrados')) {
+                resultEl.innerHTML = existingContent + filterHtml;
+            } else {
+                // Substituir seção de filtros existente
+                const parts = existingContent.split('<div class="warning">');
+                resultEl.innerHTML = parts[0] + filterHtml;
+            }
+        }
+        
+        async function loadTiposTeste() {
+            const resultEl = document.getElementById('tipos-teste-result');
+            resultEl.innerHTML = '<p>⏳ Carregando tipos de teste...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/tipos-teste/`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const tipos = await response.json();
+                
+                // Agrupar por setor
+                const tiposPorSetor = {};
+                tipos.forEach(tipo => {
+                    const setor = tipo.setor || 'SEM_SETOR';
+                    if (!tiposPorSetor[setor]) {
+                        tiposPorSetor[setor] = [];
+                    }
+                    tiposPorSetor[setor].push(tipo);
+                });
+                
+                let html = `
+                    <div class="success">
+                        <h3>🧪 Tipos de Teste por Setor</h3>
+                        <p><strong>Total:</strong> ${tipos.length} tipos de teste</p>
+                `;
+                
+                Object.entries(tiposPorSetor).forEach(([setor, tiposSetor]) => {
+                    html += `<p><strong>${setor}:</strong> ${tiposSetor.length} tipos</p>`;
+                });
+                
+                html += '</div>';
+                resultEl.innerHTML = html;
+                
+            } catch (error) {
+                resultEl.innerHTML = `<div class="error"><h3>❌ Erro ao carregar tipos de teste</h3><p>${error.message}</p></div>`;
+            }
+        }
+        
+        async function simulateUseCachedSetores() {
+            const resultEl = document.getElementById('hook-simulation-result');
+            resultEl.innerHTML = '<p>⏳ Simulando useCachedSetores...</p>';
+            
+            try {
+                // Simular exatamente o que o hook faz
+                const response = await fetch(`${API_BASE}/setores/`);
+                const setores = await response.json();
+                
+                const motores = setores.filter(setor => setor.departamento === 'MOTORES' && setor.ativo);
+                const transformadores = setores.filter(setor => setor.departamento === 'TRANSFORMADORES' && setor.ativo);
+                
+                const html = `
+                    <div class="success">
+                        <h3>🎯 Resultado da Simulação</h3>
+                        <p><strong>Setores MOTORES:</strong> ${motores.length}</p>
+                        <p><strong>Setores TRANSFORMADORES:</strong> ${transformadores.length}</p>
+                        
+                        <h4>🔧 Primeiros 5 setores MOTORES:</h4>
+                        <pre>${JSON.stringify(motores.slice(0, 5), null, 2)}</pre>
+                        
+                        <h4>⚡ Primeiros 5 setores TRANSFORMADORES:</h4>
+                        <pre>${JSON.stringify(transformadores.slice(0, 5), null, 2)}</pre>
+                    </div>
+                `;
+                
+                resultEl.innerHTML = html;
+                
+            } catch (error) {
+                resultEl.innerHTML = `<div class="error"><h3>❌ Erro na simulação</h3><p>${error.message}</p></div>`;
+            }
+        }
+        
+        function clearResults() {
+            document.getElementById('setores-result').innerHTML = '';
+            document.getElementById('tipos-teste-result').innerHTML = '';
+            document.getElementById('hook-simulation-result').innerHTML = '';
+            allSetores = [];
+            filteredSetores = [];
+        }
+        
+        // Testar conexão automaticamente ao carregar
+        window.onload = () => {
+            testConnection();
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧪 Teste Dropdowns Frontend - Setores</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: #f9f9f9;
+        }
+        .dropdown {
+            margin: 10px 0;
+            padding: 8px;
+            width: 300px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Teste de Dropdowns Frontend - Setores</h1>
+        <p>Este teste verifica se os dropdowns de setores estão funcionando corretamente em todas as abas administrativas.</p>
+
+        <div class="test-section">
+            <h3>🏢 1. Teste de Departamentos</h3>
+            <button class="button" onclick="testarDepartamentos()">Carregar Departamentos</button>
+            <select id="departamentoSelect" class="dropdown">
+                <option value="">Selecione um departamento</option>
+            </select>
+            <div id="resultDepartamentos" class="result info"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🏭 2. Teste de Setores</h3>
+            <button class="button" onclick="testarSetores()">Carregar Todos os Setores</button>
+            <button class="button" onclick="filtrarSetoresPorDepartamento()">Filtrar por Departamento Selecionado</button>
+            <select id="setorSelect" class="dropdown">
+                <option value="">Selecione um setor</option>
+            </select>
+            <div id="resultSetores" class="result info"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎯 3. Teste de Categorias</h3>
+            <button class="button" onclick="testarCategorias()">Carregar Categorias de Máquinas</button>
+            <select id="categoriaSelect" class="dropdown">
+                <option value="">Selecione uma categoria</option>
+            </select>
+            <div id="resultCategorias" class="result info"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔧 4. Teste Simulação Formulário Tipo Máquina</h3>
+            <p>Simula o comportamento do formulário de Tipo de Máquina:</p>
+            <label>Departamento:</label>
+            <select id="formDepartamento" class="dropdown" onchange="filtrarSetoresFormulario()">
+                <option value="">Selecione um departamento</option>
+            </select>
+            <br>
+            <label>Setor:</label>
+            <select id="formSetor" class="dropdown">
+                <option value="">Selecione um setor</option>
+            </select>
+            <div id="resultFormulario" class="result info"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 5. Resumo dos Testes</h3>
+            <button class="button" onclick="executarTodosOsTestes()">🚀 Executar Todos os Testes</button>
+            <div id="resumoTestes" class="result info"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        let todosDepartamentos = [];
+        let todosSetores = [];
+
+        function showResult(elementId, message, isError = false) {
+            const element = document.getElementById(elementId);
+            element.textContent = typeof message === 'object' ? JSON.stringify(message, null, 2) : message;
+            element.className = `result ${isError ? 'error' : 'success'}`;
+        }
+
+        async function testarDepartamentos() {
+            try {
+                showResult('resultDepartamentos', '🔄 Carregando departamentos...', false);
+                
+                const response = await fetch(`${API_BASE}/admin/departamentos/`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const departamentos = await response.json();
+                todosDepartamentos = departamentos;
+                
+                // Preencher dropdown
+                const select = document.getElementById('departamentoSelect');
+                select.innerHTML = '<option value="">Selecione um departamento</option>';
+                departamentos.forEach(dept => {
+                    const option = document.createElement('option');
+                    option.value = dept.nome_tipo;
+                    option.textContent = dept.nome_tipo;
+                    select.appendChild(option);
+                });
+
+                // Preencher dropdown do formulário também
+                const formSelect = document.getElementById('formDepartamento');
+                formSelect.innerHTML = '<option value="">Selecione um departamento</option>';
+                departamentos.forEach(dept => {
+                    const option = document.createElement('option');
+                    option.value = dept.nome_tipo;
+                    option.textContent = dept.nome_tipo;
+                    formSelect.appendChild(option);
+                });
+                
+                showResult('resultDepartamentos', `✅ ${departamentos.length} departamentos carregados:\n${departamentos.map(d => `- ${d.nome_tipo}`).join('\n')}`, false);
+            } catch (error) {
+                showResult('resultDepartamentos', `❌ Erro: ${error.message}`, true);
+            }
+        }
+
+        async function testarSetores() {
+            try {
+                showResult('resultSetores', '🔄 Carregando setores...', false);
+                
+                const response = await fetch(`${API_BASE}/admin/setores/`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const setores = await response.json();
+                todosSetores = setores;
+                
+                // Preencher dropdown
+                const select = document.getElementById('setorSelect');
+                select.innerHTML = '<option value="">Selecione um setor</option>';
+                setores.forEach(setor => {
+                    const option = document.createElement('option');
+                    option.value = setor.nome;
+                    option.textContent = `${setor.nome} (${setor.departamento || 'Sem Dept'})`;
+                    select.appendChild(option);
+                });
+                
+                showResult('resultSetores', `✅ ${setores.length} setores carregados:\n${setores.slice(0, 5).map(s => `- ${s.nome} (Dept: ${s.departamento || 'N/A'})`).join('\n')}\n... e mais ${setores.length - 5} setores`, false);
+            } catch (error) {
+                showResult('resultSetores', `❌ Erro: ${error.message}`, true);
+            }
+        }
+
+        function filtrarSetoresPorDepartamento() {
+            const departamentoSelecionado = document.getElementById('departamentoSelect').value;
+            if (!departamentoSelecionado) {
+                showResult('resultSetores', '⚠️ Selecione um departamento primeiro', true);
+                return;
+            }
+
+            const setoresFiltrados = todosSetores.filter(setor => {
+                const setorDept = setor.departamento?.trim();
+                const formDept = departamentoSelecionado?.trim();
+                return setorDept === formDept;
+            });
+
+            const select = document.getElementById('setorSelect');
+            select.innerHTML = '<option value="">Selecione um setor</option>';
+            setoresFiltrados.forEach(setor => {
+                const option = document.createElement('option');
+                option.value = setor.nome;
+                option.textContent = setor.nome;
+                select.appendChild(option);
+            });
+
+            showResult('resultSetores', `🔍 Filtrados ${setoresFiltrados.length} setores para departamento "${departamentoSelecionado}":\n${setoresFiltrados.map(s => `- ${s.nome}`).join('\n')}`, false);
+        }
+
+        function filtrarSetoresFormulario() {
+            const departamentoSelecionado = document.getElementById('formDepartamento').value;
+            if (!departamentoSelecionado) {
+                document.getElementById('formSetor').innerHTML = '<option value="">Selecione um setor</option>';
+                showResult('resultFormulario', '⚠️ Departamento não selecionado', false);
+                return;
+            }
+
+            const setoresFiltrados = todosSetores.filter(setor => {
+                const setorDept = setor.departamento?.trim();
+                const formDept = departamentoSelecionado?.trim();
+                return setorDept === formDept;
+            });
+
+            const select = document.getElementById('formSetor');
+            select.innerHTML = '<option value="">Selecione um setor</option>';
+            setoresFiltrados.forEach(setor => {
+                const option = document.createElement('option');
+                option.value = setor.nome;
+                option.textContent = setor.nome;
+                select.appendChild(option);
+            });
+
+            showResult('resultFormulario', `🎯 Simulação formulário: ${setoresFiltrados.length} setores filtrados para "${departamentoSelecionado}"`, false);
+        }
+
+        async function testarCategorias() {
+            try {
+                showResult('resultCategorias', '🔄 Carregando categorias...', false);
+                
+                const response = await fetch(`${API_BASE}/admin/tipos-maquina/`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const tiposMaquina = await response.json();
+                const categorias = [...new Set(tiposMaquina
+                    .map(tipo => tipo.categoria)
+                    .filter(categoria => categoria && categoria.trim())
+                )];
+                
+                // Preencher dropdown
+                const select = document.getElementById('categoriaSelect');
+                select.innerHTML = '<option value="">Selecione uma categoria</option>';
+                categorias.forEach(categoria => {
+                    const option = document.createElement('option');
+                    option.value = categoria;
+                    option.textContent = categoria;
+                    select.appendChild(option);
+                });
+                
+                showResult('resultCategorias', `✅ ${categorias.length} categorias encontradas:\n${categorias.map(c => `- ${c}`).join('\n')}`, false);
+            } catch (error) {
+                showResult('resultCategorias', `❌ Erro: ${error.message}`, true);
+            }
+        }
+
+        async function executarTodosOsTestes() {
+            showResult('resumoTestes', '🚀 Executando todos os testes...', false);
+            
+            await testarDepartamentos();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            await testarSetores();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            await testarCategorias();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            showResult('resumoTestes', '✅ Todos os testes executados! Verifique os resultados acima.', false);
+        }
+
+        // Executar teste inicial
+        window.onload = () => {
+            executarTodosOsTestes();
+        };
+    </script>
+</body>
+</html>

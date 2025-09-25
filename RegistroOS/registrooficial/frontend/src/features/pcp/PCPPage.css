@@ -1,0 +1,20 @@
+/* Custom styles for PCPPage */
+.pcp-page {
+  font-family: sans-serif;
+}
+
+/* Remove default date picker arrow if any */
+.DatePicker input {
+  appearance: none;
+  background-image: none; /* Removes the default dropdown arrow in some browsers */
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 640px) {
+  .pcp-page form .grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-3 {
+    grid-template-columns: 1fr;
+  }
+  .pcp-page .lg\\:col-span-2, .pcp-page .lg\\:col-span-1 {
+    grid-column: 1 / -1;
+  }
+}

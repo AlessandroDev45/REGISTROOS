@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Relatório Completo</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Teste do Relatório Completo</h1>
+    
+    <div class="test-section info">
+        <h3>📋 Informações do Teste</h3>
+        <p><strong>Objetivo:</strong> Verificar se o endpoint de relatório completo está funcionando</p>
+        <p><strong>OS de Teste:</strong> 12345 (ID: 2)</p>
+        <p><strong>Endpoint:</strong> /api/os/2/relatorio-completo</p>
+    </div>
+
+    <div class="test-section">
+        <h3>🔧 Testes Disponíveis</h3>
+        <button onclick="testarEndpointDireto()">1. Testar Endpoint Direto (Backend)</button>
+        <button onclick="testarEndpointProxy()">2. Testar Endpoint via Proxy (Frontend)</button>
+        <button onclick="testarComDadosCompletos()">3. Verificar Estrutura dos Dados</button>
+        <button onclick="limparResultados()">🧹 Limpar Resultados</button>
+    </div>
+
+    <div id="resultados"></div>
+
+    <script>
+        function adicionarResultado(titulo, conteudo, tipo = 'info') {
+            const div = document.createElement('div');
+            div.className = `test-section ${tipo}`;
+            div.innerHTML = `<h3>${titulo}</h3><pre>${conteudo}</pre>`;
+            document.getElementById('resultados').appendChild(div);
+        }
+
+        function limparResultados() {
+            document.getElementById('resultados').innerHTML = '';
+        }
+
+        async function testarEndpointDireto() {
+            try {
+                adicionarResultado('🔄 Testando Endpoint Direto...', 'Fazendo requisição para http://localhost:8000/api/os/2/relatorio-completo');
+                
+                const response = await fetch('http://localhost:8000/api/os/2/relatorio-completo');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    adicionarResultado(
+                        '✅ Endpoint Direto - SUCESSO', 
+                        `Status: ${response.status}\nTamanho da resposta: ${JSON.stringify(data).length} caracteres\nOS Número: ${data.os_dados_gerais?.os_numero}\nCliente: ${data.os_dados_gerais?.cliente_nome}`,
+                        'success'
+                    );
+                } else {
+                    adicionarResultado(
+                        '❌ Endpoint Direto - ERRO', 
+                        `Status: ${response.status}\nErro: ${await response.text()}`,
+                        'error'
+                    );
+                }
+            } catch (error) {
+                adicionarResultado(
+                    '❌ Endpoint Direto - ERRO DE REDE', 
+                    `Erro: ${error.message}`,
+                    'error'
+                );
+            }
+        }
+
+        async function testarEndpointProxy() {
+            try {
+                adicionarResultado('🔄 Testando Endpoint via Proxy...', 'Fazendo requisição para http://localhost:3001/api/os/2/relatorio-completo');
+                
+                const response = await fetch('http://localhost:3001/api/os/2/relatorio-completo');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    adicionarResultado(
+                        '✅ Endpoint Proxy - SUCESSO', 
+                        `Status: ${response.status}\nTamanho da resposta: ${JSON.stringify(data).length} caracteres\nOS Número: ${data.os_dados_gerais?.os_numero}\nCliente: ${data.os_dados_gerais?.cliente_nome}`,
+                        'success'
+                    );
+                } else {
+                    adicionarResultado(
+                        '❌ Endpoint Proxy - ERRO', 
+                        `Status: ${response.status}\nErro: ${await response.text()}`,
+                        'error'
+                    );
+                }
+            } catch (error) {
+                adicionarResultado(
+                    '❌ Endpoint Proxy - ERRO DE REDE', 
+                    `Erro: ${error.message}`,
+                    'error'
+                );
+            }
+        }
+
+        async function testarComDadosCompletos() {
+            try {
+                adicionarResultado('🔄 Verificando Estrutura dos Dados...', 'Analisando resposta completa do endpoint');
+                
+                const response = await fetch('http://localhost:3001/api/os/2/relatorio-completo');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    const estrutura = {
+                        'OS Dados Gerais': data.os_dados_gerais ? '✅ Presente' : '❌ Ausente',
+                        'Apontamentos por Setor': data.apontamentos_por_setor ? '✅ Presente' : '❌ Ausente',
+                        'Apontamentos Detalhados': Array.isArray(data.apontamentos_detalhados) ? `✅ ${data.apontamentos_detalhados.length} registros` : '❌ Ausente',
+                        'Resultados de Testes': Array.isArray(data.resultados_testes) ? `✅ ${data.resultados_testes.length} registros` : '❌ Ausente',
+                        'Pendências/Retrabalhos': Array.isArray(data.pendencias_retrabalhos) ? `✅ ${data.pendencias_retrabalhos.length} registros` : '❌ Ausente',
+                        'Programações': Array.isArray(data.programacoes) ? `✅ ${data.programacoes.length} registros` : '❌ Ausente',
+                        'Métricas Consolidadas': data.metricas_consolidadas ? '✅ Presente' : '❌ Ausente',
+                        'Resumo Gerencial': data.resumo_gerencial ? '✅ Presente' : '❌ Ausente'
+                    };
+                    
+                    let resultado = 'Estrutura dos Dados:\n';
+                    for (const [chave, valor] of Object.entries(estrutura)) {
+                        resultado += `${chave}: ${valor}\n`;
+                    }
+                    
+                    resultado += `\nDetalhes da OS:\n`;
+                    resultado += `Número: ${data.os_dados_gerais?.os_numero}\n`;
+                    resultado += `Cliente: ${data.os_dados_gerais?.cliente_nome}\n`;
+                    resultado += `Status: ${data.os_dados_gerais?.status_os}\n`;
+                    resultado += `Equipamento: ${data.os_dados_gerais?.descricao_maquina}\n`;
+                    
+                    adicionarResultado(
+                        '📊 Estrutura dos Dados - ANÁLISE COMPLETA', 
+                        resultado,
+                        'success'
+                    );
+                } else {
+                    adicionarResultado(
+                        '❌ Verificação de Estrutura - ERRO', 
+                        `Status: ${response.status}\nErro: ${await response.text()}`,
+                        'error'
+                    );
+                }
+            } catch (error) {
+                adicionarResultado(
+                    '❌ Verificação de Estrutura - ERRO DE REDE', 
+                    `Erro: ${error.message}`,
+                    'error'
+                );
+            }
+        }
+
+        // Executar teste inicial automaticamente
+        window.onload = function() {
+            adicionarResultado('🚀 Página Carregada', 'Pronto para executar testes. Clique nos botões acima para testar diferentes aspectos do endpoint.');
+        };
+    </script>
+</body>
+</html>

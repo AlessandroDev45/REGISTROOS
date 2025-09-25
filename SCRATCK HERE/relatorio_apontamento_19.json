@@ -1,0 +1,46 @@
+{
+  "apontamento": {
+    "id": 19,
+    "data_inicio": "2025-01-16T00:00:00",
+    "data_fim": "2025-01-16T00:00:00",
+    "status": "CONCLUIDO",
+    "foi_retrabalho": false,
+    "causa_retrabalho": null,
+    "observacao_os": "Documentação completa dos testes realizados",
+    "observacoes_gerais": "Relatório detalhado conforme procedimento DOC_002",
+    "resultado_global": "APROVADO",
+    "setor": "GERAL",
+    "criado_por_email": "admin@registroos.com"
+  },
+  "ordem_servico": {
+    "numero": "TEST003",
+    "status": "AGUARDANDO",
+    "descricao_maquina": "OS criada automaticamente via apontamento - CLIENTE TESTE DOCUMENTACAO",
+    "prioridade": "NORMAL"
+  },
+  "testes_realizados": [
+    {
+      "id": 347,
+      "nome": "TESTE FUNCIONAL BÁSICO",
+      "tipo": "FUNCIONAL",
+      "resultado": "APROVADO",
+      "observacao": "Documentação do teste funcional completa"
+    },
+    {
+      "id": 349,
+      "nome": "TESTE DE SEGURANÇA",
+      "tipo": "SEGURANCA",
+      "resultado": "APROVADO",
+      "observacao": "Relatório de segurança elaborado conforme normas"
+    }
+  ],
+  "resumo": {
+    "total_testes": 2,
+    "testes_aprovados": 2,
+    "testes_reprovados": 0,
+    "testes_inconclusivos": 0,
+    "percentual_aprovacao": 100.0
+  },
+  "gerado_em": "2025-09-23T02:08:12.491805",
+  "gerado_por": "admin@registroos.com"
+}

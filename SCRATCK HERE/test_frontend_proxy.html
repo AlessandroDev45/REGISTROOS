@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Frontend Proxy - Categorias</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Teste Frontend Proxy - Categorias de Máquina</h1>
+        
+        <div class="test-section">
+            <h2>📋 Informações</h2>
+            <p><strong>Frontend:</strong> http://localhost:3001</p>
+            <p><strong>Backend:</strong> http://localhost:8000</p>
+            <p><strong>Endpoint:</strong> /api/tipos-maquina/categorias</p>
+        </div>
+
+        <div class="test-section">
+            <h2>🔧 Testes de Conectividade</h2>
+            <button onclick="testBackendHealth()">Testar Backend Health</button>
+            <button onclick="testFrontendProxy()">Testar Proxy Frontend</button>
+            <div id="connectivity-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📊 Testes de API Categorias</h2>
+            <button onclick="testCategoriasWithoutAuth()">Testar Categorias (Sem Auth)</button>
+            <button onclick="testCategoriasWithParams()">Testar com Parâmetros</button>
+            <div id="categorias-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📝 Log de Atividades</h2>
+            <div id="log" class="log"></div>
+            <button onclick="clearLog()">Limpar Log</button>
+        </div>
+    </div>
+
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}<br>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function showResult(containerId, message, isSuccess) {
+            const container = document.getElementById(containerId);
+            const div = document.createElement('div');
+            div.className = isSuccess ? 'success' : 'error';
+            div.innerHTML = message;
+            container.appendChild(div);
+        }
+
+        async function testBackendHealth() {
+            log('Testando conectividade com backend...');
+            try {
+                const response = await fetch('http://localhost:8000/health');
+                if (response.ok) {
+                    const data = await response.json();
+                    showResult('connectivity-results', `✅ Backend OK: ${data.service}`, true);
+                    log('Backend respondeu corretamente');
+                } else {
+                    showResult('connectivity-results', `❌ Backend erro: ${response.status}`, false);
+                    log(`Backend retornou erro: ${response.status}`);
+                }
+            } catch (error) {
+                showResult('connectivity-results', `❌ Backend inacessível: ${error.message}`, false);
+                log(`Erro ao conectar com backend: ${error.message}`);
+            }
+        }
+
+        async function testFrontendProxy() {
+            log('Testando proxy do frontend...');
+            try {
+                const response = await fetch('/api/health');
+                if (response.ok) {
+                    const data = await response.json();
+                    showResult('connectivity-results', `✅ Proxy OK: ${data.service}`, true);
+                    log('Proxy funcionando corretamente');
+                } else {
+                    showResult('connectivity-results', `❌ Proxy erro: ${response.status}`, false);
+                    log(`Proxy retornou erro: ${response.status}`);
+                }
+            } catch (error) {
+                showResult('connectivity-results', `❌ Proxy inacessível: ${error.message}`, false);
+                log(`Erro ao conectar via proxy: ${error.message}`);
+            }
+        }
+
+        async function testCategoriasWithoutAuth() {
+            log('Testando endpoint de categorias sem autenticação...');
+            try {
+                const response = await fetch('/api/tipos-maquina/categorias');
+                log(`Status da resposta: ${response.status}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showResult('categorias-results', `✅ Categorias obtidas: ${JSON.stringify(data)}`, true);
+                    log(`Categorias: ${JSON.stringify(data)}`);
+                } else {
+                    const errorText = await response.text();
+                    showResult('categorias-results', `❌ Erro ${response.status}: ${errorText}`, false);
+                    log(`Erro ${response.status}: ${errorText}`);
+                }
+            } catch (error) {
+                showResult('categorias-results', `❌ Erro de rede: ${error.message}`, false);
+                log(`Erro de rede: ${error.message}`);
+            }
+        }
+
+        async function testCategoriasWithParams() {
+            log('Testando endpoint de categorias com parâmetros...');
+            try {
+                const url = '/api/tipos-maquina/categorias?departamento=MOTORES&setor=MECANICA+DIA';
+                const response = await fetch(url);
+                log(`Status da resposta: ${response.status}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showResult('categorias-results', `✅ Categorias filtradas: ${JSON.stringify(data)}`, true);
+                    log(`Categorias filtradas: ${JSON.stringify(data)}`);
+                } else {
+                    const errorText = await response.text();
+                    showResult('categorias-results', `❌ Erro ${response.status}: ${errorText}`, false);
+                    log(`Erro ${response.status}: ${errorText}`);
+                }
+            } catch (error) {
+                showResult('categorias-results', `❌ Erro de rede: ${error.message}`, false);
+                log(`Erro de rede: ${error.message}`);
+            }
+        }
+
+        // Executar testes automaticamente ao carregar a página
+        window.onload = function() {
+            log('Página carregada. Executando testes automáticos...');
+            setTimeout(testBackendHealth, 1000);
+            setTimeout(testFrontendProxy, 2000);
+        };
+    </script>
+</body>
+</html>

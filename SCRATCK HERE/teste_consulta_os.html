@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Consulta OS</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Teste Funcionalidade Consulta OS</h1>
+    
+    <div>
+        <button onclick="testarStatusOS()">Testar Status OS</button>
+        <button onclick="testarApontamentosDetalhados()">Testar Apontamentos Detalhados</button>
+        <button onclick="testarConsultaOS()">Testar Consulta OS Específica</button>
+    </div>
+    
+    <div id="resultados"></div>
+
+    <script>
+        const resultados = document.getElementById('resultados');
+        
+        function adicionarResultado(titulo, sucesso, dados) {
+            const div = document.createElement('div');
+            div.className = `result ${sucesso ? 'success' : 'error'}`;
+            div.innerHTML = `
+                <h3>${titulo}</h3>
+                <pre>${JSON.stringify(dados, null, 2)}</pre>
+            `;
+            resultados.appendChild(div);
+        }
+        
+        async function testarStatusOS() {
+            try {
+                console.log('Testando endpoint status-os...');
+                const response = await fetch('/api/status-os', {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    adicionarResultado('Status OS - SUCESSO', true, {
+                        status: response.status,
+                        total_status: data.status_disponiveis?.length || 0,
+                        primeiros_status: data.status_disponiveis?.slice(0, 5) || []
+                    });
+                } else {
+                    const errorData = await response.text();
+                    adicionarResultado('Status OS - ERRO', false, {
+                        status: response.status,
+                        statusText: response.statusText,
+                        error: errorData
+                    });
+                }
+            } catch (error) {
+                adicionarResultado('Status OS - ERRO', false, {
+                    error: error.message
+                });
+            }
+        }
+        
+        async function testarApontamentosDetalhados() {
+            try {
+                console.log('Testando endpoint apontamentos-detalhados...');
+                const response = await fetch('/api/apontamentos-detalhados?limit=5', {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    adicionarResultado('Apontamentos Detalhados - SUCESSO', true, {
+                        status: response.status,
+                        total_apontamentos: Array.isArray(data) ? data.length : 'Não é array',
+                        primeiro_apontamento: Array.isArray(data) && data.length > 0 ? {
+                            id: data[0].id,
+                            numero_os: data[0].numero_os,
+                            cliente: data[0].cliente,
+                            status: data[0].status_apontamento
+                        } : 'Nenhum apontamento'
+                    });
+                } else {
+                    const errorData = await response.text();
+                    adicionarResultado('Apontamentos Detalhados - ERRO', false, {
+                        status: response.status,
+                        statusText: response.statusText,
+                        error: errorData
+                    });
+                }
+            } catch (error) {
+                adicionarResultado('Apontamentos Detalhados - ERRO', false, {
+                    error: error.message
+                });
+            }
+        }
+        
+        async function testarConsultaOS() {
+            try {
+                console.log('Testando consulta de OS específica...');
+                const response = await fetch('/api/os/20001', {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    adicionarResultado('Consulta OS Específica - SUCESSO', true, {
+                        status: response.status,
+                        os_encontrada: !!data,
+                        dados_os: data ? {
+                            numero: data.numero || data.os_numero,
+                            cliente: data.cliente,
+                            status: data.status || data.status_os,
+                            equipamento: data.equipamento || data.descricao_maquina
+                        } : 'Nenhum dado'
+                    });
+                } else {
+                    const errorData = await response.text();
+                    adicionarResultado('Consulta OS Específica - ERRO', false, {
+                        status: response.status,
+                        statusText: response.statusText,
+                        error: errorData
+                    });
+                }
+            } catch (error) {
+                adicionarResultado('Consulta OS Específica - ERRO', false, {
+                    error: error.message
+                });
+            }
+        }
+        
+        // Testar automaticamente ao carregar
+        window.onload = function() {
+            console.log('Página carregada, iniciando testes...');
+            setTimeout(testarStatusOS, 1000);
+        };
+    </script>
+</body>
+</html>

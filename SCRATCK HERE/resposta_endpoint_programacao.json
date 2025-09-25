@@ -1,0 +1,363 @@
+{
+  "setores": [
+    {
+      "id": 16,
+      "nome": "ACABAMENTO",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 34,
+      "nome": "ACABAMENTO",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 46,
+      "nome": "ADMINISTRAÇÃO",
+      "id_departamento": 4,
+      "departamento_nome": "ADMINISTRAÇÃO"
+    },
+    {
+      "id": 44,
+      "nome": "BOBINAGEM",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 8,
+      "nome": "COMERCIAL",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 26,
+      "nome": "COMERCIAL",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 22,
+      "nome": "ENGENHARIA",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 40,
+      "nome": "ENGENHARIA",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 20,
+      "nome": "ENROLAMENTO BARRAMENTO",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 38,
+      "nome": "ENROLAMENTO BARRAMENTO",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 21,
+      "nome": "ENROLAMENTO FIO REDONDO",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 39,
+      "nome": "ENROLAMENTO FIO REDONDO",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 14,
+      "nome": "ENSAIOS BT",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 32,
+      "nome": "ENSAIOS BT",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 9,
+      "nome": "EXPEDICAO",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 27,
+      "nome": "EXPEDICAO",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 15,
+      "nome": "FECHAMENTO",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 33,
+      "nome": "FECHAMENTO",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 12,
+      "nome": "GERENCIA",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 30,
+      "nome": "GERENCIA",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 11,
+      "nome": "GESTAO",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 29,
+      "nome": "GESTAO",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 41,
+      "nome": "LABORATORIO DE ENSAIOS ELETRICOS",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 42,
+      "nome": "LABORATORIO DE ENSAIOS ELETRICOS",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 6,
+      "nome": "MECANICA DIA",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 24,
+      "nome": "MECANICA DIA ",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 7,
+      "nome": "MECANICA NOITE",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 25,
+      "nome": "MECANICA NOITE",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 45,
+      "nome": "MONTAGEM",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 18,
+      "nome": "PARTE ATIVA",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 36,
+      "nome": "PARTE ATIVA",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 10,
+      "nome": "PCP",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 28,
+      "nome": "PCP",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 13,
+      "nome": "PINTURA",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 31,
+      "nome": "PINTURA",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 17,
+      "nome": "POLOS",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 35,
+      "nome": "POLOS",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 19,
+      "nome": "PREPARACAO",
+      "id_departamento": 1,
+      "departamento_nome": "MOTORES"
+    },
+    {
+      "id": 37,
+      "nome": "PREPARACAO",
+      "id_departamento": 2,
+      "departamento_nome": "TRANSFORMADORES"
+    },
+    {
+      "id": 47,
+      "nome": "TESTES",
+      "id_departamento": 5,
+      "departamento_nome": "TESTE"
+    }
+  ],
+  "usuarios": [
+    {
+      "id": 1,
+      "nome_completo": "ADMINISTRADOR",
+      "id_setor": 42,
+      "setor": "LABORATORIO DE ENSAIOS ELETRICOS",
+      "privilege_level": "ADMIN",
+      "trabalha_producao": true
+    },
+    {
+      "id": 15,
+      "nome_completo": "ALESSANDRO  SOUZA",
+      "id_setor": 43,
+      "setor": "Não informado",
+      "privilege_level": "ADMIN",
+      "trabalha_producao": true
+    },
+    {
+      "id": 3,
+      "nome_completo": "SUPERVISOR LABORATORIO DE ENSAIOS ELETRICOS",
+      "id_setor": 42,
+      "setor": "LABORATORIO DE ENSAIOS ELETRICOS",
+      "privilege_level": "SUPERVISOR",
+      "trabalha_producao": true
+    },
+    {
+      "id": 9,
+      "nome_completo": "SUPERVISOR MECANICA DIA",
+      "id_setor": 6,
+      "setor": "MECANICA DIA",
+      "privilege_level": "SUPERVISOR",
+      "trabalha_producao": true
+    }
+  ],
+  "departamentos": [
+    {
+      "id": 4,
+      "nome": "ADMINISTRAÇÃO"
+    },
+    {
+      "id": 3,
+      "nome": "GERADORES"
+    },
+    {
+      "id": 1,
+      "nome": "MOTORES"
+    },
+    {
+      "id": 5,
+      "nome": "TESTE"
+    },
+    {
+      "id": 2,
+      "nome": "TRANSFORMADORES"
+    }
+  ],
+  "ordens_servico": [
+    {
+      "id": 14,
+      "os_numero": "TEST003",
+      "descricao_maquina": "OS criada automaticamente via apontamento - CLIENTE TESTE DOCUMENTACAO",
+      "status": "AGUARDANDO",
+      "cliente_nome": "Não informado",
+      "tipo_maquina_nome": "N/A",
+      "setor": "LABORATORIO DE ENSAIOS ELETRICOS"
+    },
+    {
+      "id": 15,
+      "os_numero": "TEST002",
+      "descricao_maquina": "OS criada automaticamente via apontamento - CLIENTE TESTE PENDENCIA",
+      "status": "AGUARDANDO",
+      "cliente_nome": "Não informado",
+      "tipo_maquina_nome": "N/A",
+      "setor": "LABORATORIO DE ENSAIOS ELETRICOS"
+    },
+    {
+      "id": 13,
+      "os_numero": "TEST001",
+      "descricao_maquina": "OS criada automaticamente via apontamento - CLIENTE TESTE HIERARQUIA",
+      "status": "AGUARDANDO",
+      "cliente_nome": "Não informado",
+      "tipo_maquina_nome": "N/A",
+      "setor": "LABORATORIO DE ENSAIOS ELETRICOS"
+    },
+    {
+      "id": 11,
+      "os_numero": "99999",
+      "descricao_maquina": "OS criada automaticamente via apontamento - TESTE VISIBILIDADE CAMPOS",
+      "status": "AGUARDANDO",
+      "cliente_nome": "Não informado",
+      "tipo_maquina_nome": "N/A",
+      "setor": "LABORATORIO DE ENSAIOS ELETRICOS"
+    },
+    {
+      "id": 12,
+      "os_numero": "99998",
+      "descricao_maquina": "OS criada automaticamente via apontamento - CLIENTE TESTE DEPT",
+      "status": "AGUARDANDO",
+      "cliente_nome": "Não informado",
+      "tipo_maquina_nome": "N/A",
+      "setor": "LABORATORIO DE ENSAIOS ELETRICOS"
+    },
+    {
+      "id": 10,
+      "os_numero": "12345",
+      "descricao_maquina": "OS criada automaticamente via apontamento - CLIENTE TESTE",
+      "status": "AGUARDANDO",
+      "cliente_nome": "Não informado",
+      "tipo_maquina_nome": "N/A",
+      "setor": "LABORATORIO DE ENSAIOS ELETRICOS"
+    }
+  ],
+  "status_opcoes": [
+    "PROGRAMADA",
+    "EM_ANDAMENTO",
+    "ENVIADA",
+    "CONCLUIDA",
+    "CANCELADA"
+  ]
+}

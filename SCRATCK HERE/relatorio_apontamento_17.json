@@ -1,0 +1,53 @@
+{
+  "apontamento": {
+    "id": 17,
+    "data_inicio": "2025-01-16T00:00:00",
+    "data_fim": "2025-01-16T00:00:00",
+    "status": "CONCLUIDO",
+    "foi_retrabalho": false,
+    "causa_retrabalho": null,
+    "observacao_os": "Apontamento de teste usando hierarquia TESTE - Execução completa",
+    "observacoes_gerais": "Teste funcional básico executado com sucesso no Equipamento Teste A",
+    "resultado_global": "APROVADO",
+    "setor": "GERAL",
+    "criado_por_email": "admin@registroos.com"
+  },
+  "ordem_servico": {
+    "numero": "TEST001",
+    "status": "AGUARDANDO",
+    "descricao_maquina": "OS criada automaticamente via apontamento - CLIENTE TESTE HIERARQUIA",
+    "prioridade": "NORMAL"
+  },
+  "testes_realizados": [
+    {
+      "id": 347,
+      "nome": "TESTE FUNCIONAL BÁSICO",
+      "tipo": "FUNCIONAL",
+      "resultado": "APROVADO",
+      "observacao": "Teste funcional básico executado conforme procedimento EXEC_001"
+    },
+    {
+      "id": 348,
+      "nome": "TESTE DE PERFORMANCE",
+      "tipo": "PERFORMANCE",
+      "resultado": "APROVADO",
+      "observacao": "Performance dentro dos parâmetros esperados"
+    },
+    {
+      "id": 349,
+      "nome": "TESTE DE SEGURANÇA",
+      "tipo": "SEGURANCA",
+      "resultado": "APROVADO",
+      "observacao": "Todos os sistemas de segurança funcionando corretamente"
+    }
+  ],
+  "resumo": {
+    "total_testes": 3,
+    "testes_aprovados": 3,
+    "testes_reprovados": 0,
+    "testes_inconclusivos": 0,
+    "percentual_aprovacao": 100.0
+  },
+  "gerado_em": "2025-09-23T02:08:08.376169",
+  "gerado_por": "admin@registroos.com"
+}

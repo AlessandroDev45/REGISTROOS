@@ -1,0 +1,14 @@
+{
+  "departamento": "TESTE",
+  "setor": "TESTES",
+  "data_criacao": "2025-09-23 02:03:32",
+  "componentes_criados": {
+    "tipos_maquina": 3,
+    "tipos_teste": 5,
+    "atividades": 4,
+    "descricoes_atividade": 8,
+    "causas_retrabalho": 6,
+    "programacoes": 4
+  },
+  "departamento_id": 5
+}

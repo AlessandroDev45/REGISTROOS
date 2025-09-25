@@ -1,0 +1,50 @@
+Nome do campo                 | Descrição do campo              | Tipo do Campo
+------------------------------|--------------------------------|------------------
+NUMOS                        | Nro. OS                        | Numero Inteiro
+CODPARC                      | Cód. Parceiro                  | Numero Inteiro
+RAZAOSOCIAL                  | Razão Social                   | Texto
+CODCENCUS                    | Cód. Centro de Resultado       | Numero Inteiro
+DESCRCENCUS                  | Centro de Resultado            | Texto
+DTABERTURAO5                 | Dt. Abertura OS                | Data e Hora
+DTALTER                      | Dt. Alteração                  | Data e Hora
+STATUS                       | Status                         | Texto
+TAGMOTOR                     | Tag Motor                      | Texto
+TAGTRAFO                     | Tag Trafo                      | Texto
+DESCRTAGTRAFO                | Descrição TAG Trafo            | Texto
+DESCRTAGMOTOR                | Descrição TAG Motor            | Texto
+CODTIPSER                    | Cód. Tipo Serviço              | Numero Inteiro
+DESCRICAOTIPOSERVICO         | Descrição Tipo Serviço         | Texto
+DESCGRUTIPSERV                | Descrição Grupo Serviço        | Texto
+CODEQP                       | Cód. Equipamento               | Numero Inteiro
+SERIE                        | Série                          | Texto
+TAGMOTOR_ABREVIADA           | Tag Motor Abreviada            | Texto
+TAGTRAFO_ABREVIADA           | Tag Trafo Abreviada            | Texto
+POTENCIAW                    | Potência W                     | Numero Decimal
+POTENCIAMW                   | Potência MW                    | Numero Decimal
+POTENCIAVAR                  | Potência MVAr                  | Numero Decimal
+POTENCIAVA                   | Potência MVA                   | Numero Decimal
+POTENCIAKW                   | Potência KW                    | Numero Decimal
+POTENCIAVAR                  | Potência KVAr                  | Numero Decimal
+POTENCIAHP                   | Potência hp                    | Numero Decimal
+TENSAOTERCIARIO              | Tensão do Terciário (kV)       | Numero Decimal
+TENSAOESTATOR                | Tensão do Estator (V)          | Numero Decimal
+TENSAOBAIXA                  | Tensão Baixa (kV)              | Numero Decimal
+TENSAOARMADURA               | Tensão da Armadura (V)         | Numero Decimal
+TENSAOALTA                   | Tensão Alta (kV)               | Numero Decimal
+CORRENTERROTOR               | Corrente do Rotor (A)          | Numero Decimal
+CORRENTEESTATOR              | Corrente do Estator (A)        | Numero Decimal
+CORRENTECAMPO                | Corrente do Campo Exc (A)      | Numero Decimal
+CORRENTEBAIXA                | Corrente Baixa (A)             | Numero Decimal
+CORRENTEARMADURA             | Corrente da Armadura (A)       | Numero Decimal
+CORRENTEALTA                 | Corrente Alta (A)              | Numero Decimal
+ROTACAO                      | Rotação (RPM)                  | Numero Decimal
+NROFASES                     | Nro. Fases                     | Texto
+PESOTOTAL                    | Peso Total                     | Numero Decimal
+PESOTANQUEACESS              | Peso Tanque Acessórios (KG)    | Numero Decimal
+PESOPARTEATIVA               | Peso da Parte Ativa (KG)       | Numero Decimal
+PESOLEO                      | Peso do Óleo                   | Numero Decimal
+ANOFAB                       | Ano Fabricação                 | Numero Inteiro
+CODFABEQP                    | Código do Fabricante           | Numero Inteiro
+NROPOLOS                     | Nro. Polos                     | Texto
+CARACTPOLO                   | Característica do Polo         | Texto
+FABRICANTE                   | Fabricante                     | Texto

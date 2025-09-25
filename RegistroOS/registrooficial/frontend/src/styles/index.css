@@ -1,0 +1,6 @@
+/* stylelint-disable at-rule-no-unknown */
+/* eslint-disable */
+/* These Tailwind CSS directives are valid and processed by PostCSS */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
