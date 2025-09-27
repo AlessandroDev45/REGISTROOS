@@ -43,7 +43,7 @@ const createDefaultConfig = (setorNome: string, setorId: string): ConfiguracaoSe
         { etapa: 2, componente: 'select', props: { label: 'Tipo de Trabalho', opcoes: ['MANUTENCAO', 'REPARO', 'FABRICACAO', 'INSPECAO'] } }
     ],
     ConfiguracaoBackend: {
-        endPointApontamento: '/api/desenvolvimento/apontamentos',
+        endPointApontamento: '/desenvolvimento/apontamentos',
         endPointOrdemServico: '/api/ordens-servico'
     }
 });

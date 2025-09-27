@@ -1,0 +1,27 @@
+# DEPENDÊNCIAS PARA SCRAPING ASSÍNCRONO
+# =====================================
+
+# Celery para filas assíncronas
+celery==5.3.4
+redis==5.0.1
+
+# Monitoramento
+flower==2.0.1
+
+# Dependências existentes (manter compatibilidade)
+fastapi>=0.68.0
+uvicorn[standard]>=0.15.0
+sqlalchemy>=1.4.0
+python-multipart
+python-jose[cryptography]
+passlib[bcrypt]
+python-dotenv
+
+# Selenium para scraping
+selenium>=4.0.0
+webdriver-manager>=3.8.0
+
+# Utilitários
+requests>=2.25.0
+beautifulsoup4>=4.9.0
+lxml>=4.6.0

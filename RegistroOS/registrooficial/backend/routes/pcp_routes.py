@@ -169,7 +169,7 @@ async def get_programacao_form_data(
             LEFT JOIN tipo_setores s ON u.id_setor = s.id
             LEFT JOIN tipo_departamentos d ON s.id_departamento = d.id
             WHERE u.privilege_level IN ('SUPERVISOR', 'ADMIN', 'GESTAO')
-            AND (u.ativo = 1 OR u.ativo IS NULL)
+            AND u.is_approved = 1
             ORDER BY d.nome_tipo, s.nome, u.privilege_level DESC, u.nome_completo
         """)
 

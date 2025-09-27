@@ -10,6 +10,9 @@ import os
 import logging
 import sys # Importar sys para o sys.executable
 
+# Configurar logger
+logger = logging.getLogger(__name__)
+
 from app.database_models import (
     Usuario, OrdemServico, ApontamentoDetalhado, Programacao,
     Pendencia, Setor, Departamento, TipoMaquina, Cliente, Equipamento,
@@ -18,6 +21,16 @@ from app.database_models import (
 from config.database_config import get_db
 from app.dependencies import get_current_user
 from utils.validators import generate_next_os # Certifique-se de que este import está correto
+
+# Importar Celery para scraping assíncrono
+try:
+    from tasks.scraping_tasks import scrape_os_task, get_queue_status
+    from celery.result import AsyncResult
+    CELERY_AVAILABLE = True
+    print("✅ Celery disponível - Scraping assíncrono habilitado")
+except ImportError as e:
+    CELERY_AVAILABLE = False
+    print(f"⚠️ Celery não disponível - Scraping síncrono será usado: {e}")
 
 print("🔧 Módulo desenvolvimento.py carregado")
 
@@ -1073,6 +1086,191 @@ async def teste_scraping(numero_os: str):
         logger.error(f"Erro no endpoint de teste de scraping: {e}")
         return {"erro": str(e)}
 
+@router.post("/buscar-os-async/{numero_os}")
+async def buscar_os_async(numero_os: str, db: Session = Depends(get_db), current_user: Usuario = Depends(get_current_user)):
+    """
+    ENDPOINT ASSÍNCRONO PARA SCRAPING DE OS
+    ======================================
+
+    Inicia scraping assíncrono para produção com 100+ usuários
+    Mantém toda a lógica de criação de dados existente
+    """
+    logger.info(f"🚀 Solicitação de scraping assíncrono para OS {numero_os} pelo usuário {current_user.id}")
+
+    try:
+        # 1. Verificar se OS já existe no banco
+        existing_os = db.query(OrdemServico).filter(OrdemServico.os_numero == numero_os).first()
+
+        if existing_os:
+            logger.info(f"✅ OS {numero_os} já existe no banco local")
+
+            # Buscar dados relacionados
+            cliente_nome = None
+            equipamento_nome = ""
+
+            if existing_os.id_cliente:
+                cliente_obj = db.query(Cliente).filter(Cliente.id == existing_os.id_cliente).first()
+                if cliente_obj:
+                    cliente_nome = cliente_obj.razao_social
+
+            if existing_os.id_equipamento:
+                equipamento_obj = db.query(Equipamento).filter(Equipamento.id == existing_os.id_equipamento).first()
+                if equipamento_obj:
+                    equipamento_nome = equipamento_obj.descricao
+
+            return {
+                "status": "found_existing",
+                "message": f"OS {numero_os} já existe no sistema",
+                "data": {
+                    "numero_os": existing_os.os_numero,
+                    "status": existing_os.status_os,
+                    "descricao": existing_os.descricao_maquina,
+                    "cliente": cliente_nome,
+                    "equipamento": equipamento_nome,
+                    "data_criacao": existing_os.data_criacao.isoformat() if existing_os.data_criacao else None
+                },
+                "fonte": "banco_local"
+            }
+
+        # 2. Verificar se Celery está disponível
+        if not CELERY_AVAILABLE:
+            logger.warning("⚠️ Celery não disponível - executando scraping síncrono")
+            # Fallback para scraping síncrono
+            return await get_detalhes_os_formulario(numero_os, db)
+
+        # 3. Verificar se já existe task em andamento para esta OS
+        task_id = f"scraping_{numero_os}"
+        try:
+            existing_task = AsyncResult(task_id)
+            if existing_task.state in ['PENDING', 'PROGRESS']:
+                logger.info(f"📋 OS {numero_os} já está sendo processada (Task: {task_id})")
+
+                return {
+                    "status": "queued",
+                    "message": f"OS {numero_os} já está sendo processada",
+                    "task_id": task_id,
+                    "estimated_time": "2-5 minutos"
+                }
+        except Exception as e:
+            logger.debug(f"Erro ao verificar task existente: {e}")
+
+        # 4. Iniciar nova task de scraping
+        logger.info(f"🎯 Iniciando nova task de scraping para OS {numero_os}")
+
+        task = scrape_os_task.apply_async(
+            args=[numero_os, current_user.id],
+            task_id=task_id,
+            priority=5  # Prioridade normal
+        )
+
+        logger.info(f"✅ Task criada para OS {numero_os}: {task.id}")
+
+        return {
+            "status": "queued",
+            "message": f"OS {numero_os} adicionada à fila de processamento",
+            "task_id": task.id,
+            "estimated_time": "2-5 minutos",
+            "instructions": {
+                "check_status": f"/api/desenvolvimento/scraping-status/{task.id}",
+                "polling_interval": "5 segundos"
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Erro ao iniciar scraping assíncrono para OS {numero_os}: {e}")
+        return {
+            "status": "error",
+            "message": f"Erro ao processar solicitação: {str(e)}",
+            "fallback": "Tente usar o endpoint síncrono /formulario/buscar-os/{numero_os}"
+        }
+
+@router.get("/scraping-status/{task_id}")
+async def get_scraping_status(task_id: str, current_user: Usuario = Depends(get_current_user)):
+    """
+    VERIFICAR STATUS DO SCRAPING ASSÍNCRONO
+    ======================================
+
+    Retorna o progresso e resultado do scraping
+    """
+    try:
+        if not CELERY_AVAILABLE:
+            return {"error": "Celery não disponível"}
+
+        task = AsyncResult(task_id)
+
+        response = {
+            "task_id": task_id,
+            "status": task.state,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        if task.state == 'PENDING':
+            response.update({
+                "message": "Task aguardando processamento",
+                "progress": 0
+            })
+        elif task.state == 'PROGRESS':
+            response.update({
+                "message": task.info.get('status', 'Processando...'),
+                "progress": task.info.get('progress', 0),
+                "numero_os": task.info.get('numero_os', '')
+            })
+        elif task.state == 'SUCCESS':
+            result = task.result
+            response.update({
+                "message": "Scraping concluído com sucesso",
+                "progress": 100,
+                "result": result
+            })
+        elif task.state == 'FAILURE':
+            response.update({
+                "message": f"Erro no scraping: {str(task.info)}",
+                "progress": 0,
+                "error": str(task.info)
+            })
+        else:
+            response.update({
+                "message": f"Status desconhecido: {task.state}",
+                "progress": 0
+            })
+
+        return response
+
+    except Exception as e:
+        logger.error(f"❌ Erro ao verificar status da task {task_id}: {e}")
+        return {
+            "error": f"Erro ao verificar status: {str(e)}",
+            "task_id": task_id
+        }
+
+@router.get("/queue-status")
+async def get_queue_status_endpoint(current_user: Usuario = Depends(get_current_user)):
+    """
+    STATUS DA FILA DE SCRAPING
+    =========================
+
+    Retorna informações sobre a fila de processamento
+    """
+    try:
+        if not CELERY_AVAILABLE:
+            return {"error": "Celery não disponível", "queue_size": 0}
+
+        queue_info = get_queue_status.delay().get(timeout=10)
+
+        return {
+            "status": "success",
+            "queue_info": queue_info,
+            "celery_available": True,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Erro ao obter status da fila: {e}")
+        return {
+            "error": f"Erro ao obter status: {str(e)}",
+            "celery_available": CELERY_AVAILABLE
+        }
+
 @router.get("/formulario/buscar-os/{numero_os}", operation_id="dev_get_formulario_os_detalhes")
 async def get_detalhes_os_formulario(
     numero_os: str,
@@ -1232,17 +1430,87 @@ async def get_detalhes_os_formulario(
                         os_data = scraped_data[0]  # Primeiro resultado
                         logger.info(f"📊 Dados coletados: {os_data}")
 
-                        # Salvar no banco usando SQL direto com colunas corretas
+                        # 1. CRIAR/BUSCAR CLIENTE
+                        cliente_id = None
+                        cliente_nome = os_data.get('CLIENTE', os_data.get('NOME CLIENTE', ''))
+                        cliente_cnpj = os_data.get('CNPJ', '')
+
+                        if cliente_nome and cliente_nome.strip():
+                            # Buscar cliente existente
+                            cliente_existente = db.query(Cliente).filter(
+                                Cliente.razao_social.ilike(f"%{cliente_nome.strip()}%")
+                            ).first()
+
+                            if cliente_existente:
+                                cliente_id = cliente_existente.id
+                                logger.info(f"✅ Cliente existente encontrado: {cliente_nome} (ID: {cliente_id})")
+                            else:
+                                # Criar novo cliente
+                                novo_cliente = Cliente(
+                                    razao_social=cliente_nome.strip(),
+                                    nome_fantasia=cliente_nome.strip(),
+                                    cnpj_cpf=cliente_cnpj.strip() if cliente_cnpj else None,
+                                    contato_principal="Contato via scraping",
+                                    telefone_contato="",
+                                    email_contato="",
+                                    endereco=os_data.get('MUNICIPIO', ''),
+                                    data_criacao=datetime.now(),
+                                    data_ultima_atualizacao=datetime.now()
+                                )
+                                db.add(novo_cliente)
+                                db.flush()  # Para obter o ID
+                                cliente_id = novo_cliente.id
+                                logger.info(f"✅ Novo cliente criado: {cliente_nome} (ID: {cliente_id})")
+
+                        # 2. CRIAR/BUSCAR EQUIPAMENTO
+                        equipamento_id = None
+                        equipamento_desc = os_data.get('DESCRIÇÃO', os_data.get('TIPO DO EQUIPAMENTO', ''))
+                        equipamento_fabricante = os_data.get('FABRICANTE', '')
+                        equipamento_modelo = os_data.get('MODELO', '')
+                        equipamento_serie = os_data.get('NUMERO DE SERIE', '')
+
+                        if equipamento_desc and equipamento_desc.strip():
+                            # Buscar equipamento existente
+                            equipamento_existente = db.query(Equipamento).filter(
+                                Equipamento.descricao.ilike(f"%{equipamento_desc.strip()[:50]}%")
+                            ).first()
+
+                            if equipamento_existente:
+                                equipamento_id = equipamento_existente.id
+                                logger.info(f"✅ Equipamento existente encontrado: {equipamento_desc[:50]} (ID: {equipamento_id})")
+                            else:
+                                # Criar novo equipamento
+                                novo_equipamento = Equipamento(
+                                    descricao=equipamento_desc.strip(),
+                                    tipo=os_data.get('TIPO DO EQUIPAMENTO', 'Equipamento via scraping'),
+                                    fabricante=equipamento_fabricante.strip() if equipamento_fabricante else None,
+                                    modelo=equipamento_modelo.strip() if equipamento_modelo else None,
+                                    numero_serie=equipamento_serie.strip() if equipamento_serie else None,
+                                    data_criacao=datetime.now(),
+                                    data_ultima_atualizacao=datetime.now()
+                                )
+                                db.add(novo_equipamento)
+                                db.flush()  # Para obter o ID
+                                equipamento_id = novo_equipamento.id
+                                logger.info(f"✅ Novo equipamento criado: {equipamento_desc[:50]} (ID: {equipamento_id})")
+
+                        # 3. SALVAR OS COM RELACIONAMENTOS
                         insert_sql = text("""\
                             INSERT OR REPLACE INTO ordens_servico
-                            (os_numero, status_os, descricao_maquina, data_criacao)
-                            VALUES (:os_numero, :status, :descricao, datetime('now'))
+                            (os_numero, id_cliente, id_equipamento, descricao_maquina,
+                             status_os, data_criacao, prioridade, observacoes_gerais)
+                            VALUES (:os_numero, :id_cliente, :id_equipamento, :descricao,
+                                    :status, datetime('now'), :prioridade, :observacoes)
                         """)
-                        
+
                         db.execute(insert_sql, {
                             "os_numero": os_data.get('OS', numero_os),
-                            "status": os_data.get('TAREFA', 'COLETADA VIA SCRAPING'),
-                            "descricao": f"{os_data.get('CLIENTE', 'Cliente não informado')} - {os_data.get('DESCRIÇÃO', '')}"
+                            "id_cliente": cliente_id,
+                            "id_equipamento": equipamento_id,
+                            "status": os_data.get('STATUS DA OS', 'COLETADA VIA SCRAPING'),
+                            "descricao": equipamento_desc[:200] if equipamento_desc else f"Equipamento da OS {numero_os}",
+                            "prioridade": "MEDIA",
+                            "observacoes": f"OS criada via scraping - Cliente: {cliente_nome} - CNPJ: {cliente_cnpj}"
                         })
                         
                         db.commit()

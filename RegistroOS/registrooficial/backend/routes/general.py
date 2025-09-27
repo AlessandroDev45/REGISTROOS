@@ -328,7 +328,7 @@ async def save_apontamento_with_pendencia(
                             "id": teste.id,
                             "nome": teste.nome,
                             "descricao": teste.descricao_teste_exclusivo or teste.nome,
-                            "usuario": f"{current_user.primeiro_nome} {current_user.sobrenome}",
+                            "usuario": current_user.nome_completo,
                             "setor": current_user.setor,
                             "departamento": current_user.departamento,
                             "data": agora.strftime('%Y-%m-%d'),

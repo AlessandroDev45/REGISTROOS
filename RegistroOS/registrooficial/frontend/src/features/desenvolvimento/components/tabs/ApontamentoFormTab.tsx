@@ -847,7 +847,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
             setLoadingProgramacao(true);
             console.log(`🔍 Verificando programação para OS: ${numeroOS}`);
 
-            const response = await api.get(`/api/desenvolvimento/verificar-programacao-os/${numeroOS}`);
+            const response = await api.get(`/desenvolvimento/verificar-programacao-os/${numeroOS}`);
 
             if (response.data.tem_programacao) {
                 console.log('✅ Programação detectada:', response.data);
@@ -871,7 +871,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
     const verificarProgramacaoFinalizada = async (numeroOS: string) => {
         try {
             // Buscar programações da OS
-            const response = await api.get(`/api/desenvolvimento/programacao?os_numero=${numeroOS}`);
+            const response = await api.get(`/desenvolvimento/programacao?os_numero=${numeroOS}`);
 
             if (response.data && response.data.length > 0) {
                 const programacoes = response.data;
@@ -893,7 +893,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
 
                     if (finalizada) {
                         // Atualizar status da programação para FINALIZADA
-                        await api.patch(`/api/desenvolvimento/programacao/${programacaoAtiva.id}/finalizar`, {
+                        await api.patch(`/desenvolvimento/programacao/${programacaoAtiva.id}/finalizar`, {
                             status: 'FINALIZADA',
                             data_finalizacao: new Date().toISOString(),
                             finalizada_por: user?.id
@@ -926,7 +926,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                 descricao_atividade: descricaoAtividade
             };
 
-            const response = await api.post('/api/desenvolvimento/finalizar-atividade', dados);
+            const response = await api.post('/desenvolvimento/finalizar-atividade', dados);
 
             alert(`✅ ${response.data.message}`);
 
@@ -964,7 +964,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                 observacoes_finais: observacoesFinais
             };
 
-            const response = await api.post('/api/desenvolvimento/finalizar-programacao', dados);
+            const response = await api.post('/desenvolvimento/finalizar-programacao', dados);
 
             alert(`🎉 ${response.data.message}`);
 
@@ -1145,7 +1145,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
 
             console.log('📋 Dados do apontamento com pendência:', apontamentoData);
 
-            const response = await api.post('/apontamentos-pendencia', apontamentoData);
+            const response = await api.post('/save-apontamento-with-pendencia', apontamentoData);
 
             if (response.data) {
                 console.log('✅ Apontamento e pendência salvos:', response.data);
