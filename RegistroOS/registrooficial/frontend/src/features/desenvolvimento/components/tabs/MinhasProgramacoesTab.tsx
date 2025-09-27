@@ -238,12 +238,7 @@ const MinhasProgramacoesTab: React.FC = () => {
                                         >
                                             ⏸️ Pausar
                                         </button>
-                                        <button
-                                            onClick={() => finalizarExecucao(programacao)}
-                                            className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
-                                        >
-                                            ✅ Finalizar
-                                        </button>
+                                        {/* Botão de finalizar removido - finalização deve ocorrer via apontamento */}
                                     </>
                                 )}
 

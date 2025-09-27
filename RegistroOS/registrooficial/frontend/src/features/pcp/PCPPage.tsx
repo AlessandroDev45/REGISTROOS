@@ -775,13 +775,13 @@ const PCPPage: React.FC = () => {
                   onLimparFiltros={() => setFiltrosPendencias({})}
                 />
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                   <div className="lg:col-span-2">
                     <PendenciasList
                       filtros={filtrosPendenciasEstavel}
                     />
                   </div>
-                  <div>
+                  <div className="lg:col-span-3">
                     <PendenciasDashboard
                       periodoDias={periodoDashboard}
                       onPeriodoChange={setPeriodoDashboard}

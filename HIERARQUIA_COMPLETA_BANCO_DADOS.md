@@ -259,7 +259,7 @@ O coração do sistema, detalhando a jornada de uma OS desde sua criação até 
         *   **Através de uma Programação**.
         *   Eles capturam informações detalhadas sobre a atividade, quem a fez, quando, se foi retrabalho, e o progresso por etapas, além de serem o ponto de entrada para `Resultados de Testes` e `Pendências`.
 
-*   **4.4. 🛑 Pendências** (`pendencias`)
+*   **4.4. 🛑 Pendências** (`pendencias`) - **ATUALIZADA 2025-09-27**
     *   `id` (🔑 PK)
     *   `numero_os` (🔗 FK para `ordens_servico.os_numero`)
     *   `cliente`, `data_inicio`
@@ -272,7 +272,19 @@ O coração do sistema, detalhando a jornada de uma OS desde sua criação até 
     *   `id_apontamento_origem` (🔗 FK para `apontamentos_detalhados.id` - **Pode ser gerada por um Apontamento**)
     *   `id_apontamento_fechamento` (🔗 FK para `apontamentos_detalhados.id`)
     *   `tempo_aberto_horas`, `data_criacao`, `data_ultima_atualizacao`
-    *   **LÓGICA:** `Pendências` surgem de uma `OS` e podem ser originadas ou resolvidas a partir de um `Apontamento Detalhado`.
+    *
+    *   **🆕 CAMPOS ADICIONADOS PARA PERFORMANCE E AUDITORIA:**
+    *   `setor_origem` (VARCHAR(100)) - **Setor do responsável no momento da criação**
+    *   `departamento_origem` (VARCHAR(100)) - **Departamento do responsável no momento da criação**
+    *
+    *   **📊 CAMPOS DE AUDITORIA COMPLETOS:**
+    *   - **Criação**: `data_inicio` + `id_responsavel_inicio` + `data_criacao`
+    *   - **Fechamento**: `data_fechamento` + `id_responsavel_fechamento` + `solucao_aplicada`
+    *   - **Rastreabilidade**: `id_apontamento_origem` + `id_apontamento_fechamento`
+    *   - **Métricas**: `tempo_aberto_horas` (calculado automaticamente)
+    *   - **Contexto**: `setor_origem` + `departamento_origem` (preserva contexto histórico)
+    *
+    *   **LÓGICA:** `Pendências` surgem de uma `OS` e podem ser originadas ou resolvidas a partir de um `Apontamento Detalhado`. Os campos de setor/departamento preservam o contexto organizacional no momento da criação, permitindo análises históricas precisas mesmo se o usuário mudar de setor.
 
 *   **4.5. ✅ Resultados de Testes** (`resultados_teste`)
     *   `id` (🔑 PK)
@@ -977,7 +989,87 @@ Sistema Externo → Scraping → Cliente/Equipamento → OS → Apontamentos/Pro
 
 ---
 
-## 🔧 9. CORREÇÕES IMPLEMENTADAS - FORMULÁRIO APONTAMENTO
+## 🔧 9. MELHORIAS IMPLEMENTADAS - TABELA PENDÊNCIAS (2025-09-27)
+
+### ✅ **9.1. MIGRAÇÃO COMPLETA DA TABELA PENDÊNCIAS**
+
+#### **Problema Identificado:**
+- Dashboard de pendências retornava 0 para todas as métricas
+- Campos de auditoria (`data_criacao`, `data_ultima_atualizacao`) estavam NULL
+- Faltavam campos de setor/departamento para análises diretas
+- Queries complexas com JOINs desnecessários para filtros básicos
+
+#### **Soluções Implementadas:**
+
+##### **A. Novos Campos Adicionados:**
+```sql
+ALTER TABLE pendencias ADD COLUMN setor_origem VARCHAR(100);
+ALTER TABLE pendencias ADD COLUMN departamento_origem VARCHAR(100);
+```
+
+##### **B. População Automática dos Campos:**
+- **setor_origem**: Populado com o setor do `id_responsavel_inicio`
+- **departamento_origem**: Populado com o departamento do `id_responsavel_inicio`
+- **data_criacao**: Populado com `data_inicio` onde estava NULL
+- **data_ultima_atualizacao**: Populado com timestamp atual
+- **tempo_aberto_horas**: Calculado automaticamente para todas as pendências
+
+##### **C. Correção do Dashboard:**
+- ✅ **Query otimizada**: Usa campos diretos em vez de JOINs complexos
+- ✅ **Conversão de datas**: Corrigido problema de comparação string vs datetime
+- ✅ **Métricas funcionais**: Total, abertas, fechadas, período, tempo médio
+- ✅ **Distribuição por setor**: Usando campo `setor_origem` diretamente
+
+##### **D. Modelo SQLAlchemy Atualizado:**
+```python
+class Pendencia(Base):
+    # ... campos existentes ...
+    setor_origem = Column(String(100))  # Setor do responsável na criação
+    departamento_origem = Column(String(100))  # Departamento do responsável na criação
+```
+
+#### **Resultados da Migração:**
+- ✅ **3 pendências migradas** com sucesso
+- ✅ **100% dos registros** com setor/departamento populados
+- ✅ **100% dos registros** com campos de auditoria completos
+- ✅ **Dashboard funcionando** com métricas corretas
+- ✅ **Performance otimizada** com queries diretas
+
+#### **Exemplo de Dados Após Migração:**
+```
+ID: 1 | OS: 000012345 | Status: ABERTA
+   Setor: LABORATORIO DE ENSAIOS ELETRICOS | Dept: MOTORES
+   Criação: 2025-09-26 12:33:17 | Tempo: 27.7h
+
+ID: 2 | OS: 000012346 | Status: ABERTA
+   Setor: LABORATORIO DE ENSAIOS ELETRICOS | Dept: MOTORES
+   Criação: 2025-09-24 12:33:17 | Tempo: 75.7h
+
+ID: 3 | OS: 000016608 | Status: FECHADA
+   Setor: LABORATORIO DE ENSAIOS ELETRICOS | Dept: MOTORES
+   Criação: 2025-09-22 12:33:17 | Tempo: 96.0h
+```
+
+### ✅ **9.2. VANTAGENS DA NOVA ESTRUTURA**
+
+#### **📊 Performance:**
+- **Queries mais rápidas**: Sem necessidade de JOINs para filtros básicos
+- **Índices otimizados**: Campos diretos permitem índices mais eficientes
+- **Dashboard responsivo**: Métricas calculadas instantaneamente
+
+#### **📈 Análises Históricas:**
+- **Contexto preservado**: Setor/departamento no momento da criação
+- **Auditoria completa**: Quem criou, quando, quem fechou, tempo total
+- **Rastreabilidade**: Ligação com apontamentos de origem e fechamento
+
+#### **🔧 Manutenibilidade:**
+- **Dados consistentes**: Campos sempre populados automaticamente
+- **Migração segura**: Script preserva todos os dados existentes
+- **Compatibilidade**: Mantém relacionamentos existentes
+
+---
+
+## 🔧 10. CORREÇÕES IMPLEMENTADAS - FORMULÁRIO APONTAMENTO
 
 ### ✅ **9.1. PROBLEMA RESOLVIDO: Campos Observação e Resultado Global**
 

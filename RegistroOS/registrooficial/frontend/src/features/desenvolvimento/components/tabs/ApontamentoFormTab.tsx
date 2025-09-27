@@ -18,6 +18,11 @@ interface ApontamentoFormTabProps {
     handleSupervisorTestesParciaisChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     handleSupervisorTestesFinaisChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     handleSaveApontamento: () => Promise<void>;
+
+    // Novas props para resolução de pendências
+    dadosPreenchidos?: any;
+    pendenciaParaResolver?: any;
+    onPendenciaResolvida?: () => void;
 }
 const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
     formData,
@@ -30,7 +35,10 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
     handleSupervisorHorasOrcadasChange,
     handleSupervisorTestesIniciaisChange,
     handleSupervisorTestesParciaisChange,
-    handleSupervisorTestesFinaisChange
+    handleSupervisorTestesFinaisChange,
+    dadosPreenchidos,
+    pendenciaParaResolver,
+    onPendenciaResolvida
 }) => {
     const { configuracaoAtual, setorAtivo } = useSetor();
     const { user } = useAuth();
@@ -811,6 +819,22 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
         console.log('✅ Formulário resetado com sucesso');
     };
 
+    // 🎯 USEEFFECT PARA PREENCHER DADOS DA PENDÊNCIA
+    useEffect(() => {
+        if (dadosPreenchidos && pendenciaParaResolver) {
+            console.log('📋 Preenchendo formulário com dados da pendência:', dadosPreenchidos);
+
+            // Preencher campos do formulário
+            setFormData(prevData => ({
+                ...prevData,
+                ...dadosPreenchidos
+            }));
+
+            // Mostrar notificação
+            alert(`📋 Formulário preenchido com dados da pendência #${pendenciaParaResolver.id}\n\nOS: ${dadosPreenchidos.inpNumOS}\nCliente: ${dadosPreenchidos.inpCliente}\n\nProssiga com o apontamento para resolver a pendência.`);
+        }
+    }, [dadosPreenchidos, pendenciaParaResolver]);
+
     // 🎯 FUNÇÃO PARA VERIFICAR PROGRAMAÇÃO ATIVA POR OS
     const verificarProgramacaoPorOS = async (numeroOS: string) => {
         if (!numeroOS || numeroOS.length < 3) {
@@ -1008,15 +1032,49 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                     testes_iniciais: formData.supervisor_testes_iniciais,
                     testes_parciais: formData.supervisor_testes_parciais,
                     testes_finais: formData.supervisor_testes_finais
-                }
+                },
+                // Incluir ID da pendência se estiver resolvendo uma
+                pendencia_origem_id: pendenciaParaResolver?.id || null
             };
 
             const response = await api.post('/desenvolvimento/os/apontamentos', apontamentoData);
 
-            alert(`✅ Apontamento salvo com sucesso! OS: ${response.data.numero_os || response.data.os_numero}`);
+            // Se estava resolvendo uma pendência, finalizá-la
+            if (pendenciaParaResolver) {
+                try {
+                    await api.patch(`/desenvolvimento/pendencias/${pendenciaParaResolver.id}/resolver`, {
+                        solucao_aplicada: formData.observacao || 'Resolvida via apontamento',
+                        observacoes_fechamento: `Pendência resolvida através do apontamento #${response.data.id}`,
+                        status: 'FECHADA'
+                    });
 
-            // 🎯 VERIFICAR SE PROGRAMAÇÃO FOI FINALIZADA
-            await verificarProgramacaoFinalizada(formData.inpNumOS);
+                    console.log('✅ Pendência finalizada automaticamente');
+
+                    // Chamar callback para limpar estado
+                    if (onPendenciaResolvida) {
+                        onPendenciaResolvida();
+                    }
+                } catch (errorPendencia) {
+                    console.error('❌ Erro ao finalizar pendência:', errorPendencia);
+                    // Não bloquear o fluxo se a finalização da pendência falhar
+                }
+            }
+
+            // Verificar se programação foi finalizada automaticamente
+            let mensagem = `✅ Apontamento salvo com sucesso! OS: ${response.data.numero_os || response.data.os_numero}`;
+
+            if (response.data.programacao_finalizada) {
+                mensagem += '\n🎯 Programação finalizada automaticamente!';
+                // Limpar detecção de programação
+                setProgramacaoDetectada(null);
+                setMostraOpcoesFinalizacao(false);
+            }
+
+            if (pendenciaParaResolver) {
+                mensagem += `\n📋 Pendência #${pendenciaParaResolver.id} resolvida!`;
+            }
+
+            alert(mensagem);
 
             // RESET COMPLETO DA PÁGINA
             resetarFormulario();
@@ -2761,11 +2819,24 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                 className={`px-4 py-2 text-white rounded whitespace-nowrap ${
                                     osBloqueadaParaApontamento
                                         ? 'bg-gray-400 cursor-not-allowed'
+                                        : programacaoDetectada
+                                        ? 'bg-blue-600 hover:bg-blue-700'
                                         : 'bg-green-600 hover:bg-green-700'
                                 }`}
-                                title={osBloqueadaParaApontamento ? "OS não permite apontamentos" : "Salvar apontamento"}
+                                title={
+                                    osBloqueadaParaApontamento
+                                        ? "OS não permite apontamentos"
+                                        : programacaoDetectada
+                                        ? "Salvar apontamento e finalizar programação"
+                                        : "Salvar apontamento"
+                                }
                             >
-                                {osBloqueadaParaApontamento ? '🚫 Bloqueado' : '💾 Salvar Apontamento'}
+                                {osBloqueadaParaApontamento
+                                    ? '🚫 Bloqueado'
+                                    : programacaoDetectada
+                                    ? '💾 Salvar Apontamento/Programação'
+                                    : '💾 Salvar Apontamento'
+                                }
                             </button>
                         </div>
                         <div className="flex-shrink-0">

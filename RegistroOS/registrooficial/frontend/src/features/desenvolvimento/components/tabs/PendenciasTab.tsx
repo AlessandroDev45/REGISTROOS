@@ -24,7 +24,11 @@ interface Pendencia {
     observacoes_fechamento?: string;
 }
 
-const PendenciasTab: React.FC = () => {
+interface PendenciasTabProps {
+    onResolverViaApontamento?: (pendencia: Pendencia) => void;
+}
+
+const PendenciasTab: React.FC<PendenciasTabProps> = ({ onResolverViaApontamento }) => {
     const { setorAtivo } = useSetor();
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -447,18 +451,31 @@ const PendenciasTab: React.FC = () => {
                                                 </div>
                                             </div>
 
-                                            {/* Botão de Ação */}
+                                            {/* Botões de Ação */}
                                             <div className="ml-4">
                                                 {pendencia.status === 'ABERTA' ? (
-                                                    <button
-                                                        onClick={() => handleResolverPendencia(pendencia)}
-                                                        className={`px-6 py-3 text-white text-sm font-medium rounded-lg transition-all duration-200 ${
-                                                            isUrgente ? 'bg-red-600 hover:bg-red-700 shadow-lg' :
-                                                            'bg-purple-600 hover:bg-purple-700'
-                                                        }`}
-                                                    >
-                                                        🔧 Resolver Agora
-                                                    </button>
+                                                    <div className="flex flex-col space-y-2">
+                                                        <button
+                                                            onClick={() => onResolverViaApontamento && onResolverViaApontamento(pendencia)}
+                                                            className={`px-4 py-2 text-white text-sm font-medium rounded-lg transition-all duration-200 ${
+                                                                isUrgente ? 'bg-blue-600 hover:bg-blue-700 shadow-lg' :
+                                                                'bg-blue-600 hover:bg-blue-700'
+                                                            }`}
+                                                            title="Resolver criando um apontamento"
+                                                        >
+                                                            📝 Resolver via Apontamento
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleResolverPendencia(pendencia)}
+                                                            className={`px-4 py-2 text-white text-sm font-medium rounded-lg transition-all duration-200 ${
+                                                                isUrgente ? 'bg-purple-600 hover:bg-purple-700 shadow-lg' :
+                                                                'bg-purple-600 hover:bg-purple-700'
+                                                            }`}
+                                                            title="Resolver diretamente (modal)"
+                                                        >
+                                                            🔧 Resolver Diretamente
+                                                        </button>
+                                                    </div>
                                                 ) : (
                                                     <div className="bg-green-100 text-green-800 px-6 py-3 rounded-lg font-medium">
                                                         ✅ Resolvida
@@ -564,12 +581,22 @@ const PendenciasTab: React.FC = () => {
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                     {pendencia.status === 'ABERTA' ? (
-                                                        <button
-                                                            onClick={() => handleResolverPendencia(pendencia)}
-                                                            className="text-purple-600 hover:text-purple-900 font-medium"
-                                                        >
-                                                            🔧 Resolver
-                                                        </button>
+                                                        <div className="flex space-x-2">
+                                                            <button
+                                                                onClick={() => onResolverViaApontamento && onResolverViaApontamento(pendencia)}
+                                                                className="text-blue-600 hover:text-blue-900 font-medium text-xs"
+                                                                title="Resolver via apontamento"
+                                                            >
+                                                                📝 Apontamento
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleResolverPendencia(pendencia)}
+                                                                className="text-purple-600 hover:text-purple-900 font-medium text-xs"
+                                                                title="Resolver diretamente"
+                                                            >
+                                                                🔧 Direto
+                                                            </button>
+                                                        </div>
                                                     ) : (
                                                         <span className="text-green-600">✅ Resolvida</span>
                                                     )}

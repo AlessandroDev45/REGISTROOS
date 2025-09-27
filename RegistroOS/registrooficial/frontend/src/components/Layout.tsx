@@ -1,6 +1,7 @@
-// frontend/src/components/Layout.tsx
+/* frontend/src/components/Layout.tsx */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import Logo from '../logo/assets/logo.png';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api'; // Certifique-se de que o caminho está correto
@@ -147,7 +148,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                     <div className="flex justify-between h-16">
                         <div className="flex flex-col md:flex-row md:items-center md:flex-1">
                             <div className="shrink-0 flex items-center">
-                                <h1 className="text-xl font-bold text-gray-800">RegistroOS</h1>
+                                <img src={Logo} alt="RegistroOS Logo" className="h-8 w-auto" />
                             </div>
                             <div className="hidden md:ml-6 md:flex md:space-x-8 flex-1 justify-center">
                                 {menuRoutes.map(route => {

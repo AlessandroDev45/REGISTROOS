@@ -482,13 +482,31 @@ async def criar_apontamento(
     """
     Endpoint para criar novo apontamento.
     Associa o apontamento ao usuário atual.
-    Campos como setor e departamento são preenchidos como None e atualizados posteriormente.
+    Verifica se existe programação ativa e a finaliza automaticamente.
     """
     try:
         # Buscar OS pelo número
         ordem_servico = db.query(OrdemServico).filter(OrdemServico.os_numero == apontamento.numero_os).first()
         if not ordem_servico:
             raise HTTPException(status_code=404, detail="Ordem de serviço não encontrada")
+
+        # Verificar se existe programação ativa para esta OS e usuário
+        from sqlalchemy import text
+        sql_programacao = text("""
+            SELECT p.id, p.status, p.observacoes
+            FROM programacoes p
+            LEFT JOIN ordens_servico os ON p.id_ordem_servico = os.id
+            WHERE os.os_numero = :os_numero
+            AND p.responsavel_id = :user_id
+            AND p.status IN ('PROGRAMADA', 'EM_ANDAMENTO')
+            ORDER BY p.created_at DESC
+            LIMIT 1
+        """)
+
+        programacao_result = db.execute(sql_programacao, {
+            "os_numero": apontamento.numero_os,
+            "user_id": current_user.id
+        }).fetchone()
 
         # Combinar data e hora para datetime
         data_hora_inicio = datetime.combine(apontamento.data_inicio, datetime.strptime(apontamento.hora_inicio, "%H:%M").time())
@@ -511,17 +529,53 @@ async def criar_apontamento(
             criado_por_email=current_user.email,
             setor=current_user.setor or "MECANICA DIA"
         )
-        
+
         db.add(novo_apontamento)
+        db.flush()  # Para obter o ID do apontamento
+
+        # Se existe programação ativa, finalizá-la
+        programacao_finalizada = False
+        if programacao_result:
+            programacao_id = programacao_result[0]
+
+            # Atualizar programação para FINALIZADA com todos os campos necessários
+            sql_update_prog = text("""
+                UPDATE programacoes
+                SET status = 'FINALIZADA',
+                    updated_at = CURRENT_TIMESTAMP,
+                    observacoes = COALESCE(observacoes, '') || :nova_observacao,
+                    historico = COALESCE(historico, '') || :nova_entrada_historico
+                WHERE id = :programacao_id
+            """)
+
+            timestamp = datetime.now().strftime('%d/%m/%Y %H:%M')
+            nova_observacao = f"\n[FINALIZADA] Programação finalizada automaticamente via apontamento #{novo_apontamento.id} em {timestamp} por {current_user.nome_completo}"
+            nova_entrada_historico = f"\n[FINALIZADA] Status alterado para FINALIZADA por {current_user.nome_completo} em {timestamp} via apontamento #{novo_apontamento.id}"
+
+            db.execute(sql_update_prog, {
+                "programacao_id": programacao_id,
+                "nova_observacao": nova_observacao,
+                "nova_entrada_historico": nova_entrada_historico
+            })
+
+            programacao_finalizada = True
+
         db.commit()
         db.refresh(novo_apontamento)
-        
-        return {
+
+        response_data = {
             "message": "Apontamento criado com sucesso",
             "id": novo_apontamento.id,
             "numero_os": apontamento.numero_os,
             "status_os": novo_apontamento.status_apontamento
         }
+
+        if programacao_finalizada:
+            response_data["programacao_finalizada"] = True
+            response_data["message"] = "Apontamento criado e programação finalizada com sucesso"
+
+        return response_data
+
     except Exception as e:
         db.rollback()
         print(f"Erro ao criar apontamento: {e}")
@@ -558,6 +612,139 @@ async def deletar_minhas_os(
         db.rollback()
         print(f"Erro ao deletar apontamentos: {e}")
         raise HTTPException(status_code=500, detail="Erro ao deletar apontamentos")
+
+@router.patch("/apontamentos/{apontamento_id}/finalizar", operation_id="dev_patch_apontamento_finalizar")
+async def finalizar_apontamento(
+    apontamento_id: int,
+    dados: dict,  # {"data_fim": "2024-01-01", "hora_fim": "17:30", "gerar_pendencia": true, "observacao_pendencia": "..."}
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Finalizar um apontamento específico.
+    Atualiza data_hora_fim, calcula tempo_trabalhado, define status_apontamento="CONCLUIDO".
+    Opcionalmente gera pendência via escolha do usuário (conforme especificação).
+    """
+    try:
+        # Buscar apontamento
+        apontamento = db.query(ApontamentoDetalhado).filter(
+            ApontamentoDetalhado.id == apontamento_id,
+            ApontamentoDetalhado.id_usuario == current_user.id  # Só pode finalizar próprios apontamentos
+        ).first()
+
+        if not apontamento:
+            raise HTTPException(status_code=404, detail="Apontamento não encontrado ou sem permissão")
+
+        if apontamento.status_apontamento == "CONCLUIDO":
+            raise HTTPException(status_code=400, detail="Apontamento já está finalizado")
+
+        # Combinar data e hora fim
+        data_fim = dados.get("data_fim")
+        hora_fim = dados.get("hora_fim")
+
+        if not data_fim or not hora_fim:
+            raise HTTPException(status_code=400, detail="data_fim e hora_fim são obrigatórios")
+
+        try:
+            data_hora_fim = datetime.combine(
+                datetime.strptime(data_fim, "%Y-%m-%d").date(),
+                datetime.strptime(hora_fim, "%H:%M").time()
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Formato de data/hora inválido: {e}")
+
+        # Validar que data_fim >= data_inicio
+        if data_hora_fim < apontamento.data_hora_inicio:
+            raise HTTPException(status_code=400, detail="Data/hora fim não pode ser anterior ao início")
+
+        # Calcular tempo_trabalhado (delta em horas)
+        delta = data_hora_fim - apontamento.data_hora_inicio
+        tempo_trabalhado = round(delta.total_seconds() / 3600, 2)
+
+        # Atualizar apontamento
+        apontamento.data_hora_fim = data_hora_fim
+        apontamento.tempo_trabalhado = tempo_trabalhado
+        apontamento.status_apontamento = "CONCLUIDO"
+
+        # Verificar se existe programação ativa para esta OS e usuário (integração automática)
+        programacao_atualizada = None
+        ordem_servico = db.query(OrdemServico).filter(OrdemServico.id == apontamento.id_os).first()
+        if ordem_servico:
+            programacao_ativa = db.query(Programacao).filter(
+                Programacao.id_ordem_servico == ordem_servico.id,
+                Programacao.responsavel_id == current_user.id,
+                Programacao.status.in_(["PROGRAMADA", "EM_ANDAMENTO"])
+            ).first()
+
+            if programacao_ativa:
+                # Atualizar histórico da programação
+                timestamp = datetime.now().strftime('%d/%m/%Y %H:%M')
+                historico_atual = programacao_ativa.historico or ""
+                novo_historico = f"{historico_atual}\n[ATIVIDADE FINALIZADA] Apontamento ID {apontamento.id} finalizado por {current_user.nome_completo} em {timestamp}"
+
+                programacao_ativa.historico = novo_historico
+                programacao_ativa.status = "EM_ANDAMENTO"  # Manter em andamento até finalização completa
+                programacao_ativa.updated_at = datetime.now()
+
+                programacao_atualizada = {
+                    "id": programacao_ativa.id,
+                    "status": programacao_ativa.status,
+                    "historico_atualizado": True
+                }
+
+        # Opcionalmente gerar pendência (conforme especificação)
+        pendencia_id = None
+        if dados.get("gerar_pendencia", False):
+            observacao_pendencia = dados.get("observacao_pendencia", "Pendência gerada a partir do apontamento")
+
+            # Buscar dados da OS para a pendência
+            ordem_servico = db.query(OrdemServico).filter(OrdemServico.id == apontamento.id_os).first()
+
+            nova_pendencia = Pendencia(
+                numero_os=ordem_servico.os_numero if ordem_servico else "N/A",
+                cliente=ordem_servico.cliente if ordem_servico else "Cliente não informado",
+                tipo_maquina=ordem_servico.tipo_maquina if ordem_servico else "Tipo não informado",
+                descricao_maquina=ordem_servico.descricao_maquina if ordem_servico else "Equipamento não informado",
+                descricao_pendencia=observacao_pendencia,
+                status='ABERTA',
+                data_inicio=datetime.now(),
+                id_responsavel_inicio=current_user.id,
+                id_apontamento_origem=apontamento.id,
+                setor_origem=current_user.setor or "Não informado"
+            )
+
+            db.add(nova_pendencia)
+            db.flush()  # Para obter o ID
+            pendencia_id = nova_pendencia.id
+
+        db.commit()
+
+        resultado = {
+            "message": "Apontamento finalizado com sucesso",
+            "apontamento_id": apontamento_id,
+            "tempo_trabalhado": tempo_trabalhado,
+            "data_hora_fim": data_hora_fim.isoformat(),
+            "status": "CONCLUIDO"
+        }
+
+        if pendencia_id:
+            resultado["pendencia_criada"] = {
+                "id": pendencia_id,
+                "message": "Pendência criada com sucesso"
+            }
+
+        if programacao_atualizada:
+            resultado["programacao_atualizada"] = programacao_atualizada
+
+        return resultado
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"Erro ao finalizar apontamento: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao finalizar apontamento: {str(e)}")
 
 # =============================================================================
 # ENDPOINTS PARA FORMULÁRIO DE APONTAMENTO
@@ -1313,17 +1500,27 @@ async def get_pendencias(
     try:
         query = db.query(Pendencia)
         
-        # DESENVOLVIMENTO: Filtrar APENAS por setor do usuário (não pode ver outros setores)
-        # Filtrar por setor através do apontamento origem
-        apontamento_ids = db.query(ApontamentoDetalhado.id).filter(
-            ApontamentoDetalhado.id_setor == current_user.id_setor
-        ).all()
-        ids_list = [apt_id[0] for apt_id in apontamento_ids]
-        if ids_list:
-            query = query.filter(Pendencia.id_apontamento_origem.in_(ids_list))
-        else:
-            # Se não há apontamentos do setor, não retornar nenhuma pendência
-            query = query.filter(Pendencia.id == -1)
+        # Controle de acesso: setor criador, PCP e GESTÃO têm acesso
+        user_departamento = None
+        if hasattr(current_user, 'departamento'):
+            user_departamento = current_user.departamento
+        elif hasattr(current_user, 'id_setor') and current_user.id_setor:
+            setor_user = db.query(Setor).filter(Setor.id == current_user.id_setor).first()
+            if setor_user:
+                user_departamento = setor_user.departamento
+
+        # PCP e GESTÃO têm acesso a todas as pendências
+        if user_departamento not in ['PCP', 'GESTAO'] and current_user.privilege_level != 'ADMIN':
+            # Usuários normais só veem pendências do seu setor
+            apontamento_ids = db.query(ApontamentoDetalhado.id).filter(
+                ApontamentoDetalhado.id_setor == current_user.id_setor
+            ).all()
+            ids_list = [apt_id[0] for apt_id in apontamento_ids]
+            if ids_list:
+                query = query.filter(Pendencia.id_apontamento_origem.in_(ids_list))
+            else:
+                # Se não há apontamentos do setor, não retornar nenhuma pendência
+                query = query.filter(Pendencia.id == -1)
         
         if status:
             query = query.filter(Pendencia.status == status)
@@ -1384,35 +1581,73 @@ async def resolver_pendencia(
 ):
     """
     Endpoint para resolver uma pendência específica.
-    Atualiza status para FECHADA e adiciona observação de resolução.
+    Atualiza status para FECHADA, calcula tempo_aberto_horas e adiciona observação de resolução.
+    Verifica privilégios: USER/SUPERVISOR só resolvem do seu setor; ADMIN resolve todas.
     """
     try:
         pendencia = db.query(Pendencia).filter(Pendencia.id == pendencia_id).first()
         if not pendencia:
             raise HTTPException(status_code=404, detail="Pendência não encontrada")
-        
-        # Verificar permissões - USER, SUPERVISOR e ADMIN podem resolver pendências
-        if current_user.privilege_level not in ['ADMIN', 'SUPERVISOR', 'USER']:  # type: ignore
+
+        # Verificar se pendência já está fechada
+        if pendencia.status == 'FECHADA':
+            raise HTTPException(status_code=400, detail="Pendência já está fechada")
+
+        # Verificar permissões conforme especificação
+        if current_user.privilege_level not in ['ADMIN', 'SUPERVISOR', 'USER']:
             raise HTTPException(status_code=403, detail="Sem permissão para resolver pendências")
 
-        # USER e SUPERVISOR só podem resolver pendências do seu setor
-        if current_user.privilege_level in ['SUPERVISOR', 'USER'] and pendencia.id_setor != current_user.id_setor:  # type: ignore
-            raise HTTPException(status_code=403, detail="Sem permissão para resolver esta pendência")
-        
-        # Atualizar pendência
-        pendencia.status = 'FECHADA'  # type: ignore
-        pendencia.data_fechamento = datetime.now()  # type: ignore
-        pendencia.responsavel_fechamento_id = current_user.id  # type: ignore
-        pendencia.observacoes_fechamento = dados.observacao_resolucao  # type: ignore
-        pendencia.solucao_aplicada = dados.observacao_resolucao  # type: ignore
-        
+        # Verificar permissões: setor criador, PCP, GESTÃO e ADMIN podem resolver
+        user_departamento = None
+        if hasattr(current_user, 'departamento'):
+            user_departamento = current_user.departamento
+        elif hasattr(current_user, 'id_setor') and current_user.id_setor:
+            setor_user = db.query(Setor).filter(Setor.id == current_user.id_setor).first()
+            if setor_user:
+                user_departamento = setor_user.departamento
+
+        # ADMIN, PCP e GESTÃO podem resolver qualquer pendência
+        if current_user.privilege_level != 'ADMIN' and user_departamento not in ['PCP', 'GESTAO']:
+            # Usuários normais só podem resolver pendências do seu setor
+            user_setor = db.query(Setor).filter(Setor.id == current_user.id_setor).first()
+            if user_setor and pendencia.setor_origem != user_setor.nome:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Sem permissão para resolver pendência de outro setor. Seu setor: {user_setor.nome}, Pendência: {pendencia.setor_origem}"
+                )
+
+        # Calcular tempo_aberto_horas (delta desde data_inicio)
+        tempo_aberto_horas = 0
+        if pendencia.data_inicio:
+            delta = datetime.now() - pendencia.data_inicio
+            tempo_aberto_horas = round(delta.total_seconds() / 3600, 2)  # Converter para horas
+
+        # Atualizar pendência conforme especificação
+        pendencia.status = 'FECHADA'
+        pendencia.data_fechamento = datetime.now()
+        pendencia.responsavel_fechamento_id = current_user.id
+        pendencia.observacoes_fechamento = dados.observacao_resolucao
+        pendencia.tempo_aberto_horas = tempo_aberto_horas
+
+        # Adicionar solucao_aplicada (campo existe no modelo)
+        pendencia.solucao_aplicada = dados.observacao_resolucao
+
         db.commit()
-        
-        return {"message": "Pendência resolvida com sucesso"}
+
+        return {
+            "message": "Pendência resolvida com sucesso",
+            "pendencia_id": pendencia_id,
+            "tempo_aberto_horas": tempo_aberto_horas,
+            "data_fechamento": pendencia.data_fechamento.isoformat(),
+            "responsavel_fechamento": current_user.nome_completo
+        }
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         print(f"Erro ao resolver pendência: {e}")
-        raise HTTPException(status_code=500, detail="Erro ao resolver pendência")
+        raise HTTPException(status_code=500, detail=f"Erro ao resolver pendência: {str(e)}")
 
 # =============================================================================
 # ENDPOINTS DE PROGRAMAÇÃO

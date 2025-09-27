@@ -4,20 +4,33 @@ import api from '../../services/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 
 const DashboardPage: React.FC = () => {
-    const [dashboardData, setDashboardData] = useState({
-        geral: {
-            totalApontamentos: 0,
-            totalHoras: 0,
-            horasExtras: 0,
-            retrabalhos: 0,
-            osUnicas: 0
-        },
-        departamentos: [],
-        setores: [],
-        performanceDepartamentos: [],
-        topSetores: [],
-        apontamentosRecentes: []
-    });
+const [dashboardData, setDashboardData] = useState<any>({
+    geral: {
+        totalApontamentos: 0,
+        totalHoras: 0,
+        horasExtras: 0,
+        retrabalhos: 0,
+        osUnicas: 0
+    },
+    departamentos: [] as any[],
+    setores: [] as any[],
+    programacoes: {
+        total: 0,
+        enviadas: 0,
+        emAndamento: 0,
+        concluidas: 0,
+        recentes: [] as any[]
+    },
+    pendencias: {
+        total: 0,
+        abertas: 0,
+        fechadas: 0,
+        recentes: [] as any[]
+    },
+    performanceDepartamentos: [] as any[],
+    topSetores: [] as any[],
+    apontamentosRecentes: [] as any[]
+});
 
     const [filtros, setFiltros] = useState({
         departamentoSelecionado: '',
@@ -26,37 +39,78 @@ const DashboardPage: React.FC = () => {
     });
 
     const [loading, setLoading] = useState(true);
-    const [setoresDisponiveis, setSetoresDisponiveis] = useState([]);
-    const [departamentosDisponiveis, setDepartamentosDisponiveis] = useState([]);
+    const [error, setError] = useState<string | null>(null);
+    const [setoresDisponiveis, setSetoresDisponiveis] = useState<any[]>([]);
+    const [departamentosDisponiveis, setDepartamentosDisponiveis] = useState<any[]>([]);
+    const [dadosOriginais, setDadosOriginais] = useState<any>({
+        apontamentos: [],
+        programacoes: [],
+        pendencias: []
+    });
 
     useEffect(() => {
         const fetchDashboardData = async () => {
             try {
                 setLoading(true);
-                console.log('🔍 Buscando dados escaláveis do dashboard...');
+                console.log('🔍 Buscando dados do dashboard...');
 
-                // Buscar apontamentos detalhados
+                // Buscar dados de forma sequencial para melhor debugging
+                console.log('📊 Buscando apontamentos...');
                 const apontamentosResponse = await api.get('/apontamentos-detalhados');
-                const apontamentos = Array.isArray(apontamentosResponse.data) ? apontamentosResponse.data : [];
-                console.log('📊 Total de apontamentos:', apontamentos.length);
+                console.log('✅ Apontamentos:', apontamentosResponse.data?.length || 0);
 
-                // Buscar departamentos e setores disponíveis
-                const [departamentosResponse, setoresResponse] = await Promise.all([
-                    api.get('/departamentos'),
-                    api.get('/setores')
-                ]);
+                console.log('📅 Buscando programações...');
+                const programacoesResponse = await api.get('/pcp/programacoes');
+                console.log('✅ Programações:', programacoesResponse.data?.length || 0);
+
+                console.log('📋 Buscando pendências...');
+                const pendenciasResponse = await api.get('/pcp/pendencias');
+                console.log('✅ Pendências:', pendenciasResponse.data?.length || 0);
+
+                console.log('🏢 Buscando departamentos...');
+                const departamentosResponse = await api.get('/departamentos');
+                console.log('✅ Departamentos:', departamentosResponse.data?.length || 0);
+
+                console.log('🏭 Buscando setores...');
+                const setoresResponse = await api.get('/setores');
+                console.log('✅ Setores:', setoresResponse.data?.length || 0);
+
+                const apontamentos = Array.isArray(apontamentosResponse.data) ? apontamentosResponse.data : [];
+                const programacoes = Array.isArray(programacoesResponse.data) ? programacoesResponse.data : [];
+                const pendencias = Array.isArray(pendenciasResponse.data) ? pendenciasResponse.data : [];
+
+                console.log('📊 Total de apontamentos:', apontamentos.length);
+                console.log('📅 Total de programações:', programacoes.length);
+                console.log('⚠️ Total de pendências:', pendencias.length);
 
                 const departamentos = Array.isArray(departamentosResponse.data) ? departamentosResponse.data : [];
                 const setores = Array.isArray(setoresResponse.data) ? setoresResponse.data : [];
 
+                console.log('🏢 Departamentos brutos:', departamentos);
+                console.log('🏭 Setores brutos:', setores);
+
                 setDepartamentosDisponiveis(departamentos);
                 setSetoresDisponiveis(setores);
+
+                // Armazenar dados originais para reprocessamento com filtros
+                setDadosOriginais({
+                    apontamentos,
+                    programacoes,
+                    pendencias
+                });
 
                 console.log('🏢 Departamentos encontrados:', departamentos.length);
                 console.log('🏭 Setores encontrados:', setores.length);
 
+                // Log dos primeiros apontamentos para verificar estrutura
+                if (apontamentos.length > 0) {
+                    console.log('📊 Estrutura do primeiro apontamento:', apontamentos[0]);
+                    console.log('📊 Departamentos únicos nos apontamentos:', [...new Set(apontamentos.map((a: any) => a.departamento))]);
+                    console.log('📊 Setores únicos nos apontamentos:', [...new Set(apontamentos.map((a: any) => a.setor))]);
+                }
+
                 // Função para processar dados de forma escalável
-                const processarDadosEscalaveis = (apontamentos: any[]) => {
+                const processarDadosEscalaveis = (apontamentos: any[], programacoes: any[], pendencias: any[]) => {
                     console.log('🔄 Processando dados de forma escalável...');
 
                     // 1. MÉTRICAS GERAIS
@@ -70,6 +124,17 @@ const DashboardPage: React.FC = () => {
                     ).length;
                     const osUnicas = new Set(apontamentos.map(a => a.numero_os)).size;
 
+                    // 1.1. MÉTRICAS DE PROGRAMAÇÕES
+                    const totalProgramacoes = programacoes.length;
+                    const programacoesEnviadas = programacoes.filter(p => p.status === 'ENVIADA').length;
+                    const programacoesEmAndamento = programacoes.filter(p => p.status === 'EM_ANDAMENTO').length;
+                    const programacoesConcluidas = programacoes.filter(p => p.status === 'CONCLUIDA').length;
+
+                    // 1.2. MÉTRICAS DE PENDÊNCIAS
+                    const totalPendencias = pendencias.length;
+                    const pendenciasAbertas = pendencias.filter(p => p.status === 'ABERTA').length;
+                    const pendenciasFechadas = pendencias.filter(p => p.status === 'FECHADA').length;
+
                     // 2. AGRUPAMENTO POR DEPARTAMENTO
                     const apontamentosPorDepartamento = apontamentos.reduce((acc, a) => {
                         const dept = a.departamento || 'SEM_DEPARTAMENTO';
@@ -78,12 +143,13 @@ const DashboardPage: React.FC = () => {
                         return acc;
                     }, {});
 
-                    const departamentosData = Object.entries(apontamentosPorDepartamento).map(([nome, apts]: [string, any[]]) => {
-                        const horasDept = apts.reduce((total, a) => total + parseFloat(a.tempo_trabalhado || 0), 0);
-                        const horasExtrasDept = apts.filter(a => a.horas_extras && a.horas_extras > 0)
+                    const departamentosData = Object.entries(apontamentosPorDepartamento).map(([nome, apts]) => {
+                        const aptsArray = apts as any[];
+                        const horasDept = aptsArray.reduce((total, a) => total + parseFloat(a.tempo_trabalhado || 0), 0);
+                        const horasExtrasDept = aptsArray.filter(a => a.horas_extras && a.horas_extras > 0)
                             .reduce((total, a) => total + parseFloat(a.horas_extras || 0), 0);
-                        const retrabalhosDept = apts.filter(a => a.foi_retrabalho === true).length;
-                        const osUnicasDept = new Set(apts.map(a => a.numero_os)).size;
+                        const retrabalhosDept = aptsArray.filter(a => a.foi_retrabalho === true).length;
+                        const osUnicasDept = new Set(aptsArray.map(a => a.numero_os)).size;
 
                         return {
                             nome,
@@ -91,7 +157,7 @@ const DashboardPage: React.FC = () => {
                             horasExtras: Math.round(horasExtrasDept),
                             retrabalhos: retrabalhosDept,
                             osUnicas: osUnicasDept,
-                            apontamentos: apts.length,
+                            apontamentos: aptsArray.length,
                             percentualHoras: totalHoras > 0 ? Math.round((horasDept / totalHoras) * 100) : 0
                         };
                     }).sort((a, b) => b.totalHoras - a.totalHoras);
@@ -104,16 +170,17 @@ const DashboardPage: React.FC = () => {
                         return acc;
                     }, {});
 
-                    const setoresData = Object.entries(apontamentosPorSetor).map(([nome, apts]: [string, any[]]) => {
-                        const horasSetor = apts.reduce((total, a) => total + parseFloat(a.tempo_trabalhado || 0), 0);
-                        const departamento = apts[0]?.departamento || 'SEM_DEPARTAMENTO';
+                    const setoresData = Object.entries(apontamentosPorSetor).map(([nome, apts]) => {
+                        const aptsArray = apts as any[];
+                        const horasSetor = aptsArray.reduce((total: number, a: any) => total + parseFloat(a.tempo_trabalhado || 0), 0);
+                        const departamento = aptsArray[0]?.departamento || 'SEM_DEPARTAMENTO';
 
                         return {
                             nome,
                             departamento,
                             totalHoras: Math.round(horasSetor),
-                            apontamentos: apts.length,
-                            osUnicas: new Set(apts.map(a => a.numero_os)).size,
+                            apontamentos: aptsArray.length,
+                            osUnicas: new Set(aptsArray.map((a: any) => a.numero_os)).size,
                             percentualHoras: totalHoras > 0 ? Math.round((horasSetor / totalHoras) * 100) : 0
                         };
                     }).sort((a, b) => b.totalHoras - a.totalHoras).slice(0, 10); // TOP 10 setores
@@ -125,6 +192,31 @@ const DashboardPage: React.FC = () => {
                             horasExtras: Math.round(horasExtras),
                             retrabalhos,
                             osUnicas
+                        },
+                        programacoes: {
+                            total: totalProgramacoes,
+                            enviadas: programacoesEnviadas,
+                            emAndamento: programacoesEmAndamento,
+                            concluidas: programacoesConcluidas,
+                            recentes: programacoes.slice(0, 5).map(p => ({
+                                id: p.id,
+                                os_numero: p.os_numero || 'N/A',
+                                status: p.status || 'N/A',
+                                responsavel: p.responsavel_nome || 'N/A',
+                                setor: p.setor_nome || 'N/A'
+                            }))
+                        },
+                        pendencias: {
+                            total: totalPendencias,
+                            abertas: pendenciasAbertas,
+                            fechadas: pendenciasFechadas,
+                            recentes: pendencias.slice(0, 5).map(p => ({
+                                id: p.id,
+                                descricao: p.descricao || 'N/A',
+                                status: p.status || 'ABERTA',
+                                numero_os: p.numero_os || 'N/A',
+                                responsavel: p.responsavel_nome || 'N/A'
+                            }))
                         },
                         departamentos: departamentosData,
                         topSetores: setoresData,
@@ -199,7 +291,7 @@ const DashboardPage: React.FC = () => {
                 const apontamentosFiltrados = aplicarFiltros(apontamentos);
 
                 // Processar dados de forma escalável
-                const dadosProcessados = processarDadosEscalaveis(apontamentosFiltrados);
+                const dadosProcessados = processarDadosEscalaveis(apontamentosFiltrados, programacoes, pendencias);
 
                 // Gerar performance por departamento
                 const performanceDepartamentos = gerarPerformanceDepartamentos(apontamentosFiltrados, dadosProcessados.departamentos);
@@ -216,8 +308,22 @@ const DashboardPage: React.FC = () => {
                     performanceDepartamentos
                 });
 
-            } catch (error) {
-                console.error('Erro ao carregar dados do dashboard:', error);
+            } catch (err: any) {
+                console.error('❌ Erro ao carregar dados do dashboard:', err);
+
+                // Log detalhado do erro
+                if (err?.response) {
+                    console.error('📄 Status:', err.response.status);
+                    console.error('📄 Data:', err.response.data);
+                    setError(`Erro ${err.response.status}: ${err.response.data?.detail || 'Erro no servidor'}`);
+                } else if (err?.request) {
+                    console.error('📡 Erro de rede:', err.request);
+                    setError('Erro de conexão com o servidor');
+                } else {
+                    console.error('⚠️ Erro:', err?.message);
+                    setError(err?.message || 'Erro desconhecido');
+                }
+
                 // Manter dados padrão em caso de erro
                 setDashboardData({
                     geral: {
@@ -227,6 +333,19 @@ const DashboardPage: React.FC = () => {
                         retrabalhos: 0,
                         osUnicas: 0
                     },
+                    programacoes: {
+                        total: 0,
+                        enviadas: 0,
+                        emAndamento: 0,
+                        concluidas: 0,
+                        recentes: []
+                    },
+                    pendencias: {
+                        total: 0,
+                        abertas: 0,
+                        fechadas: 0,
+                        recentes: []
+                    },
                     departamentos: [],
                     setores: [],
                     performanceDepartamentos: [],
@@ -235,67 +354,170 @@ const DashboardPage: React.FC = () => {
                 });
             } finally {
                 setLoading(false);
+                console.log('🏁 Carregamento do dashboard finalizado');
             }
         };
 
         fetchDashboardData();
-    }, [filtros]); // Recarregar quando filtros mudarem
+    }, []); // Carregar dados apenas uma vez
 
-    // Componente de gráfico de linha descendente
-    const ChartComponent: React.FC<{ title: string, data: any[] }> = ({ title, data }) => {
-        // Transformar dados para formato do gráfico de linha
-        const chartData = [
-            { mes: 'Jan', ...data.reduce((acc, item) => ({ ...acc, [item.setor]: item.janeiro }), {}) },
-            { mes: 'Fev', ...data.reduce((acc, item) => ({ ...acc, [item.setor]: item.fevereiro }), {}) },
-            { mes: 'Mar', ...data.reduce((acc, item) => ({ ...acc, [item.setor]: item.marco }), {}) },
-            { mes: 'Abr', ...data.reduce((acc, item) => ({ ...acc, [item.setor]: item.abril }), {}) },
-            { mes: 'Mai', ...data.reduce((acc, item) => ({ ...acc, [item.setor]: item.maio }), {}) },
-            { mes: 'Jun', ...data.reduce((acc, item) => ({ ...acc, [item.setor]: item.junho }), {}) }
-        ];
+    // useEffect separado para reprocessar dados quando filtros mudarem
+    useEffect(() => {
+        console.log('🔄 useEffect de filtros executado!');
+        console.log('📊 Dados originais disponíveis:', dadosOriginais.apontamentos.length);
+        console.log('🔍 Filtros atuais:', filtros);
 
-        const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
+        if (dadosOriginais.apontamentos.length > 0) {
+            console.log('🔄 Reprocessando dados com novos filtros...');
 
-        return (
-            <div className="bg-white p-4 rounded-lg shadow">
-                <h3 className="text-lg font-semibold mb-4">{title}</h3>
-                <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="mes" />
-                            <YAxis />
-                            <Tooltip />
-                            <Legend />
-                            {data.map((item, index) => (
-                                <Line
-                                    key={item.setor}
-                                    type="monotone"
-                                    dataKey={item.setor}
-                                    stroke={colors[index % colors.length]}
-                                    strokeWidth={2}
-                                    dot={{ r: 4 }}
-                                />
-                            ))}
-                        </LineChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
-        );
-    };
+            // Função para aplicar filtros
+            const aplicarFiltros = (apontamentos: any[]) => {
+                let apontamentosFiltrados = [...apontamentos];
 
-    // Componente de filtros
+                console.log('📊 Apontamentos antes do filtro:', apontamentosFiltrados.length);
+
+                if (filtros.departamentoSelecionado) {
+                    console.log('🏢 Filtrando por departamento:', filtros.departamentoSelecionado);
+                    apontamentosFiltrados = apontamentosFiltrados.filter(a => {
+                        console.log('Comparando:', a.departamento, '===', filtros.departamentoSelecionado);
+                        return a.departamento === filtros.departamentoSelecionado;
+                    });
+                    console.log('📊 Após filtro departamento:', apontamentosFiltrados.length);
+                }
+
+                if (filtros.setorSelecionado) {
+                    console.log('🏭 Filtrando por setor:', filtros.setorSelecionado);
+                    apontamentosFiltrados = apontamentosFiltrados.filter(a => {
+                        console.log('Comparando:', a.setor, '===', filtros.setorSelecionado);
+                        return a.setor === filtros.setorSelecionado;
+                    });
+                    console.log('📊 Após filtro setor:', apontamentosFiltrados.length);
+                }
+
+                console.log('📊 Apontamentos após todos os filtros:', apontamentosFiltrados.length);
+                return apontamentosFiltrados;
+            };
+
+            // Aplicar filtros aos dados originais
+            const apontamentosFiltrados = aplicarFiltros(dadosOriginais.apontamentos);
+
+            console.log('🔍 Filtros aplicados:', filtros);
+            console.log('📊 Apontamentos antes do filtro:', dadosOriginais.apontamentos.length);
+            console.log('📊 Apontamentos após filtro:', apontamentosFiltrados.length);
+
+            // Reprocessar dados com filtros aplicados
+            const processarDadosEscalaveis = (apontamentos: any[], programacoes: any[], pendencias: any[]) => {
+                console.log('🔄 Processando dados de forma escalável...');
+
+                // Calcular totais gerais
+                const totalHoras = apontamentos.reduce((total: number, a: any) => total + parseFloat(a.tempo_trabalhado || 0), 0);
+                const horasExtras = apontamentos.filter((a: any) => a.horas_extras && a.horas_extras > 0)
+                    .reduce((total: number, a: any) => total + parseFloat(a.horas_extras || 0), 0);
+                const retrabalhos = apontamentos.filter((a: any) => a.foi_retrabalho === true).length;
+                const osUnicas = new Set(apontamentos.map((a: any) => a.numero_os)).size;
+
+                // Agrupar por departamento
+                const apontamentosPorDepartamento = apontamentos.reduce((acc: any, a: any) => {
+                    const dept = a.departamento || 'SEM_DEPARTAMENTO';
+                    if (!acc[dept]) acc[dept] = [];
+                    acc[dept].push(a);
+                    return acc;
+                }, {});
+
+                const departamentosData = Object.entries(apontamentosPorDepartamento).map(([nome, apts]) => {
+                    const aptsArray = apts as any[];
+                    const horasDept = aptsArray.reduce((total: number, a: any) => total + parseFloat(a.tempo_trabalhado || 0), 0);
+                    const horasExtrasDept = aptsArray.filter((a: any) => a.horas_extras && a.horas_extras > 0)
+                        .reduce((total: number, a: any) => total + parseFloat(a.horas_extras || 0), 0);
+                    const retrabalhosDept = aptsArray.filter((a: any) => a.foi_retrabalho === true).length;
+                    const osUnicasDept = new Set(aptsArray.map((a: any) => a.numero_os)).size;
+
+                    return {
+                        nome,
+                        totalHoras: Math.round(horasDept),
+                        horasExtras: Math.round(horasExtrasDept),
+                        retrabalhos: retrabalhosDept,
+                        osUnicas: osUnicasDept,
+                        apontamentos: aptsArray.length,
+                        percentualHoras: totalHoras > 0 ? Math.round((horasDept / totalHoras) * 100) : 0
+                    };
+                }).sort((a, b) => b.totalHoras - a.totalHoras);
+
+                // Agrupar por setor
+                const apontamentosPorSetor = apontamentos.reduce((acc: any, a: any) => {
+                    const setor = a.setor || 'SEM_SETOR';
+                    if (!acc[setor]) acc[setor] = [];
+                    acc[setor].push(a);
+                    return acc;
+                }, {});
+
+                const setoresData = Object.entries(apontamentosPorSetor).map(([nome, apts]) => {
+                    const aptsArray = apts as any[];
+                    const horasSetor = aptsArray.reduce((total: number, a: any) => total + parseFloat(a.tempo_trabalhado || 0), 0);
+                    const departamento = aptsArray[0]?.departamento || 'SEM_DEPARTAMENTO';
+
+                    return {
+                        nome,
+                        departamento,
+                        totalHoras: Math.round(horasSetor),
+                        apontamentos: aptsArray.length,
+                        osUnicas: new Set(aptsArray.map((a: any) => a.numero_os)).size,
+                        percentualHoras: totalHoras > 0 ? Math.round((horasSetor / totalHoras) * 100) : 0
+                    };
+                }).sort((a, b) => b.totalHoras - a.totalHoras).slice(0, 10); // TOP 10 setores
+
+                return {
+                    geral: {
+                        totalApontamentos: apontamentos.length,
+                        totalHoras: Math.round(totalHoras),
+                        horasExtras: Math.round(horasExtras),
+                        retrabalhos,
+                        osUnicas
+                    },
+                    departamentos: departamentosData,
+                    topSetores: setoresData,
+                    apontamentosRecentes: apontamentos.slice(-3).reverse(),
+                    programacoes: {
+                        total: programacoes.length,
+                        enviadas: programacoes.filter((p: any) => p.status === 'ENVIADA').length,
+                        emAndamento: programacoes.filter((p: any) => p.status === 'EM_ANDAMENTO').length,
+                        concluidas: programacoes.filter((p: any) => p.status === 'CONCLUIDA').length,
+                        recentes: programacoes.slice(-3).reverse()
+                    },
+                    pendencias: {
+                        total: pendencias.length,
+                        abertas: pendencias.filter((p: any) => p.status === 'ABERTA').length,
+                        fechadas: pendencias.filter((p: any) => p.status === 'FECHADA').length,
+                        recentes: pendencias.slice(-3).reverse()
+                    }
+                };
+            };
+
+            const dadosProcessados = processarDadosEscalaveis(apontamentosFiltrados, dadosOriginais.programacoes, dadosOriginais.pendencias);
+
+            // Atualizar estado com dados filtrados
+            setDashboardData({
+                ...dadosProcessados,
+                performanceDepartamentos: dadosProcessados.departamentos
+            });
+        }
+    }, [filtros, dadosOriginais]); // Reprocessar quando filtros ou dados originais mudarem
+
+
+
+    // Componente de filtros - ULTRA COMPACTO
     const FiltrosComponent: React.FC = () => (
-        <div className="bg-white p-4 rounded-lg shadow mb-6">
-            <h3 className="text-lg font-semibold mb-4">Filtros</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Departamento</label>
+        <div className="bg-white p-3 rounded-lg shadow-sm border">
+            <div className="flex items-center space-x-4">
+                <h3 className="text-sm font-semibold text-gray-800">Filtros:</h3>
+                <div className="flex items-center space-x-2">
+                    <label className="text-xs font-medium text-gray-600">Departamento:</label>
                     <select
                         value={filtros.departamentoSelecionado}
                         onChange={(e) => setFiltros(prev => ({ ...prev, departamentoSelecionado: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
-                        <option value="">Todos os Departamentos</option>
+                        <option value="">Todos</option>
                         {departamentosDisponiveis.map((dept: any) => (
                             <option key={dept.id} value={dept.nome_tipo || dept.nome}>
                                 {dept.nome_tipo || dept.nome}
@@ -303,14 +525,14 @@ const DashboardPage: React.FC = () => {
                         ))}
                     </select>
                 </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Setor</label>
+                <div className="flex items-center space-x-2">
+                    <label className="text-xs font-medium text-gray-600">Setor:</label>
                     <select
                         value={filtros.setorSelecionado}
                         onChange={(e) => setFiltros(prev => ({ ...prev, setorSelecionado: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
-                        <option value="">Todos os Setores</option>
+                        <option value="">Todos</option>
                         {setoresDisponiveis
                             .filter((setor: any) => !filtros.departamentoSelecionado || setor.departamento === filtros.departamentoSelecionado)
                             .map((setor: any) => (
@@ -320,124 +542,178 @@ const DashboardPage: React.FC = () => {
                             ))}
                     </select>
                 </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Período</label>
+                <div className="flex items-center space-x-2">
+                    <label className="text-xs font-medium text-gray-600">Período:</label>
                     <select
                         value={filtros.periodo}
                         onChange={(e) => setFiltros(prev => ({ ...prev, periodo: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
-                        <option value="6meses">Últimos 6 meses</option>
-                        <option value="3meses">Últimos 3 meses</option>
-                        <option value="1mes">Último mês</option>
+                        <option value="6meses">6 meses</option>
+                        <option value="3meses">3 meses</option>
+                        <option value="1mes">1 mês</option>
                     </select>
                 </div>
             </div>
         </div>
     );
 
-    // Componente de métricas gerais
+    // Componente de métricas gerais - ULTRA COMPACTO
     const MetricasGeraisComponent: React.FC = () => (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-            <div className="bg-white p-4 rounded-lg shadow text-center">
-                <p className="text-sm text-gray-600">Total Apontamentos</p>
-                <p className="text-2xl font-bold text-blue-600">
+        <div className="grid grid-cols-5 gap-3">
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-3 rounded-lg border border-blue-200 text-center">
+                <p className="text-xs text-blue-700 font-medium">Apontamentos</p>
+                <p className="text-xl font-bold text-blue-900">
                     {loading ? '...' : dashboardData.geral.totalApontamentos.toLocaleString()}
                 </p>
             </div>
-            <div className="bg-white p-4 rounded-lg shadow text-center">
-                <p className="text-sm text-gray-600">Total Horas</p>
-                <p className="text-2xl font-bold text-green-600">
+            <div className="bg-gradient-to-br from-green-50 to-green-100 p-3 rounded-lg border border-green-200 text-center">
+                <p className="text-xs text-green-700 font-medium">Horas</p>
+                <p className="text-xl font-bold text-green-900">
                     {loading ? '...' : `${dashboardData.geral.totalHoras.toLocaleString()}h`}
                 </p>
             </div>
-            <div className="bg-white p-4 rounded-lg shadow text-center">
-                <p className="text-sm text-gray-600">Horas Extras</p>
-                <p className="text-2xl font-bold text-yellow-600">
+            <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-3 rounded-lg border border-yellow-200 text-center">
+                <p className="text-xs text-yellow-700 font-medium">H. Extras</p>
+                <p className="text-xl font-bold text-yellow-900">
                     {loading ? '...' : `${dashboardData.geral.horasExtras.toLocaleString()}h`}
                 </p>
             </div>
-            <div className="bg-white p-4 rounded-lg shadow text-center">
-                <p className="text-sm text-gray-600">Retrabalhos</p>
-                <p className="text-2xl font-bold text-red-600">
+            <div className="bg-gradient-to-br from-red-50 to-red-100 p-3 rounded-lg border border-red-200 text-center">
+                <p className="text-xs text-red-700 font-medium">Retrabalhos</p>
+                <p className="text-xl font-bold text-red-900">
                     {loading ? '...' : dashboardData.geral.retrabalhos.toLocaleString()}
                 </p>
             </div>
-            <div className="bg-white p-4 rounded-lg shadow text-center">
-                <p className="text-sm text-gray-600">OS Únicas</p>
-                <p className="text-2xl font-bold text-purple-600">
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-3 rounded-lg border border-purple-200 text-center">
+                <p className="text-xs text-purple-700 font-medium">OS Únicas</p>
+                <p className="text-xl font-bold text-purple-900">
                     {loading ? '...' : dashboardData.geral.osUnicas.toLocaleString()}
                 </p>
             </div>
         </div>
     );
 
-    const TableComponent: React.FC<{ title: string, columns: string[], data: any[] }> = ({ title, columns, data }) => (
-        <div className="bg-white p-4 rounded-lg shadow overflow-hidden">
-            <h3 className="text-lg font-semibold mb-4">{title}</h3>
-            <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            {columns.map((col, index) => (
-                                <th key={index} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    {col}
-                                </th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {data.length > 0 ? data.map((row, rowIndex) => (
-                            <tr key={rowIndex}>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {row.numero_os || 'N/A'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {row.cliente || 'Cliente não informado'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {row.status || 'TESTE'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {row.prioridade || 'MEDIA'}
-                                </td>
-                            </tr>
-                        )) : (
-                            <tr>
-                                <td colSpan={4} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
-                                    Nenhuma OS encontrada
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
+    // Componente de métricas de programações - COMPACTO
+    const ProgramacoesComponent: React.FC = () => (
+        <div className="bg-white p-3 rounded shadow">
+            <h3 className="text-sm font-semibold mb-2 flex items-center">
+                📅 Programações
+            </h3>
+            <div className="grid grid-cols-4 gap-2 mb-2">
+                <div className="text-center">
+                    <p className="text-xs text-gray-600">Total</p>
+                    <p className="text-sm font-bold text-blue-600">
+                        {loading ? '...' : dashboardData.programacoes?.total || 0}
+                    </p>
+                </div>
+                <div className="text-center">
+                    <p className="text-xs text-gray-600">Enviadas</p>
+                    <p className="text-sm font-bold text-yellow-600">
+                        {loading ? '...' : dashboardData.programacoes?.enviadas || 0}
+                    </p>
+                </div>
+                <div className="text-center">
+                    <p className="text-xs text-gray-600">Andamento</p>
+                    <p className="text-sm font-bold text-orange-600">
+                        {loading ? '...' : dashboardData.programacoes?.emAndamento || 0}
+                    </p>
+                </div>
+                <div className="text-center">
+                    <p className="text-xs text-gray-600">Concluídas</p>
+                    <p className="text-sm font-bold text-green-600">
+                        {loading ? '...' : dashboardData.programacoes?.concluidas || 0}
+                    </p>
+                </div>
             </div>
+            {dashboardData.programacoes?.recentes && dashboardData.programacoes.recentes.length > 0 && (
+                <div className="max-h-16 overflow-y-auto">
+                    {dashboardData.programacoes.recentes.slice(0, 2).map((prog: any, index: number) => (
+                        <div key={index} className="text-xs bg-gray-50 p-1 rounded mb-1">
+                            <span className="font-medium">OS {prog.os_numero}</span> -
+                            <span className={`ml-1 px-1 rounded text-xs ${
+                                prog.status === 'CONCLUIDA' ? 'bg-green-100 text-green-800' :
+                                prog.status === 'EM_ANDAMENTO' ? 'bg-orange-100 text-orange-800' :
+                                'bg-yellow-100 text-yellow-800'
+                            }`}>
+                                {prog.status}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
+
+    // Componente de métricas de pendências - COMPACTO
+    const PendenciasComponent: React.FC = () => (
+        <div className="bg-white p-3 rounded shadow">
+            <h3 className="text-sm font-semibold mb-2 flex items-center">
+                ⚠️ Pendências
+            </h3>
+            <div className="grid grid-cols-3 gap-2 mb-2">
+                <div className="text-center">
+                    <p className="text-xs text-gray-600">Total</p>
+                    <p className="text-sm font-bold text-blue-600">
+                        {loading ? '...' : dashboardData.pendencias?.total || 0}
+                    </p>
+                </div>
+                <div className="text-center">
+                    <p className="text-xs text-gray-600">Abertas</p>
+                    <p className="text-sm font-bold text-red-600">
+                        {loading ? '...' : dashboardData.pendencias?.abertas || 0}
+                    </p>
+                </div>
+                <div className="text-center">
+                    <p className="text-xs text-gray-600">Fechadas</p>
+                    <p className="text-sm font-bold text-green-600">
+                        {loading ? '...' : dashboardData.pendencias?.fechadas || 0}
+                    </p>
+                </div>
+            </div>
+            {dashboardData.pendencias?.recentes && dashboardData.pendencias.recentes.length > 0 && (
+                <div className="max-h-16 overflow-y-auto">
+                    {dashboardData.pendencias.recentes.slice(0, 2).map((pend: any, index: number) => (
+                        <div key={index} className="text-xs bg-gray-50 p-1 rounded mb-1">
+                            <span className="font-medium">OS {pend.numero_os}</span> -
+                            <span className={`ml-1 px-1 rounded text-xs ${
+                                pend.status === 'FECHADA' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                                {pend.status}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+
+
 
     // Componente de gráfico de performance por departamento
     const PerformanceDepartamentosComponent: React.FC = () => {
         const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
         return (
-            <div className="bg-white p-4 rounded-lg shadow">
-                <h3 className="text-lg font-semibold mb-4">Performance por Departamento (Últimos 6 Meses)</h3>
-                <div className="h-80">
+            <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-800 mb-3">Performance Departamentos (6m)</h3>
+                <div className="h-32">
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={dashboardData.performanceDepartamentos}>
                             <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="mes" />
-                            <YAxis />
+                            <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                            <YAxis tick={{ fontSize: 10 }} />
                             <Tooltip formatter={(value, name) => [`${value}h`, name]} />
-                            <Legend />
-                            {dashboardData.departamentos.map((dept, index) => (
+                            <Legend wrapperStyle={{ fontSize: 9 }} />
+                            {(dashboardData.departamentos || []).slice(0, 3).map((dept: any, index: number) => (
                                 <Line
-                                    key={dept.nome}
+                                    key={dept.nome || `dept-${index}`}
                                     type="monotone"
                                     dataKey={dept.nome}
                                     stroke={colors[index % colors.length]}
-                                    strokeWidth={3}
-                                    dot={{ r: 5 }}
+                                    strokeWidth={2}
+                                    dot={{ r: 3 }}
+                                    activeDot={{ r: 6 }}
                                 />
                             ))}
                         </LineChart>
@@ -452,21 +728,21 @@ const DashboardPage: React.FC = () => {
         const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
 
         return (
-            <div className="bg-white p-4 rounded-lg shadow">
-                <h3 className="text-lg font-semibold mb-4">Distribuição de Horas por Departamento</h3>
-                <div className="h-80">
+            <div className="bg-white p-3 rounded shadow">
+                <h3 className="text-sm font-semibold mb-2">Distribuição Horas</h3>
+                <div className="h-32">
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                             <Pie
-                                data={dashboardData.departamentos}
+                                data={(dashboardData.departamentos || []).slice(0, 4)}
                                 dataKey="totalHoras"
                                 nameKey="nome"
                                 cx="50%"
                                 cy="50%"
-                                outerRadius={100}
-                                label={({ nome, percentualHoras }) => `${nome}: ${percentualHoras}%`}
+                                outerRadius={50}
+                                label={({ percentualHoras }: any) => `${percentualHoras || 0}%`}
                             >
-                                {dashboardData.departamentos.map((entry, index) => (
+                                {(dashboardData.departamentos || []).slice(0, 4).map((_: any, index: number) => (
                                     <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
                                 ))}
                             </Pie>
@@ -478,16 +754,16 @@ const DashboardPage: React.FC = () => {
         );
     };
 
-    // Componente de top setores
+    // Componente de top setores - COMPACTO
     const TopSetoresComponent: React.FC = () => (
-        <div className="bg-white p-4 rounded-lg shadow">
-            <h3 className="text-lg font-semibold mb-4">Top 10 Setores por Horas Trabalhadas</h3>
-            <div className="h-80">
+        <div className="bg-white p-3 rounded shadow">
+            <h3 className="text-sm font-semibold mb-2">Top 5 Setores</h3>
+            <div className="h-32">
                 <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={dashboardData.topSetores} layout="horizontal">
+                    <BarChart data={dashboardData.topSetores.slice(0, 5)} layout="horizontal">
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis type="number" />
-                        <YAxis dataKey="nome" type="category" width={120} />
+                        <XAxis type="number" tick={{ fontSize: 10 }} />
+                        <YAxis dataKey="nome" type="category" width={80} tick={{ fontSize: 10 }} />
                         <Tooltip formatter={(value) => [`${value}h`, 'Horas']} />
                         <Bar dataKey="totalHoras" fill="#3B82F6" />
                     </BarChart>
@@ -496,105 +772,213 @@ const DashboardPage: React.FC = () => {
         </div>
     );
 
+    if (loading) {
+        return (
+            <Layout>
+                <div className="flex items-center justify-center h-64">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                        <p className="mt-4 text-gray-600">Carregando dashboard...</p>
+                    </div>
+                </div>
+            </Layout>
+        );
+    }
+
+    if (error) {
+        return (
+            <Layout>
+                <div className="flex items-center justify-center h-64">
+                    <div className="text-center">
+                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                            <h3 className="font-bold">❌ Erro ao carregar Dashboard</h3>
+                            <p className="mt-2">{error}</p>
+                            <button
+                                onClick={() => window.location.reload()}
+                                className="mt-4 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+                            >
+                                🔄 Tentar Novamente
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </Layout>
+        );
+    }
+
     return (
         <Layout>
-            <div className="space-y-6">
-                {/* Cabeçalho */}
-                <div className="bg-white rounded-lg shadow-md p-6">
-                    <h1 className="text-3xl font-bold text-gray-800">Dashboard Geral</h1>
-                    <p className="text-gray-600">Visão geral escalável dos apontamentos de todos os departamentos e setores</p>
-                </div>
-
-                {/* Filtros */}
-                <FiltrosComponent />
-
-                {/* Métricas Gerais */}
-                <MetricasGeraisComponent />
-
-                {/* Gráficos Principais */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <PerformanceDepartamentosComponent />
-                    <DepartamentosPieComponent />
-                </div>
-
-                {/* Top Setores */}
-                <TopSetoresComponent />
-
-                {/* Tabelas de Dados */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Departamentos */}
-                    <div className="bg-white p-4 rounded-lg shadow">
-                        <h3 className="text-lg font-semibold mb-4">Departamentos - Resumo</h3>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Departamento</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Horas</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">OS</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">%</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {dashboardData.departamentos.map((dept, index) => (
-                                        <tr key={index}>
-                                            <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                                {dept.nome}
-                                            </td>
-                                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {dept.totalHoras.toLocaleString()}h
-                                            </td>
-                                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {dept.osUnicas}
-                                            </td>
-                                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {dept.percentualHoras}%
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+            <div className="h-screen bg-gray-50 p-3 overflow-hidden">
+                <div className="w-full h-full flex flex-col space-y-3">
+                    {/* HEADER COMPACTO */}
+                    <div className="bg-white rounded-lg shadow-sm border p-3 flex-shrink-0">
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-900">Dashboard RegistroOS</h1>
+                                <p className="text-sm text-gray-600">Visão geral completa do sistema</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs text-gray-500">Última atualização</p>
+                                <p className="text-sm font-semibold text-gray-900">{new Date().toLocaleTimeString()}</p>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Apontamentos Recentes */}
-                    <div className="bg-white p-4 rounded-lg shadow">
-                        <h3 className="text-lg font-semibold mb-4">Apontamentos Recentes</h3>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">OS</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Setor</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Horas</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {dashboardData.apontamentosRecentes.map((apt, index) => (
-                                        <tr key={index}>
-                                            <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                                {apt.numero_os}
-                                            </td>
-                                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {apt.setor}
-                                            </td>
-                                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {apt.horas.toFixed(1)}h
-                                            </td>
-                                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                <span className={`px-2 py-1 text-xs rounded-full ${
-                                                    apt.status === 'FINALIZADO'
-                                                        ? 'bg-green-100 text-green-800'
-                                                        : 'bg-yellow-100 text-yellow-800'
-                                                }`}>
-                                                    {apt.status}
-                                                </span>
-                                            </td>
+                    {/* FILTROS COMPACTOS */}
+                    <div className="flex-shrink-0">
+                        <FiltrosComponent />
+                    </div>
+
+                    {/* MÉTRICAS PRINCIPAIS E APONTAMENTOS RECENTES */}
+                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 flex-shrink-0">
+                        {/* MÉTRICAS PRINCIPAIS */}
+                        <div className="xl:col-span-2 bg-white rounded-lg shadow-sm border p-3">
+                            <h2 className="text-lg font-semibold text-gray-900 mb-2">📊 Métricas Principais</h2>
+                            <MetricasGeraisComponent />
+                        </div>
+
+                        {/* APONTAMENTOS RECENTES */}
+                        <div className="bg-white rounded-lg shadow-sm border p-3">
+                            <h2 className="text-lg font-semibold text-gray-900 mb-2">� Apontamentos Recentes</h2>
+                            <div className="overflow-y-auto max-h-32">
+                                <table className="w-full">
+                                    <thead className="sticky top-0 bg-white">
+                                        <tr className="border-b border-gray-200">
+                                            <th className="text-left py-1 px-1 font-semibold text-gray-700 text-xs">OS</th>
+                                            <th className="text-left py-1 px-1 font-semibold text-gray-700 text-xs">Setor</th>
+                                            <th className="text-right py-1 px-1 font-semibold text-gray-700 text-xs">Horas</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {(dashboardData.apontamentosRecentes || []).slice(0, 6).map((apt: any, index: number) => (
+                                            <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                                <td className="py-1 px-1 font-medium text-blue-600 text-xs">{apt.numero_os}</td>
+                                                <td className="py-1 px-1 text-gray-600 text-xs">{apt.setor}</td>
+                                                <td className="py-1 px-1 text-right font-semibold text-green-600 text-xs">{apt.horas}h</td>
+                                            </tr>
+                                        ))}
+                                        {(!dashboardData.apontamentosRecentes || dashboardData.apontamentosRecentes.length === 0) && (
+                                            <tr>
+                                                <td colSpan={3} className="py-2 text-center text-gray-400 text-xs">
+                                                    Nenhum apontamento recente
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* GRID PRINCIPAL - LARGURA TOTAL SEM SCROLL */}
+                    <div className="flex-1 grid grid-cols-1 xl:grid-cols-4 gap-3 min-h-0">
+                        {/* COLUNA 1: PROGRAMAÇÕES */}
+                        <div className="bg-white rounded-lg shadow-sm border p-4 flex flex-col">
+                            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                                📅 Programações
+                            </h2>
+                            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border border-blue-200 flex-1">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="font-semibold text-blue-900">Total</h3>
+                                    <span className="bg-blue-500 text-white text-sm px-2 py-1 rounded-full font-medium">
+                                        {loading ? '...' : dashboardData.programacoes?.total || 0}
+                                    </span>
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-blue-700">Enviadas</span>
+                                        <span className="font-semibold text-blue-900 bg-white px-2 py-1 rounded text-xs">
+                                            {loading ? '...' : dashboardData.programacoes?.enviadas || 0}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-blue-700">Em Andamento</span>
+                                        <span className="font-semibold text-blue-900 bg-white px-2 py-1 rounded text-xs">
+                                            {loading ? '...' : dashboardData.programacoes?.emAndamento || 0}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-blue-700">Concluídas</span>
+                                        <span className="font-semibold text-blue-900 bg-white px-2 py-1 rounded text-xs">
+                                            {loading ? '...' : dashboardData.programacoes?.concluidas || 0}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* COLUNA 2: PENDÊNCIAS */}
+                        <div className="bg-white rounded-lg shadow-sm border p-4 flex flex-col">
+                            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                                ⚠️ Pendências
+                            </h2>
+                            <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-3 border border-red-200 flex-1">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="font-semibold text-red-900">Total</h3>
+                                    <span className="bg-red-500 text-white text-sm px-2 py-1 rounded-full font-medium">
+                                        {loading ? '...' : dashboardData.pendencias?.total || 0}
+                                    </span>
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-red-700">Abertas</span>
+                                        <span className="font-semibold text-red-900 bg-white px-2 py-1 rounded text-xs">
+                                            {loading ? '...' : dashboardData.pendencias?.abertas || 0}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-red-700">Fechadas</span>
+                                        <span className="font-semibold text-red-900 bg-white px-2 py-1 rounded text-xs">
+                                            {loading ? '...' : dashboardData.pendencias?.fechadas || 0}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* COLUNA 3: PERFORMANCE DEPARTAMENTOS */}
+                        <div className="bg-white rounded-lg shadow-sm border p-4 flex flex-col">
+                            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                                🏢 Departamentos
+                            </h2>
+                            <div className="flex-1 min-h-0">
+                                <PerformanceDepartamentosComponent />
+                            </div>
+                        </div>
+
+                        {/* COLUNA 4: TOP SETORES */}
+                        <div className="bg-white rounded-lg shadow-sm border p-4 flex flex-col">
+                            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                                🏭 Top Setores
+                            </h2>
+                            <div className="flex-1 min-h-0">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart
+                                        data={(dashboardData.topSetores || []).slice(0, 6)}
+                                        margin={{ top: 10, right: 10, left: 10, bottom: 40 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis
+                                            dataKey="nome"
+                                            fontSize={10}
+                                            angle={-45}
+                                            textAnchor="end"
+                                            height={40}
+                                            interval={0}
+                                        />
+                                        <YAxis fontSize={10} />
+                                        <Tooltip
+                                            contentStyle={{
+                                                backgroundColor: '#f8fafc',
+                                                border: '1px solid #e2e8f0',
+                                                borderRadius: '8px',
+                                                fontSize: '12px'
+                                            }}
+                                        />
+                                        <Bar dataKey="totalHoras" fill="#3B82F6" radius={[2, 2, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
                         </div>
                     </div>
                 </div>

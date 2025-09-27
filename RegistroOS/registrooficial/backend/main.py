@@ -128,6 +128,8 @@ async def get_apontamentos_detalhados_global(
     Redireciona para o endpoint correto em desenvolvimento.py
     """
     try:
+        print(f"🔍 Buscando apontamentos detalhados para usuário: {current_user.nome_completo} ({current_user.privilege_level})")
+
         # Buscar apontamentos detalhados do banco de dados
         query = db.query(ApontamentoDetalhado)
 
@@ -137,10 +139,15 @@ async def get_apontamentos_detalhados_global(
             if privilege_level == 'USER':
                 query = query.filter(ApontamentoDetalhado.id_usuario == current_user.id)
             elif privilege_level == 'SUPERVISOR':
-                # Supervisores veem apontamentos do seu setor
-                user_setor = getattr(current_user, 'setor', None)
-                if user_setor:
-                    query = query.filter(ApontamentoDetalhado.setor == user_setor)
+                # Supervisores veem apontamentos do seu setor usando id_setor
+                user_setor_id = getattr(current_user, 'id_setor', None)
+                if user_setor_id:
+                    query = query.filter(ApontamentoDetalhado.id_setor == user_setor_id)
+                else:
+                    # Fallback para campo setor string se id_setor não existir
+                    user_setor = getattr(current_user, 'setor', None)
+                    if user_setor:
+                        query = query.filter(ApontamentoDetalhado.setor == user_setor)
             # ADMIN vê todos os apontamentos
         except Exception as e:
             print(f"⚠️ Erro ao aplicar filtros de usuário: {e}")
@@ -149,58 +156,73 @@ async def get_apontamentos_detalhados_global(
 
         # Limitar a 50 registros mais recentes
         apontamentos = query.order_by(ApontamentoDetalhado.data_hora_inicio.desc()).limit(50).all()
+        print(f"📊 Encontrados {len(apontamentos)} apontamentos")
 
         # Converter para formato de resposta
         result = []
         for apt in apontamentos:
-            # Buscar OS manualmente
-            os = db.query(OrdemServico).filter(OrdemServico.id == apt.id_os).first()
-            numero_os = os.os_numero if os else "N/A"
-
-            # Buscar usuário
-            usuario = db.query(Usuario).filter(Usuario.id == apt.id_usuario).first()
-            nome_usuario = usuario.nome_completo if usuario else "N/A"
-
-            # Converter datas de forma segura
-            data_inicio = None
-            data_fim = None
             try:
-                data_inicio = str(apt.data_hora_inicio) if apt.data_hora_inicio is not None else None
-            except:
+                # Buscar OS manualmente
+                os = db.query(OrdemServico).filter(OrdemServico.id == apt.id_os).first()
+                numero_os = os.os_numero if os else "N/A"
+
+                # Buscar usuário
+                usuario = db.query(Usuario).filter(Usuario.id == apt.id_usuario).first()
+                nome_usuario = usuario.nome_completo if usuario else "N/A"
+
+                # Converter datas de forma segura
                 data_inicio = None
-
-            try:
-                data_fim = str(apt.data_hora_fim) if apt.data_hora_fim is not None else None
-            except:
                 data_fim = None
+                try:
+                    data_inicio = str(apt.data_hora_inicio) if apt.data_hora_inicio is not None else None
+                except:
+                    data_inicio = None
 
-            # Calcular tempo trabalhado se houver data de início e fim
-            tempo_trabalhado = 0.0
-            try:
-                if apt.data_hora_inicio is not None and apt.data_hora_fim is not None:
-                    delta = apt.data_hora_fim - apt.data_hora_inicio
-                    tempo_trabalhado = delta.total_seconds() / 3600  # Converter para horas
-            except:
+                try:
+                    data_fim = str(apt.data_hora_fim) if apt.data_hora_fim is not None else None
+                except:
+                    data_fim = None
+
+                # Calcular tempo trabalhado se houver data de início e fim
                 tempo_trabalhado = 0.0
+                try:
+                    if apt.data_hora_inicio is not None and apt.data_hora_fim is not None:
+                        delta = apt.data_hora_fim - apt.data_hora_inicio
+                        tempo_trabalhado = delta.total_seconds() / 3600  # Converter para horas
+                except:
+                    tempo_trabalhado = 0.0
 
-            result.append({
-                "id": apt.id,
-                "numero_os": numero_os,
-                "data_inicio": data_inicio,
-                "data_fim": data_fim,
-                "data_hora_inicio": data_inicio,  # Alias para compatibilidade
-                "status": apt.status_apontamento or "N/A",
-                "observacoes": apt.observacao_os or "",
-                "setor": apt.setor or "N/A",
-                "departamento": "N/A",  # Campo não existe na tabela atual
-                "foi_retrabalho": apt.foi_retrabalho or False,
-                "usuario": nome_usuario,
-                "nome_tecnico": nome_usuario,  # Alias para compatibilidade
-                "tipo_atividade": apt.tipo_atividade or "N/A",
-                "tempo_trabalhado": tempo_trabalhado,
-                "aprovado_supervisor": bool(getattr(apt, 'aprovado_supervisor', False)),
-                "cliente": "N/A"  # Campo não disponível nos dados atuais
-            })
+                # Obter tipo_atividade de forma segura
+                tipo_atividade_str = "N/A"
+                try:
+                    tipo_atividade_value = getattr(apt, 'tipo_atividade', None)
+                    if tipo_atividade_value is not None:
+                        tipo_atividade_str = str(tipo_atividade_value)
+                except:
+                    tipo_atividade_str = "N/A"
+
+                result.append({
+                    "id": apt.id,
+                    "numero_os": numero_os,
+                    "data_inicio": data_inicio,
+                    "data_fim": data_fim,
+                    "data_hora_inicio": data_inicio,  # Alias para compatibilidade
+                    "status": getattr(apt, 'status_apontamento', 'N/A') or "N/A",
+                    "observacoes": getattr(apt, 'observacao_os', '') or "",
+                    "setor": getattr(apt, 'setor', 'N/A') or "N/A",
+                    "departamento": "N/A",  # Campo não existe na tabela atual
+                    "foi_retrabalho": getattr(apt, 'foi_retrabalho', False) or False,
+                    "usuario": nome_usuario,
+                    "nome_tecnico": nome_usuario,  # Alias para compatibilidade
+                    "tipo_atividade": tipo_atividade_str,
+                    "tempo_trabalhado": tempo_trabalhado,
+                    "aprovado_supervisor": bool(getattr(apt, 'aprovado_supervisor', False)),
+                    "cliente": "N/A"  # Campo não disponível nos dados atuais
+                })
+
+            except Exception as e:
+                print(f"⚠️ Erro ao processar apontamento {apt.id}: {e}")
+                continue
 
         return result
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../services/api';
+import logo from '../../logo/assets/logo.png';
 
 interface Setor {
   id: number;
@@ -167,13 +168,16 @@ const SetorSelectionPage: React.FC = () => {
       <div className="bg-white shadow-sm border-b">
         <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Sistema de Desenvolvimento
-              </h1>
-              <p className="text-sm text-gray-500">
-                {user?.primeiro_nome || (user?.nome_completo ? user.nome_completo.split(' ')[0] : 'Usuário')} | Selecione um setor para continuar
-              </p>
+            <div className="flex items-center space-x-4">
+              <img src={logo} alt="RegistroOS Logo" className="h-8 w-auto" />
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Sistema de Desenvolvimento
+                </h1>
+                <p className="text-sm text-gray-500">
+                  {user?.primeiro_nome || (user?.nome_completo ? user.nome_completo.split(' ')[0] : 'Usuário')} | Selecione um setor para continuar
+                </p>
+              </div>
             </div>
             <div className="flex items-center space-x-4">
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">

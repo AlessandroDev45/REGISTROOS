@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSetor } from '../../contexts/SetorContext';
 import { ConfiguracaoSetor } from '../../pages/common/TiposApi';
 import api from '../../services/api';
+import logo from '../../logo/assets/logo.png';
 
 // Componentes das abas originais
 import DashTab from './components/tabs/DashTab';
@@ -79,6 +80,10 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
   const [relatorioModalOpen, setRelatorioModalOpen] = useState(false);
   const [selectedOsId, setSelectedOsId] = useState<number | null>(null);
 
+  // Estados para comunicação entre abas (resolução de pendências)
+  const [pendenciaParaResolver, setPendenciaParaResolver] = useState<any>(null);
+  const [dadosPreenchidosApontamento, setDadosPreenchidosApontamento] = useState<any>(null);
+
   // Definir abas baseadas no nível de privilégio do usuário
   const getAvailableTabs = (): TabItem[] => {
     const baseTabs: TabItem[] = [
@@ -120,6 +125,26 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
 
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
+  };
+
+  // Função para resolver pendência via apontamento
+  const handleResolverPendenciaViaApontamento = (pendencia: any) => {
+    // Preparar dados para preencher no formulário de apontamento
+    const dadosApontamento = {
+      inpNumOS: pendencia.numero_os,
+      inpCliente: pendencia.cliente,
+      inpEquipamento: pendencia.descricao_maquina || pendencia.equipamento,
+      selMaq: pendencia.tipo_maquina,
+      observacao: `RESOLUÇÃO DE PENDÊNCIA #${pendencia.id}: ${pendencia.descricao_pendencia || pendencia.descricao}`,
+      pendencia_origem_id: pendencia.id
+    };
+
+    // Armazenar dados para usar na aba de apontamento
+    setPendenciaParaResolver(pendencia);
+    setDadosPreenchidosApontamento(dadosApontamento);
+
+    // Mudar para a aba de apontamento
+    setActiveTab('apontamento');
   };
 
   // Handlers para o formulário de apontamento
@@ -185,6 +210,12 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
           handleSupervisorTestesParciaisChange={handleSupervisorTestesParciaisChange}
           handleSupervisorTestesFinaisChange={handleSupervisorTestesFinaisChange}
           handleSaveApontamento={handleSaveApontamento}
+          dadosPreenchidos={dadosPreenchidosApontamento}
+          pendenciaParaResolver={pendenciaParaResolver}
+          onPendenciaResolvida={() => {
+            setPendenciaParaResolver(null);
+            setDadosPreenchidosApontamento(null);
+          }}
         />;
       case 'minhas-os':
         return <MinhasOsTab />;
@@ -198,7 +229,9 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
       case 'programacao':
         return <ProgramacaoTab />;
       case 'pendencias':
-        return <PendenciasTab />;
+        return <PendenciasTab
+          onResolverViaApontamento={handleResolverPendenciaViaApontamento}
+        />;
       case 'gerenciar':
         return <GerenciarTab />;
       case 'aprovacao':
@@ -215,6 +248,7 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
         <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-4">
+              <img src={logo} alt="RegistroOS Logo" className="h-8 w-auto" />
               <button
                 onClick={() => window.location.href = '/dashboard'}
                 className="flex items-center space-x-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"

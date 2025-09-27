@@ -137,13 +137,18 @@ async def get_programacao_form_data(
             SELECT s.id, s.nome, s.id_departamento, d.nome_tipo as departamento_nome
             FROM tipo_setores s
             LEFT JOIN tipo_departamentos d ON s.id_departamento = d.id
+            WHERE s.ativo = 1 OR s.ativo IS NULL
             ORDER BY s.nome
         """)
 
         print(f"[DEBUG] Executando consulta de setores...")
-        setores_result = db.execute(setores_sql)
-        setores_rows = setores_result.fetchall()
-        print(f"[DEBUG] Encontrados {len(setores_rows)} setores")
+        try:
+            setores_result = db.execute(setores_sql)
+            setores_rows = setores_result.fetchall()
+            print(f"[DEBUG] Encontrados {len(setores_rows)} setores")
+        except Exception as e:
+            print(f"[ERROR] Erro na consulta de setores: {e}")
+            setores_rows = []
 
         setores = [
             {
@@ -164,13 +169,18 @@ async def get_programacao_form_data(
             LEFT JOIN tipo_setores s ON u.id_setor = s.id
             LEFT JOIN tipo_departamentos d ON s.id_departamento = d.id
             WHERE u.privilege_level IN ('SUPERVISOR', 'ADMIN', 'GESTAO')
+            AND (u.ativo = 1 OR u.ativo IS NULL)
             ORDER BY d.nome_tipo, s.nome, u.privilege_level DESC, u.nome_completo
         """)
 
         print(f"[DEBUG] Executando consulta de usuários...")
-        usuarios_result = db.execute(usuarios_sql)
-        usuarios_rows = usuarios_result.fetchall()
-        print(f"[DEBUG] Encontrados {len(usuarios_rows)} usuários")
+        try:
+            usuarios_result = db.execute(usuarios_sql)
+            usuarios_rows = usuarios_result.fetchall()
+            print(f"[DEBUG] Encontrados {len(usuarios_rows)} usuários")
+        except Exception as e:
+            print(f"[ERROR] Erro na consulta de usuários: {e}")
+            usuarios_rows = []
 
         usuarios = [
             {
@@ -196,13 +206,18 @@ async def get_programacao_form_data(
         departamentos_sql = text("""
             SELECT d.id, d.nome_tipo as nome
             FROM tipo_departamentos d
+            WHERE d.ativo = 1 OR d.ativo IS NULL
             ORDER BY d.nome_tipo
         """)
 
         print(f"[DEBUG] Executando consulta de departamentos...")
-        departamentos_result = db.execute(departamentos_sql)
-        departamentos_rows = departamentos_result.fetchall()
-        print(f"[DEBUG] Encontrados {len(departamentos_rows)} departamentos")
+        try:
+            departamentos_result = db.execute(departamentos_sql)
+            departamentos_rows = departamentos_result.fetchall()
+            print(f"[DEBUG] Encontrados {len(departamentos_rows)} departamentos")
+        except Exception as e:
+            print(f"[ERROR] Erro na consulta de departamentos: {e}")
+            departamentos_rows = []
 
         departamentos = [
             {
@@ -230,9 +245,13 @@ async def get_programacao_form_data(
         """)
 
         print(f"[DEBUG] Executando consulta de ordens de serviço...")
-        ordens_result = db.execute(ordens_sql)
-        ordens_rows = ordens_result.fetchall()
-        print(f"[DEBUG] Encontradas {len(ordens_rows)} ordens de serviço")
+        try:
+            ordens_result = db.execute(ordens_sql)
+            ordens_rows = ordens_result.fetchall()
+            print(f"[DEBUG] Encontradas {len(ordens_rows)} ordens de serviço")
+        except Exception as e:
+            print(f"[ERROR] Erro na consulta de ordens de serviço: {e}")
+            ordens_rows = []
         ordens_servico = [
             {
                 "id": row[0],
@@ -592,8 +611,22 @@ async def get_pendencias_pcp(
         ]
 
     except Exception as e:
-        print(f"Erro ao buscar pendências: {e}")
-        return []
+        print(f"❌ ERRO CRÍTICO no dashboard de pendências: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "metricas_gerais": {
+                "total_pendencias": 0,
+                "pendencias_abertas": 0,
+                "pendencias_fechadas": 0,
+                "pendencias_periodo": 0,
+                "pendencias_criticas": 0,
+                "tempo_medio_resolucao_horas": 0.0
+            },
+            "distribuicao_prioridade": [],
+            "distribuicao_setor": [],
+            "evolucao_7_dias": []
+        }
 
 @router.get("/pendencias/dashboard", operation_id="pcp_get_pendencias_dashboard")
 async def get_pendencias_dashboard(
@@ -603,46 +636,112 @@ async def get_pendencias_dashboard(
 ):
     """Dashboard de pendências do PCP"""
     try:
-        print(f"🏭 Calculando dashboard de pendências para período: {periodo_dias} dias")
-
+        print(f"🏭 INÍCIO - Calculando dashboard de pendências para período: {periodo_dias} dias")
         # 📊 CALCULAR MÉTRICAS REAIS DAS PENDÊNCIAS
         from datetime import datetime, timedelta
 
         # Data limite para o período
         data_limite = datetime.now() - timedelta(days=periodo_dias)
 
-        # Query simplificada para buscar todas as pendências
+        # Query otimizada com campos diretos de setor e departamento
         sql = text("""
-            SELECT p.id, p.status, p.data_inicio, p.data_fechamento,
-                   p.tempo_aberto_horas
+            SELECT p.id, p.descricao_pendencia, p.status, p.data_inicio,
+                   p.data_fechamento, p.id_responsavel_inicio, p.numero_os,
+                   p.cliente, p.tipo_maquina, p.descricao_maquina,
+                   COALESCE(u.nome_completo, 'Usuário ' || p.id_responsavel_inicio) as responsavel_nome,
+                   p.setor_origem, p.departamento_origem, p.tempo_aberto_horas
             FROM pendencias p
+            LEFT JOIN tipo_usuarios u ON p.id_responsavel_inicio = u.id
             WHERE 1=1
+            ORDER BY p.data_inicio DESC
         """)
 
+        print(f"🔍 Executando query SQL: {sql}")
+
+        # Usar EXATAMENTE o mesmo padrão do endpoint de listagem que funciona
         result = db.execute(sql)
         todas_pendencias = result.fetchall()
+        print(f"✅ Query executada! Pendências encontradas: {len(todas_pendencias)}")
 
         print(f"📊 Total de pendências encontradas: {len(todas_pendencias)}")
 
-        # Calcular métricas (SEM prioridade)
-        total_pendencias = len(todas_pendencias)
-        pendencias_abertas = len([p for p in todas_pendencias if p[1] == 'ABERTA'])
-        pendencias_fechadas = len([p for p in todas_pendencias if p[1] == 'FECHADA'])
+        # Debug: mostrar algumas pendências com novos campos
+        if todas_pendencias:
+            print(f"📋 Primeiras pendências encontradas:")
+            for i, p in enumerate(todas_pendencias[:3], 1):
+                print(f"   {i}. ID: {p[0]} | Status: {p[2]} | OS: {p[6]} | Setor: {p[11]} | Dept: {p[12]}")
+        else:
+            print(f"❌ NENHUMA PENDÊNCIA ENCONTRADA NA QUERY!")
+            print(f"🔍 Isso indica que a query não está retornando dados")
 
-        # Pendências do período
-        pendencias_periodo = len([p for p in todas_pendencias if p[2] and p[2] >= data_limite])
+        # Calcular métricas - ajustar índices para query completa
+        total_pendencias = len(todas_pendencias)
+        pendencias_abertas = len([p for p in todas_pendencias if p[2] == 'ABERTA'])  # p[2] = status
+        pendencias_fechadas = len([p for p in todas_pendencias if p[2] == 'FECHADA'])  # p[2] = status
+
+        print(f"📊 Métricas calculadas: Total={total_pendencias}, Abertas={pendencias_abertas}, Fechadas={pendencias_fechadas}")
+
+        # Pendências do período - converter string para datetime antes de comparar
+        from datetime import datetime
+        pendencias_periodo = 0
+        for p in todas_pendencias:
+            if p[3]:  # p[3] = data_inicio
+                try:
+                    # Converter string para datetime se necessário
+                    if isinstance(p[3], str):
+                        data_inicio = datetime.fromisoformat(p[3].replace('Z', '+00:00'))
+                    else:
+                        data_inicio = p[3]
+
+                    if data_inicio >= data_limite:
+                        pendencias_periodo += 1
+                except Exception as e:
+                    print(f"⚠️ Erro ao converter data: {p[3]} - {e}")
+                    continue
 
         # Pendências críticas = pendências abertas (sem conceito de prioridade)
         pendencias_criticas = pendencias_abertas
 
-        # Tempo médio de resolução
-        pendencias_com_tempo = [p for p in todas_pendencias if p[4] is not None and p[1] == 'FECHADA']
-        tempo_medio = sum([p[4] for p in pendencias_com_tempo]) / len(pendencias_com_tempo) if pendencias_com_tempo else 0.0
+        # Tempo médio de resolução - corrigir conversão de datas
+        tempo_medio = 0.0
+        total_horas = 0
+        pendencias_fechadas_validas = 0
 
-        # Distribuição por setor (simplificada)
+        for p in todas_pendencias:
+            if p[2] == 'FECHADA' and p[3] and p[4]:  # p[2]=status, p[3]=data_inicio, p[4]=data_fechamento
+                try:
+                    # Converter strings para datetime se necessário
+                    if isinstance(p[3], str):
+                        data_inicio = datetime.fromisoformat(p[3].replace('Z', '+00:00'))
+                    else:
+                        data_inicio = p[3]
+
+                    if isinstance(p[4], str):
+                        data_fechamento = datetime.fromisoformat(p[4].replace('Z', '+00:00'))
+                    else:
+                        data_fechamento = p[4]
+
+                    # Calcular diferença em horas
+                    diff = data_fechamento - data_inicio
+                    total_horas += diff.total_seconds() / 3600
+                    pendencias_fechadas_validas += 1
+
+                except Exception as e:
+                    print(f"⚠️ Erro ao calcular tempo: {p[3]} -> {p[4]} - {e}")
+                    continue
+
+        tempo_medio = total_horas / pendencias_fechadas_validas if pendencias_fechadas_validas > 0 else 0.0
+
+        # Distribuição por setor (usando campos diretos)
+        setores_count = {}
+        for p in todas_pendencias:
+            setor = p[11] or "Não informado"  # p[11] = setor_origem
+            setores_count[setor] = setores_count.get(setor, 0) + 1
+
         distribuicao_setor = [
-            {"setor": "Geral", "total": total_pendencias}
-        ] if total_pendencias > 0 else []
+            {"setor": setor, "total": count}
+            for setor, count in setores_count.items()
+        ]
 
         print(f"✅ Métricas calculadas: {total_pendencias} total, {pendencias_abertas} abertas, {pendencias_fechadas} fechadas")
 
@@ -1179,15 +1278,17 @@ async def atualizar_status_programacao(
                 detail=f"Status inválido. Status válidos: {', '.join(status_validos)}"
             )
 
-        # Atualizar apenas o status
+        # Preparar histórico atualizado
+        timestamp = datetime.now().strftime('%d/%m/%Y %H:%M')
+        historico_atual = programacao.historico or ""
+        novo_historico = f"{historico_atual}\n[MUDANÇA STATUS] Status alterado para {status_data.status} por {current_user.nome_completo} em {timestamp}"
+
+        # Atualizar status, observações e histórico
         db.query(Programacao).filter(Programacao.id == programacao_id).update({
             'status': status_data.status,
-            'updated_at': datetime.now()
-        })
-        
-        # Atualizar observações
-        db.query(Programacao).filter(Programacao.id == programacao_id).update({
-            'observacoes': f"{programacao.observacoes or ''} - Status alterado para {status_data.status} por {current_user.nome_completo} em {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            'updated_at': datetime.now(),
+            'observacoes': f"{programacao.observacoes or ''} - Status alterado para {status_data.status} por {current_user.nome_completo} em {timestamp}",
+            'historico': novo_historico
         })
 
         db.commit()

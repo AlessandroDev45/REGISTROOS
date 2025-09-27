@@ -86,6 +86,7 @@ class ApontamentoDetalhado(Base):
     id_setor = Column(Integer, ForeignKey("tipo_setores.id"), nullable=False)
     data_hora_inicio = Column(DateTime, nullable=False)
     data_hora_fim = Column(DateTime)
+    # tempo_trabalhado = Column(DECIMAL(10,2))  # Campo não existe na tabela atual - será calculado dinamicamente
     status_apontamento = Column(String, nullable=False)
     foi_retrabalho = Column(Boolean, default=0)
     causa_retrabalho = Column(Integer, ForeignKey("tipo_causas_retrabalho.id"))
@@ -169,6 +170,10 @@ class Pendencia(Base):
     tempo_aberto_horas = Column(Float)
     data_criacao = Column(DateTime)
     data_ultima_atualizacao = Column(DateTime)
+
+    # Campos adicionados para performance e auditoria
+    setor_origem = Column(String(100))  # Setor do responsável no momento da criação
+    departamento_origem = Column(String(100))  # Departamento do responsável no momento da criação
 
     # Relacionamentos conforme hierarquia
     ordem_servico = relationship("OrdemServico", foreign_keys=[numero_os], back_populates="pendencias")

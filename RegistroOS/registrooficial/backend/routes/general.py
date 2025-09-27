@@ -230,6 +230,50 @@ async def save_apontamento_with_pendencia(
         db.add(apontamento)
         db.flush()  # Get the ID for test results and pendencia
 
+        # Verificar se existe programação ativa para esta OS e usuário
+        from sqlalchemy import text
+        sql_programacao = text("""
+            SELECT p.id, p.status, p.observacoes
+            FROM programacoes p
+            LEFT JOIN ordens_servico os ON p.id_ordem_servico = os.id
+            WHERE os.os_numero = :os_numero
+            AND p.responsavel_id = :user_id
+            AND p.status IN ('PROGRAMADA', 'EM_ANDAMENTO')
+            ORDER BY p.created_at DESC
+            LIMIT 1
+        """)
+
+        programacao_result = db.execute(sql_programacao, {
+            "os_numero": os_numero,
+            "user_id": current_user.id
+        }).fetchone()
+
+        programacao_finalizada = False
+        if programacao_result:
+            programacao_id = programacao_result[0]
+
+            # Atualizar programação para FINALIZADA
+            sql_update_prog = text("""
+                UPDATE programacoes
+                SET status = 'FINALIZADA',
+                    updated_at = CURRENT_TIMESTAMP,
+                    observacoes = COALESCE(observacoes, '') || :nova_observacao,
+                    historico = COALESCE(historico, '') || :nova_entrada_historico
+                WHERE id = :programacao_id
+            """)
+
+            timestamp = dt.now().strftime('%d/%m/%Y %H:%M')
+            nova_observacao = f"\n[FINALIZADA] Programação finalizada automaticamente via apontamento com pendência #{apontamento.id} em {timestamp} por {current_user.nome_completo}"
+            nova_entrada_historico = f"\n[FINALIZADA] Status alterado para FINALIZADA por {current_user.nome_completo} em {timestamp} via apontamento com pendência #{apontamento.id}"
+
+            db.execute(sql_update_prog, {
+                "programacao_id": programacao_id,
+                "nova_observacao": nova_observacao,
+                "nova_entrada_historico": nova_entrada_historico
+            })
+
+            programacao_finalizada = True
+
         # Save test results if provided
         testes = apontamento_data.get("testes", {})
         observacoes_testes = apontamento_data.get("observacoes_testes", {})
@@ -299,11 +343,18 @@ async def save_apontamento_with_pendencia(
 
         db.commit()
 
-        return {
+        response_data = {
             "message": "Apontamento e pendência salvos com sucesso",
             "apontamento_id": apontamento.id,
-            "pendencia_id": pendencia.id
+            "pendencia_id": pendencia.id,
+            "numero_os": os_numero
         }
+
+        if programacao_finalizada:
+            response_data["programacao_finalizada"] = True
+            response_data["message"] = "Apontamento e pendência salvos, programação finalizada com sucesso"
+
+        return response_data
 
     except Exception as e:
         db.rollback()

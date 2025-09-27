@@ -259,14 +259,40 @@ async def get_dashboard_executivo(
 
         metricas = db.execute(sql_metricas).fetchone()
 
-        # Pendências por status
+        # Pendências por status (conforme especificação)
         sql_pendencias = text("""
-            SELECT status, COUNT(*) as quantidade
+            SELECT
+                status,
+                COUNT(*) as quantidade,
+                AVG(CASE WHEN tempo_aberto_horas IS NOT NULL THEN tempo_aberto_horas ELSE 0 END) as tempo_medio_horas
             FROM pendencias
             GROUP BY status
         """)
 
-        pendencias = db.execute(sql_pendencias).fetchall()
+        pendencias_result = db.execute(sql_pendencias).fetchall()
+
+        # Métricas específicas de pendências fechadas (conforme especificação)
+        sql_pendencias_fechadas = text("""
+            SELECT
+                COUNT(*) as total_fechadas,
+                AVG(tempo_aberto_horas) as tempo_medio_resolucao,
+                COUNT(CASE WHEN data_fechamento >= date('now', '-7 days') THEN 1 END) as fechadas_ultima_semana
+            FROM pendencias
+            WHERE status = 'FECHADA'
+        """)
+
+        pendencias_fechadas = db.execute(sql_pendencias_fechadas).fetchone()
+
+        # Programações por status
+        sql_programacoes = text("""
+            SELECT
+                status,
+                COUNT(*) as quantidade
+            FROM programacoes
+            GROUP BY status
+        """)
+
+        programacoes_result = db.execute(sql_programacoes).fetchall()
 
         return {
             "metricas_principais": {
@@ -276,10 +302,23 @@ async def get_dashboard_executivo(
                 "ordens_aguardando": metricas[3] if metricas else 0
             },
             "pendencias_por_status": [
+                {
+                    "status": row[0],
+                    "quantidade": row[1],
+                    "tempo_medio_horas": round(row[2], 2) if row[2] else 0
+                }
+                for row in pendencias_result
+            ] if pendencias_result else [],
+            "metricas_pendencias_fechadas": {
+                "total_fechadas": pendencias_fechadas[0] if pendencias_fechadas else 0,
+                "tempo_medio_resolucao_horas": round(pendencias_fechadas[1], 2) if pendencias_fechadas and pendencias_fechadas[1] else 0,
+                "fechadas_ultima_semana": pendencias_fechadas[2] if pendencias_fechadas else 0
+            },
+            "programacoes_por_status": [
                 {"status": row[0], "quantidade": row[1]}
-                for row in pendencias
-            ] if pendencias else [],
-            "data_atualizacao": "2025-09-18"
+                for row in programacoes_result
+            ] if programacoes_result else [],
+            "data_atualizacao": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
     except Exception as e:
         return {"error": f"Erro: {str(e)}"}
