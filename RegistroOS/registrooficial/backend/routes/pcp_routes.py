@@ -952,9 +952,38 @@ async def reatribuir_programacao(
         historico_atual = programacao.historico or ""
         novo_historico = f"{historico_atual}\n[REATRIBUIÇÃO] De ID {responsavel_anterior_id} para {novo_responsavel.nome_completo} em {timestamp}"
 
+        # Processar novos horários
+        novo_inicio = datetime.fromisoformat(dados.data_inicio.replace('Z', '+00:00'))
+        novo_fim = datetime.fromisoformat(dados.data_fim.replace('Z', '+00:00'))
+
+        # Se os horários fornecidos são iguais, preservar duração original
+        if novo_inicio == novo_fim:
+            inicio_original = programacao.inicio_previsto
+            fim_original = programacao.fim_previsto
+
+            if inicio_original and fim_original:
+                duracao_original = fim_original - inicio_original
+                if duracao_original.total_seconds() > 0:
+                    novo_fim = novo_inicio + duracao_original
+                    print(f"⏰ Preservando duração original: {duracao_original}")
+                else:
+                    # Se duração original é zero, usar 8h padrão
+                    novo_fim = novo_inicio + timedelta(hours=8)
+                    print(f"⏰ Aplicando duração padrão: 8h")
+            else:
+                # Se não há horários originais, usar 8h padrão
+                novo_fim = novo_inicio + timedelta(hours=8)
+                print(f"⏰ Aplicando duração padrão: 8h")
+        else:
+            # Supervisor definiu horários específicos - usar os fornecidos
+            print(f"⏰ Usando horários definidos pelo supervisor: {novo_inicio} até {novo_fim}")
+
         # Reatribuir programação
         db.query(Programacao).filter(Programacao.id == programacao_id).update({
             'responsavel_id': dados.responsavel_id,
+            'inicio_previsto': novo_inicio,
+            'fim_previsto': novo_fim,
+            'observacoes': dados.observacoes,
             'historico': novo_historico,
             'updated_at': datetime.now()
         })
@@ -982,6 +1011,104 @@ async def reatribuir_programacao(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro ao reatribuir programação: {str(e)}"
+        )
+
+@router.post("/programacoes/{programacao_id}/atribuir-multiplos", operation_id="pcp_post_programacao_atribuir_multiplos")
+async def atribuir_programacao_multiplos(
+    programacao_id: int,
+    dados: dict,  # {"responsaveis": [{"id": 1, "observacoes": "..."}, {"id": 2, "observacoes": "..."}]}
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Atribuir programação para múltiplos colaboradores (cria cópias)"""
+    try:
+        # Buscar programação original
+        programacao_original = db.query(Programacao).filter(Programacao.id == programacao_id).first()
+        if not programacao_original:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Programação não encontrada"
+            )
+
+        responsaveis = dados.get('responsaveis', [])
+        if not responsaveis:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Lista de responsáveis não pode estar vazia"
+            )
+
+        programacoes_criadas = []
+        timestamp = datetime.now().strftime('%d/%m/%Y %H:%M')
+
+        for i, responsavel_data in enumerate(responsaveis):
+            responsavel_id = responsavel_data.get('id')
+            observacoes_especificas = responsavel_data.get('observacoes', '')
+
+            # Verificar se responsável existe
+            responsavel = db.query(Usuario).filter(Usuario.id == responsavel_id).first()
+            if not responsavel:
+                continue  # Pular responsáveis inválidos
+
+            if i == 0:
+                # Primeira atribuição: atualizar programação original
+                historico_atribuicao = f"[ATRIBUIÇÃO MÚLTIPLA] Atribuída para {responsavel.nome_completo} (1/{len(responsaveis)}) por {current_user.nome_completo} em {timestamp}"
+
+                programacao_original.responsavel_id = responsavel_id
+                programacao_original.observacoes = f"{programacao_original.observacoes or ''}\n{observacoes_especificas}".strip()
+                programacao_original.historico = f"{programacao_original.historico or ''}\n{historico_atribuicao}".strip()
+                programacao_original.updated_at = datetime.now()
+
+                programacoes_criadas.append({
+                    "id": programacao_original.id,
+                    "responsavel_id": responsavel_id,
+                    "responsavel_nome": responsavel.nome_completo,
+                    "tipo": "ORIGINAL"
+                })
+            else:
+                # Demais atribuições: criar cópias
+                historico_copia = f"[CÓPIA MÚLTIPLA] Cópia da programação {programacao_id} atribuída para {responsavel.nome_completo} ({i+1}/{len(responsaveis)}) por {current_user.nome_completo} em {timestamp}"
+
+                nova_programacao = Programacao(
+                    id_ordem_servico=programacao_original.id_ordem_servico,
+                    responsavel_id=responsavel_id,
+                    id_setor=programacao_original.id_setor,
+                    inicio_previsto=programacao_original.inicio_previsto,
+                    fim_previsto=programacao_original.fim_previsto,
+                    observacoes=f"{programacao_original.observacoes or ''}\n{observacoes_especificas}".strip(),
+                    historico=historico_copia,
+                    status="ENVIADA",
+                    criado_por_id=current_user.id,
+                    created_at=datetime.now(),
+                    updated_at=datetime.now()
+                )
+
+                db.add(nova_programacao)
+                db.flush()  # Para obter o ID
+
+                programacoes_criadas.append({
+                    "id": nova_programacao.id,
+                    "responsavel_id": responsavel_id,
+                    "responsavel_nome": responsavel.nome_completo,
+                    "tipo": "COPIA"
+                })
+
+        db.commit()
+
+        return {
+            "message": f"Programação atribuída para {len(programacoes_criadas)} colaboradores",
+            "programacao_original_id": programacao_id,
+            "total_atribuicoes": len(programacoes_criadas),
+            "programacoes": programacoes_criadas
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Erro ao atribuir para múltiplos: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao atribuir programação: {str(e)}"
         )
 
 @router.delete("/programacoes/{programacao_id}", operation_id="pcp_delete_programacao")
