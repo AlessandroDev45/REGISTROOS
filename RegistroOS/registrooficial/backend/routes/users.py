@@ -44,13 +44,45 @@ class CreateUserRequest(BaseModel):
     id_setor: Optional[int] = None
     id_departamento: Optional[int] = None
 
-@router.get("/usuarios/", response_model=List[UsuarioResponse])
+@router.get("/usuarios/")
 async def get_usuarios(current_user: Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get users that current user can manage (filtered by sector/department access)"""
     try:
-        # Use the new sector-based filtering
-        allowed_users = db.query(Usuario).all()
-        return allowed_users
+        # Buscar usuários com informações de setor e departamento
+        from sqlalchemy import text
+
+        usuarios_sql = text("""
+            SELECT u.id, u.nome_completo, u.email, u.matricula, u.cargo,
+                   u.privilege_level, u.is_approved, u.trabalha_producao,
+                   u.id_setor, u.id_departamento,
+                   s.nome as setor, d.nome_tipo as departamento
+            FROM tipo_usuarios u
+            LEFT JOIN tipo_setores s ON u.id_setor = s.id
+            LEFT JOIN tipo_departamentos d ON u.id_departamento = d.id
+            WHERE u.is_approved = 1
+            ORDER BY u.nome_completo
+        """)
+
+        result = db.execute(usuarios_sql)
+        usuarios = result.fetchall()
+
+        return [
+            {
+                "id": usuario.id,
+                "nome_completo": usuario.nome_completo,
+                "email": usuario.email,
+                "matricula": usuario.matricula,
+                "cargo": usuario.cargo,
+                "privilege_level": usuario.privilege_level,
+                "is_approved": bool(usuario.is_approved),
+                "trabalha_producao": bool(usuario.trabalha_producao),
+                "id_setor": usuario.id_setor,
+                "id_departamento": usuario.id_departamento,
+                "setor": usuario.setor,
+                "departamento": usuario.departamento
+            }
+            for usuario in usuarios
+        ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar usuários: {str(e)}")
 

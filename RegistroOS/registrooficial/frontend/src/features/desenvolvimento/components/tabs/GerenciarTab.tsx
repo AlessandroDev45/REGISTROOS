@@ -92,7 +92,7 @@ const GerenciarTab: React.FC = () => {
                     equipamento: apt.equipamento || 'Equipamento não informado',
                     data: apt.data_hora_inicio ? apt.data_hora_inicio.split('T')[0] : new Date().toISOString().split('T')[0],
                     hora_inicio: apt.data_hora_inicio ? new Date(apt.data_hora_inicio).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}) : '--',
-                    hora_fim: apt.data_hora_fim ? new Date(apt.data_hora_fim).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}) : '--',
+                    hora_fim: apt.data_fim ? new Date(apt.data_fim).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}) : '--',
                     horas_trabalhadas: apt.tempo_trabalhado || 0,
                     tipo_atividade: apt.tipo_atividade || 'N/A',
                     descricao_atividade: apt.descricao_atividade || 'N/A',
@@ -160,7 +160,7 @@ const GerenciarTab: React.FC = () => {
             console.log('🔍 Aprovando registro:', recordId);
 
             // Fazer chamada real para a API de aprovação
-            await api.put(`/apontamentos/${recordId}/aprovar`, {
+            await api.put(`/desenvolvimento/apontamentos/${recordId}/aprovar`, {
                 aprovado_supervisor: true,
                 data_aprovacao_supervisor: new Date().toISOString(),
                 supervisor_aprovacao: user?.nome_completo || user?.primeiro_nome
@@ -190,7 +190,7 @@ const GerenciarTab: React.FC = () => {
             console.log('🔍 Rejeitando registro:', recordId, 'Motivo:', motivo);
 
             // Fazer chamada real para a API de rejeição
-            await api.put(`/apontamentos/${recordId}/rejeitar`, {
+            await api.put(`/desenvolvimento/apontamentos/${recordId}/rejeitar`, {
                 aprovado_supervisor: false,
                 motivo_rejeicao: motivo || 'Rejeitado pelo supervisor',
                 supervisor_aprovacao: user?.nome_completo || user?.primeiro_nome
@@ -252,7 +252,7 @@ const GerenciarTab: React.FC = () => {
             console.log('📤 Dados para atualização:', updateData);
 
             // Fazer chamada real para a API
-            await api.put(`/apontamentos/${currentRecordForEdit.id}`, updateData);
+            await api.put(`/desenvolvimento/apontamentos/${currentRecordForEdit.id}/editar`, updateData);
 
             // Atualizar estado local
             setRegistros(prev =>

@@ -54,21 +54,33 @@ if logger.handlers is None:
 class ApontamentoCreate(BaseModel):
     """Modelo para criação de apontamentos com todos os campos necessários"""
     numero_os: str
-    cliente: str
-    equipamento: str
-    tipo_maquina: str
-    tipo_atividade: str
-    descricao_atividade: str
-    data_inicio: date
-    hora_inicio: str
-    data_fim: Optional[date] = None
+    cliente: Optional[str] = None
+    equipamento: Optional[str] = None
+    tipo_maquina: Optional[str] = None
+    tipo_atividade: Optional[str] = None
+    descricao_atividade: Optional[str] = None
+    categoria_maquina: Optional[str] = None
+    subcategorias_maquina: Optional[str] = None
+    data_inicio: Optional[str] = None  # Aceitar como string
+    hora_inicio: Optional[str] = None
+    data_fim: Optional[str] = None  # Aceitar como string
     hora_fim: Optional[str] = None
     observacao: Optional[str] = None
+    observacao_geral: Optional[str] = None  # Campo adicional do frontend
     resultado_global: Optional[str] = None
     observacao_resultado: Optional[str] = None
     status_os: Optional[str] = None
     retrabalho: Optional[bool] = False
     causa_retrabalho: Optional[str] = None
+    # Campos adicionais que o frontend envia
+    usuario_id: Optional[int] = None
+    departamento: Optional[str] = None
+    setor: Optional[str] = None
+    testes_selecionados: Optional[list] = []
+    testes_exclusivos_selecionados: Optional[list] = []
+    tipo_salvamento: Optional[str] = None
+    supervisor_config: Optional[dict] = None
+    pendencia_origem_id: Optional[int] = None
 
 class ProgramacaoCreate(BaseModel):
     """Modelo para criação de programações de atividades"""
@@ -83,7 +95,10 @@ class ProgramacaoCreate(BaseModel):
 
 class PendenciaResolve(BaseModel):
     """Modelo para resolução de pendências"""
-    observacao_resolucao: str
+    observacao_resolucao: Optional[str] = None
+    solucao_aplicada: Optional[str] = None
+    observacoes_fechamento: Optional[str] = None
+    status: Optional[str] = None
 
 # =============================================================================
 # ENDPOINTS DE SETORES E CONFIGURAÇÃO
@@ -522,25 +537,45 @@ async def criar_apontamento(
         }).fetchone()
 
         # Combinar data e hora para datetime
-        data_hora_inicio = datetime.combine(apontamento.data_inicio, datetime.strptime(apontamento.hora_inicio, "%H:%M").time())
+        from datetime import datetime, date
+
+        # Converter string para date se necessário
+        if isinstance(apontamento.data_inicio, str):
+            data_inicio = datetime.strptime(apontamento.data_inicio, "%Y-%m-%d").date()
+        else:
+            data_inicio = apontamento.data_inicio
+
+        data_hora_inicio = datetime.combine(data_inicio, datetime.strptime(apontamento.hora_inicio, "%H:%M").time())
         data_hora_fim = None
+
         if apontamento.data_fim and apontamento.hora_fim:
-            data_hora_fim = datetime.combine(apontamento.data_fim, datetime.strptime(apontamento.hora_fim, "%H:%M").time())
+            # Converter string para date se necessário
+            if isinstance(apontamento.data_fim, str):
+                data_fim = datetime.strptime(apontamento.data_fim, "%Y-%m-%d").date()
+            else:
+                data_fim = apontamento.data_fim
+            data_hora_fim = datetime.combine(data_fim, datetime.strptime(apontamento.hora_fim, "%H:%M").time())
 
         novo_apontamento = ApontamentoDetalhado(
             id_os=ordem_servico.id,
             id_usuario=current_user.id,
-            id_setor=6,  # ID do setor MECANICA DIA
+            id_setor=current_user.id_setor if hasattr(current_user, 'id_setor') else 6,
             data_hora_inicio=data_hora_inicio,
             data_hora_fim=data_hora_fim,
             status_apontamento=apontamento.status_os or "FINALIZADO",
             foi_retrabalho=apontamento.retrabalho or False,
-            observacao_os=apontamento.observacao or "",
-            observacoes_gerais=apontamento.observacao_resultado or "",
+            observacao_os=apontamento.observacao or apontamento.observacao_geral or "",
+            observacoes_gerais=apontamento.observacao_geral or apontamento.observacao_resultado or "",
             resultado_global=apontamento.resultado_global or "APROVADO",
             criado_por=current_user.id,
             criado_por_email=current_user.email,
-            setor=current_user.setor or "MECANICA DIA"
+            setor=current_user.setor or "MECANICA DIA",
+            # Campos essenciais do apontamento
+            tipo_maquina=apontamento.tipo_maquina,
+            tipo_atividade=apontamento.tipo_atividade,
+            descricao_atividade=apontamento.descricao_atividade,
+            categoria_maquina=apontamento.categoria_maquina,
+            subcategorias_maquina=apontamento.subcategorias_maquina
         )
 
         db.add(novo_apontamento)
@@ -625,6 +660,124 @@ async def deletar_minhas_os(
         db.rollback()
         print(f"Erro ao deletar apontamentos: {e}")
         raise HTTPException(status_code=500, detail="Erro ao deletar apontamentos")
+
+@router.put("/apontamentos/{apontamento_id}/aprovar", operation_id="dev_put_apontamento_aprovar")
+async def aprovar_apontamento(
+    apontamento_id: int,
+    dados: dict,  # {"aprovado_supervisor": true, "data_aprovacao_supervisor": "...", "supervisor_aprovacao": "..."}
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Aprovar um apontamento específico.
+    Apenas supervisores, gestão e admins podem aprovar apontamentos.
+    """
+    try:
+        # Verificar privilégios
+        if current_user.privilege_level not in ["SUPERVISOR", "GESTAO", "ADMIN"]:
+            raise HTTPException(status_code=403, detail="Acesso negado: apenas supervisores, gestão e admins podem aprovar apontamentos")
+
+        # Buscar apontamento
+        apontamento = db.query(ApontamentoDetalhado).filter(
+            ApontamentoDetalhado.id == apontamento_id
+        ).first()
+
+        if not apontamento:
+            raise HTTPException(status_code=404, detail="Apontamento não encontrado")
+
+        # Verificar se o supervisor pode aprovar este apontamento (mesmo setor)
+        if current_user.privilege_level == "SUPERVISOR":
+            if apontamento.id_setor != current_user.id_setor:
+                raise HTTPException(status_code=403, detail="Supervisores só podem aprovar apontamentos do seu setor")
+
+        # Atualizar campos de aprovação
+        apontamento.aprovado_supervisor = True
+        apontamento.data_aprovacao_supervisor = datetime.now()
+        apontamento.supervisor_aprovacao = current_user.nome_completo
+
+        # Se havia observações de aprovação, adicionar
+        if dados.get('observacoes_aprovacao'):
+            if apontamento.observacoes_gerais:
+                apontamento.observacoes_gerais += f"\n[APROVAÇÃO] {dados['observacoes_aprovacao']}"
+            else:
+                apontamento.observacoes_gerais = f"[APROVAÇÃO] {dados['observacoes_aprovacao']}"
+
+        db.commit()
+        db.refresh(apontamento)
+
+        return {
+            "message": "Apontamento aprovado com sucesso",
+            "apontamento_id": apontamento_id,
+            "aprovado_por": current_user.nome_completo,
+            "data_aprovacao": apontamento.data_aprovacao_supervisor
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erro ao aprovar apontamento: {str(e)}")
+
+
+@router.put("/apontamentos/{apontamento_id}/rejeitar", operation_id="dev_put_apontamento_rejeitar")
+async def rejeitar_apontamento(
+    apontamento_id: int,
+    dados: dict,  # {"motivo_rejeicao": "...", "supervisor_aprovacao": "..."}
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Rejeitar um apontamento específico.
+    Apenas supervisores, gestão e admins podem rejeitar apontamentos.
+    """
+    try:
+        # Verificar privilégios
+        if current_user.privilege_level not in ["SUPERVISOR", "GESTAO", "ADMIN"]:
+            raise HTTPException(status_code=403, detail="Acesso negado: apenas supervisores, gestão e admins podem rejeitar apontamentos")
+
+        # Buscar apontamento
+        apontamento = db.query(ApontamentoDetalhado).filter(
+            ApontamentoDetalhado.id == apontamento_id
+        ).first()
+
+        if not apontamento:
+            raise HTTPException(status_code=404, detail="Apontamento não encontrado")
+
+        # Verificar se o supervisor pode rejeitar este apontamento (mesmo setor)
+        if current_user.privilege_level == "SUPERVISOR":
+            if apontamento.id_setor != current_user.id_setor:
+                raise HTTPException(status_code=403, detail="Supervisores só podem rejeitar apontamentos do seu setor")
+
+        # Atualizar campos de rejeição
+        apontamento.aprovado_supervisor = False
+        apontamento.data_aprovacao_supervisor = datetime.now()
+        apontamento.supervisor_aprovacao = current_user.nome_completo
+        apontamento.status_apontamento = "REJEITADO"
+
+        # Adicionar motivo da rejeição às observações
+        motivo = dados.get('motivo_rejeicao', 'Rejeitado pelo supervisor')
+        if apontamento.observacoes_gerais:
+            apontamento.observacoes_gerais += f"\n[REJEIÇÃO] {motivo}"
+        else:
+            apontamento.observacoes_gerais = f"[REJEIÇÃO] {motivo}"
+
+        db.commit()
+        db.refresh(apontamento)
+
+        return {
+            "message": "Apontamento rejeitado com sucesso",
+            "apontamento_id": apontamento_id,
+            "rejeitado_por": current_user.nome_completo,
+            "motivo": motivo,
+            "data_rejeicao": apontamento.data_aprovacao_supervisor
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erro ao rejeitar apontamento: {str(e)}")
+
 
 @router.patch("/apontamentos/{apontamento_id}/finalizar", operation_id="dev_patch_apontamento_finalizar")
 async def finalizar_apontamento(
@@ -758,6 +911,102 @@ async def finalizar_apontamento(
         db.rollback()
         print(f"Erro ao finalizar apontamento: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao finalizar apontamento: {str(e)}")
+
+
+@router.put("/apontamentos/{apontamento_id}/editar", operation_id="dev_put_apontamento_editar")
+async def editar_apontamento(
+    apontamento_id: int,
+    dados: dict,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Editar um apontamento específico.
+    Apenas o próprio usuário, supervisores do setor, gestão e admins podem editar.
+    Apontamentos aprovados não podem ser editados.
+    """
+    try:
+        # Buscar apontamento
+        apontamento = db.query(ApontamentoDetalhado).filter(
+            ApontamentoDetalhado.id == apontamento_id
+        ).first()
+
+        if not apontamento:
+            raise HTTPException(status_code=404, detail="Apontamento não encontrado")
+
+        # Verificar se o apontamento já foi aprovado
+        if apontamento.aprovado_supervisor:
+            raise HTTPException(status_code=403, detail="Apontamentos aprovados não podem ser editados")
+
+        # Verificar privilégios de edição
+        pode_editar = False
+
+        # Próprio usuário pode editar
+        if apontamento.id_usuario == current_user.id:
+            pode_editar = True
+        # Supervisor do mesmo setor pode editar
+        elif current_user.privilege_level == "SUPERVISOR" and apontamento.id_setor == current_user.id_setor:
+            pode_editar = True
+        # Gestão e Admin podem editar qualquer apontamento
+        elif current_user.privilege_level in ["GESTAO", "ADMIN"]:
+            pode_editar = True
+
+        if not pode_editar:
+            raise HTTPException(status_code=403, detail="Você não tem permissão para editar este apontamento")
+
+        # Campos que podem ser editados
+        campos_editaveis = [
+            'data_hora_inicio', 'data_hora_fim', 'tipo_atividade', 'descricao_atividade',
+            'observacao_os', 'observacoes_gerais', 'foi_retrabalho', 'causa_retrabalho',
+            'servico_de_campo', 'horas_orcadas'
+        ]
+
+        # Atualizar campos permitidos
+        for campo in campos_editaveis:
+            if campo in dados:
+                if campo in ['data_hora_inicio', 'data_hora_fim']:
+                    # Converter string para datetime se necessário
+                    if isinstance(dados[campo], str):
+                        try:
+                            setattr(apontamento, campo, datetime.fromisoformat(dados[campo].replace('Z', '+00:00')))
+                        except:
+                            # Tentar formato brasileiro
+                            setattr(apontamento, campo, datetime.strptime(dados[campo], '%d/%m/%Y %H:%M'))
+                    else:
+                        setattr(apontamento, campo, dados[campo])
+                else:
+                    setattr(apontamento, campo, dados[campo])
+
+        # Recalcular tempo trabalhado se as datas foram alteradas
+        if apontamento.data_hora_inicio and apontamento.data_hora_fim:
+            delta = apontamento.data_hora_fim - apontamento.data_hora_inicio
+            apontamento.tempo_trabalhado = delta.total_seconds() / 3600
+
+        # Adicionar log de edição
+        timestamp = datetime.now().strftime('%d/%m/%Y %H:%M')
+        log_edicao = f"\n[EDITADO] Por {current_user.nome_completo} em {timestamp}"
+
+        if apontamento.observacoes_gerais:
+            apontamento.observacoes_gerais += log_edicao
+        else:
+            apontamento.observacoes_gerais = log_edicao
+
+        db.commit()
+        db.refresh(apontamento)
+
+        return {
+            "message": "Apontamento editado com sucesso",
+            "apontamento_id": apontamento_id,
+            "editado_por": current_user.nome_completo,
+            "data_edicao": timestamp
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erro ao editar apontamento: {str(e)}")
+
 
 # =============================================================================
 # ENDPOINTS PARA FORMULÁRIO DE APONTAMENTO
@@ -1503,8 +1752,13 @@ async def get_detalhes_os_formulario(
                                     :status, datetime('now'), :prioridade, :observacoes)
                         """)
 
+                        # Remover zeros à esquerda do número da OS
+                        os_numero_limpo = os_data.get('OS', numero_os)
+                        if isinstance(os_numero_limpo, str) and os_numero_limpo.startswith('000'):
+                            os_numero_limpo = os_numero_limpo.lstrip('0') or '0'  # Remove zeros à esquerda, mas mantém pelo menos um zero se for só zeros
+
                         db.execute(insert_sql, {
-                            "os_numero": os_data.get('OS', numero_os),
+                            "os_numero": os_numero_limpo,
                             "id_cliente": cliente_id,
                             "id_equipamento": equipamento_id,
                             "status": os_data.get('STATUS DA OS', 'COLETADA VIA SCRAPING'),
@@ -1891,14 +2145,14 @@ async def resolver_pendencia(
             tempo_aberto_horas = round(delta.total_seconds() / 3600, 2)  # Converter para horas
 
         # Atualizar pendência conforme especificação
-        pendencia.status = 'FECHADA'
+        pendencia.status = dados.status or 'FECHADA'
         pendencia.data_fechamento = datetime.now()
-        pendencia.responsavel_fechamento_id = current_user.id
-        pendencia.observacoes_fechamento = dados.observacao_resolucao
+        pendencia.id_responsavel_fechamento = current_user.id
         pendencia.tempo_aberto_horas = tempo_aberto_horas
 
-        # Adicionar solucao_aplicada (campo existe no modelo)
-        pendencia.solucao_aplicada = dados.observacao_resolucao
+        # Usar os campos corretos enviados pelo frontend
+        pendencia.observacoes_fechamento = dados.observacoes_fechamento or dados.observacao_resolucao or 'Pendência resolvida'
+        pendencia.solucao_aplicada = dados.solucao_aplicada or dados.observacao_resolucao or 'Solução aplicada via apontamento'
 
         db.commit()
 

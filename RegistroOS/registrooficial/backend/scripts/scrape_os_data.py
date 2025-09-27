@@ -499,7 +499,13 @@ def scrape_os_details_data_only(driver, wait):
 
                     # Lógica para campos redundantes ou especiais
                     if label == "OS":
-                        current_os_data["NÚMERO DA OS"] = value
+                        # Remover zeros à esquerda do número da OS
+                        os_numero_limpo = value.lstrip('0') if value and isinstance(value, str) else value
+                        if not os_numero_limpo:  # Se ficou vazio após remover zeros, manter pelo menos um zero
+                            os_numero_limpo = '0'
+                        current_os_data["NÚMERO DA OS"] = os_numero_limpo
+                        # Também atualizar o campo OS com o número limpo
+                        current_os_data["OS"] = os_numero_limpo
                     elif label == "CLIENTE":
                         current_os_data["NOME CLIENTE"] = value
                         current_os_data["CLIENTE"] = value

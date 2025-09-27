@@ -1,8 +1,10 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import func
+from typing import Optional
 from config.database_config import engine, get_db
-from app.database_models import Base, Usuario, ApontamentoDetalhado, OrdemServico
+from app.database_models import Base, Usuario, ApontamentoDetalhado, OrdemServico, Cliente, Equipamento
 from routes.auth import get_current_user
 
 # Criar aplicação FastAPI
@@ -120,15 +122,22 @@ async def get_programacoes_global():
 
 @app.get("/api/apontamentos-detalhados")
 async def get_apontamentos_detalhados_global(
+    setor: Optional[str] = Query(None),
+    departamento: Optional[str] = Query(None),
+    usuario_id: Optional[int] = Query(None),
+    data_inicio: Optional[str] = Query(None),
+    data_fim: Optional[str] = Query(None),
+    nome_tecnico: Optional[str] = Query(None),
     current_user: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    ENDPOINT GLOBAL: Apontamentos detalhados para Dashboard
-    Redireciona para o endpoint correto em desenvolvimento.py
+    ENDPOINT GLOBAL: Apontamentos detalhados para Dashboard e Gerenciar Registros
+    Aceita parâmetros de query para filtragem avançada
     """
     try:
         print(f"🔍 Buscando apontamentos detalhados para usuário: {current_user.nome_completo} ({current_user.privilege_level})")
+        print(f"📋 Parâmetros recebidos: setor={setor}, departamento={departamento}, usuario_id={usuario_id}, data_inicio={data_inicio}, data_fim={data_fim}, nome_tecnico={nome_tecnico}")
 
         # Buscar apontamentos detalhados do banco de dados
         query = db.query(ApontamentoDetalhado)
@@ -136,19 +145,44 @@ async def get_apontamentos_detalhados_global(
         # Aplicar filtros baseados no privilégio do usuário
         try:
             privilege_level = getattr(current_user, 'privilege_level', 'USER')
-            if privilege_level == 'USER':
+
+            # Aplicar filtros de parâmetros de query primeiro
+            if usuario_id:
+                query = query.filter(ApontamentoDetalhado.id_usuario == usuario_id)
+            elif privilege_level == 'USER':
+                # Usuários normais só veem seus próprios apontamentos
                 query = query.filter(ApontamentoDetalhado.id_usuario == current_user.id)
             elif privilege_level == 'SUPERVISOR':
-                # Supervisores veem apontamentos do seu setor usando id_setor
-                user_setor_id = getattr(current_user, 'id_setor', None)
-                if user_setor_id:
-                    query = query.filter(ApontamentoDetalhado.id_setor == user_setor_id)
+                # Supervisores veem apontamentos do seu setor
+                if setor:
+                    # Se setor foi especificado nos parâmetros, usar ele
+                    user_setor_id = getattr(current_user, 'id_setor', None)
+                    if user_setor_id:
+                        query = query.filter(ApontamentoDetalhado.id_setor == user_setor_id)
                 else:
-                    # Fallback para campo setor string se id_setor não existir
-                    user_setor = getattr(current_user, 'setor', None)
-                    if user_setor:
-                        query = query.filter(ApontamentoDetalhado.setor == user_setor)
-            # ADMIN vê todos os apontamentos
+                    # Usar setor do supervisor
+                    user_setor_id = getattr(current_user, 'id_setor', None)
+                    if user_setor_id:
+                        query = query.filter(ApontamentoDetalhado.id_setor == user_setor_id)
+            # ADMIN e GESTAO veem todos os apontamentos (sem filtro adicional)
+
+            # Aplicar filtros de data se especificados
+            if data_inicio:
+                from datetime import datetime
+                try:
+                    data_inicio_dt = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+                    query = query.filter(func.date(ApontamentoDetalhado.data_hora_inicio) >= data_inicio_dt)
+                except ValueError:
+                    pass
+
+            if data_fim:
+                from datetime import datetime
+                try:
+                    data_fim_dt = datetime.strptime(data_fim, '%Y-%m-%d').date()
+                    query = query.filter(func.date(ApontamentoDetalhado.data_hora_inicio) <= data_fim_dt)
+                except ValueError:
+                    pass
+
         except Exception as e:
             print(f"⚠️ Erro ao aplicar filtros de usuário: {e}")
             # Em caso de erro, mostrar apenas apontamentos do usuário atual
@@ -166,22 +200,69 @@ async def get_apontamentos_detalhados_global(
                 os = db.query(OrdemServico).filter(OrdemServico.id == apt.id_os).first()
                 numero_os = os.os_numero if os else "N/A"
 
-                # Buscar usuário
+                # Buscar cliente através da relação
+                cliente_nome = "N/A"
+                try:
+                    if os and hasattr(os, 'id_cliente'):
+                        id_cliente = getattr(os, 'id_cliente', None)
+                        if id_cliente:
+                            cliente = db.query(Cliente).filter(Cliente.id == id_cliente).first()
+                            if cliente:
+                                cliente_nome = cliente.razao_social or cliente.nome_fantasia or "Cliente não informado"
+                except Exception as e:
+                    cliente_nome = "N/A"
+
+                # Buscar equipamento através da relação
+                equipamento_descricao = "N/A"
+                try:
+                    if os and hasattr(os, 'id_equipamento'):
+                        id_equipamento = getattr(os, 'id_equipamento', None)
+                        if id_equipamento:
+                            equipamento = db.query(Equipamento).filter(Equipamento.id == id_equipamento).first()
+                            if equipamento:
+                                equipamento_descricao = equipamento.descricao or "Equipamento não informado"
+                except Exception as e:
+                    equipamento_descricao = "N/A"
+
+                # Buscar dados diretamente do apontamento
+                tipo_maquina_nome = getattr(apt, 'tipo_maquina', None) or "N/A"
+                categoria_maquina = getattr(apt, 'categoria_maquina', None) or "N/A"
+                subcategorias_maquina = getattr(apt, 'subcategorias_maquina', None) or "N/A"
+
+                # Buscar descrição da máquina da OS
+                descricao_maquina = "N/A"
+                try:
+                    if os and hasattr(os, 'descricao_maquina'):
+                        descricao_maquina = getattr(os, 'descricao_maquina', None) or "N/A"
+                except Exception as e:
+                    descricao_maquina = "N/A"
+
+                # Buscar usuário e departamento
                 usuario = db.query(Usuario).filter(Usuario.id == apt.id_usuario).first()
                 nome_usuario = usuario.nome_completo if usuario else "N/A"
+                departamento_usuario = usuario.departamento if usuario else "N/A"
 
                 # Converter datas de forma segura
                 data_inicio = None
                 data_fim = None
-                try:
-                    data_inicio = str(apt.data_hora_inicio) if apt.data_hora_inicio is not None else None
-                except:
-                    data_inicio = None
+                hora_inicio = None
+                hora_fim = None
 
                 try:
-                    data_fim = str(apt.data_hora_fim) if apt.data_hora_fim is not None else None
+                    if apt.data_hora_inicio is not None:
+                        data_inicio = str(apt.data_hora_inicio)
+                        hora_inicio = apt.data_hora_inicio.strftime("%H:%M")
+                except:
+                    data_inicio = None
+                    hora_inicio = None
+
+                try:
+                    if apt.data_hora_fim is not None:
+                        data_fim = str(apt.data_hora_fim)
+                        hora_fim = apt.data_hora_fim.strftime("%H:%M")
                 except:
                     data_fim = None
+                    hora_fim = None
 
                 # Calcular tempo trabalhado se houver data de início e fim
                 tempo_trabalhado = 0.0
@@ -192,32 +273,47 @@ async def get_apontamentos_detalhados_global(
                 except:
                     tempo_trabalhado = 0.0
 
-                # Obter tipo_atividade de forma segura
+                # Obter tipo_atividade e descricao_atividade de forma segura
                 tipo_atividade_str = "N/A"
+                descricao_atividade_str = "N/A"
                 try:
                     tipo_atividade_value = getattr(apt, 'tipo_atividade', None)
                     if tipo_atividade_value is not None:
                         tipo_atividade_str = str(tipo_atividade_value)
-                except:
+
+                    descricao_atividade_value = getattr(apt, 'descricao_atividade', None)
+                    if descricao_atividade_value is not None:
+                        descricao_atividade_str = str(descricao_atividade_value)
+                except Exception as e:
                     tipo_atividade_str = "N/A"
+                    descricao_atividade_str = "N/A"
 
                 result.append({
                     "id": apt.id,
                     "numero_os": numero_os,
                     "data_inicio": data_inicio,
                     "data_fim": data_fim,
+                    "hora_inicio": hora_inicio,
+                    "hora_fim": hora_fim,
                     "data_hora_inicio": data_inicio,  # Alias para compatibilidade
                     "status": getattr(apt, 'status_apontamento', 'N/A') or "N/A",
                     "observacoes": getattr(apt, 'observacao_os', '') or "",
                     "setor": getattr(apt, 'setor', 'N/A') or "N/A",
-                    "departamento": "N/A",  # Campo não existe na tabela atual
+                    "departamento": departamento_usuario,
                     "foi_retrabalho": getattr(apt, 'foi_retrabalho', False) or False,
                     "usuario": nome_usuario,
                     "nome_tecnico": nome_usuario,  # Alias para compatibilidade
                     "tipo_atividade": tipo_atividade_str,
+                    "descricao_atividade": descricao_atividade_str,
                     "tempo_trabalhado": tempo_trabalhado,
                     "aprovado_supervisor": bool(getattr(apt, 'aprovado_supervisor', False)),
-                    "cliente": "N/A"  # Campo não disponível nos dados atuais
+                    "cliente": cliente_nome,
+                    # Novos campos da OS
+                    "equipamento": equipamento_descricao,
+                    "tipo_maquina": tipo_maquina_nome,
+                    "categoria_maquina": categoria_maquina,
+                    "subcategorias_maquina": subcategorias_maquina,
+                    "descricao_maquina": descricao_maquina
                 })
 
             except Exception as e:

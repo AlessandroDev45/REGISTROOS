@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Dict, Any, Optional
@@ -93,7 +93,13 @@ async def save_apontamento(
             resultado_global=apontamento_data.get("resultado_global"),
             criado_por=current_user.id,
             criado_por_email=current_user.email,
-            setor=current_user.setor if hasattr(current_user, 'setor') else None
+            setor=current_user.setor if hasattr(current_user, 'setor') else None,
+            # Campos essenciais do apontamento
+            tipo_maquina=apontamento_data.get("tipo_maquina") or apontamento_data.get("selMaq"),
+            tipo_atividade=apontamento_data.get("tipo_atividade") or apontamento_data.get("selAtiv"),
+            descricao_atividade=apontamento_data.get("descricao_atividade") or apontamento_data.get("selDescAtiv"),
+            categoria_maquina=apontamento_data.get("categoria_maquina") or apontamento_data.get("categoria") or apontamento_data.get("categoriaSelecionada"),
+            subcategorias_maquina=apontamento_data.get("subcategorias_maquina") or apontamento_data.get("subcategoria") or apontamento_data.get("subcategoriasSelecionadas")
         )
 
         db.add(apontamento)
@@ -179,15 +185,27 @@ async def save_apontamento(
 
 @router.post("/save-apontamento-with-pendencia")
 async def save_apontamento_with_pendencia(
-    apontamento_data: Dict[str, Any],
+    request: Request,
     current_user: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Save apontamento and create pendencia"""
     try:
+        # Parse JSON data from request
+        apontamento_data = await request.json()
+
+        print(f"[DEBUG] save_apontamento_with_pendencia - Iniciando para usuário: {current_user.nome_completo}")
+        print(f"[DEBUG] save_apontamento_with_pendencia - Dados recebidos: {apontamento_data}")
+
+        # Log dos dados recebidos
+        for key, value in apontamento_data.items():
+            print(f"[DEBUG] Dados - {key}: {value}")
+
+        print(f"[DEBUG] save_apontamento_with_pendencia - Usuário atual: ID={current_user.id}, Nome={current_user.nome_completo}")
         # Validate OS exists or create if not found
-        os_numero = apontamento_data.get("inpNumOS")
-        if not os_numero:
+        os_numero = apontamento_data.get("numero_os")
+        print(f"[DEBUG] os_numero extraído: '{os_numero}', tipo: {type(os_numero)}, bool: {bool(os_numero)}")
+        if not os_numero or str(os_numero).strip() == "":
             raise HTTPException(status_code=400, detail="Número da OS é obrigatório")
 
         ordem_servico = db.query(OrdemServico).filter(OrdemServico.os_numero == os_numero).first()
@@ -224,7 +242,13 @@ async def save_apontamento_with_pendencia(
             resultado_global=apontamento_data.get("resultado_global"),
             criado_por=current_user.id,
             criado_por_email=current_user.email,
-            setor=current_user.setor if hasattr(current_user, 'setor') else None
+            setor=current_user.setor if hasattr(current_user, 'setor') else None,
+            # Campos essenciais do apontamento
+            tipo_maquina=apontamento_data.get("tipo_maquina") or apontamento_data.get("selMaq"),
+            tipo_atividade=apontamento_data.get("tipo_atividade") or apontamento_data.get("selAtiv"),
+            descricao_atividade=apontamento_data.get("descricao_atividade") or apontamento_data.get("selDescAtiv"),
+            categoria_maquina=apontamento_data.get("categoria_maquina") or apontamento_data.get("categoria") or apontamento_data.get("categoriaSelecionada"),
+            subcategorias_maquina=apontamento_data.get("subcategorias_maquina") or apontamento_data.get("subcategoria") or apontamento_data.get("subcategoriasSelecionadas")
         )
 
         db.add(apontamento)
@@ -292,17 +316,29 @@ async def save_apontamento_with_pendencia(
         pendencia_descricao = apontamento_data.get("pendencia_descricao", "Pendência criada a partir do apontamento")
         pendencia_prioridade = apontamento_data.get("pendencia_prioridade", "NORMAL")
 
+        # Usar dados do apontamento para preencher a pendência
+        cliente_nome = apontamento_data.get("cliente") or ordem_servico.cliente or "Cliente Não Informado"
+        tipo_maquina = apontamento_data.get("tipo_maquina") or ordem_servico.tipo_maquina or "Tipo Não Informado"
+        equipamento = apontamento_data.get("equipamento") or ordem_servico.descricao_maquina or "Equipamento Não Informado"
+
+        # Garantir que todos os campos obrigatórios estejam preenchidos
+        agora = dt.now()
+
         pendencia = Pendencia(
             numero_os=os_numero,
-            cliente="Cliente não informado",  # Será preenchido via relacionamento depois
-            tipo_maquina="Tipo não informado",  # Será preenchido via relacionamento depois
-            descricao_maquina=ordem_servico.descricao_maquina or "Equipamento não informado",
-            descricao_pendencia=pendencia_descricao,
-            prioridade=pendencia_prioridade,
+            cliente=cliente_nome,
+            data_inicio=agora,
             id_responsavel_inicio=current_user.id,
-            id_apontamento_origem=apontamento.id,
+            tipo_maquina=tipo_maquina,
+            descricao_maquina=equipamento,
+            descricao_pendencia=pendencia_descricao,
             status='ABERTA',
-            data_inicio=dt.now()  # Campo obrigatório
+            prioridade=pendencia_prioridade or 'NORMAL',
+            id_apontamento_origem=apontamento.id,
+            data_criacao=agora,
+            data_ultima_atualizacao=agora,
+            setor_origem=current_user.setor,
+            departamento_origem=current_user.departamento
         )
 
         db.add(pendencia)
@@ -357,6 +393,10 @@ async def save_apontamento_with_pendencia(
         return response_data
 
     except Exception as e:
+        print(f"[ERROR] save_apontamento_with_pendencia - Erro capturado: {str(e)}")
+        print(f"[ERROR] save_apontamento_with_pendencia - Tipo do erro: {type(e)}")
+        import traceback
+        print(f"[ERROR] save_apontamento_with_pendencia - Traceback: {traceback.format_exc()}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erro ao salvar apontamento: {str(e)}")
 

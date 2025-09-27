@@ -254,7 +254,9 @@ const MinhasOsTab: React.FC = () => {
         }
 
         try {
-            await api.delete(`/apontamentos/${lastApontamento.id}`);
+            await api.delete('/desenvolvimento/minhas-os', {
+                data: [lastApontamento.id]
+            });
             setApontamentos(prev => prev.filter(apt => apt.id !== lastApontamento.id));
             alert('Apontamento excluído com sucesso!');
         } catch (err: any) {
