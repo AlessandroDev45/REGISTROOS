@@ -28,11 +28,19 @@ class AtribuicaoProgramacaoRequest(BaseModel):
     departamento_destino: str
     data_inicio: str
     data_fim: str
-    prioridade: str = "NORMAL"
     observacoes: Optional[str] = None
+    prioridade: Optional[str] = "NORMAL"
 
 class StatusUpdateRequest(BaseModel):
     status: str
+
+class ProgramacaoEditRequest(BaseModel):
+    inicio_previsto: Optional[datetime] = None
+    fim_previsto: Optional[datetime] = None
+    responsavel_id: Optional[int] = None
+    id_setor: Optional[int] = None
+    observacoes: Optional[str] = None
+    prioridade: Optional[str] = None
 
 from app.database_models import (
     Usuario, OrdemServico, ApontamentoDetalhado, Programacao,
@@ -58,6 +66,7 @@ class ProgramacaoPCPCreate(BaseModel):
     id_setor: Optional[int] = None
     responsavel_id: Optional[int] = None
     observacoes: Optional[str] = None
+    prioridade: Optional[str] = "NORMAL"  # Campo prioridade
     status: Optional[str] = "PROGRAMADA"
 
 class FiltragemPCP(BaseModel):
@@ -367,7 +376,15 @@ async def create_programacao_pcp(
         # Buscar o setor para obter o departamento
         setor = db.query(Setor).filter(Setor.id == programacao_data.id_setor).first()
         
-        # Criar a programação
+        # Preparar histórico inicial
+        timestamp = datetime.now().strftime('%d/%m/%Y %H:%M')
+        historico_inicial = f"[CRIAÇÃO] Programação criada por {current_user.nome_completo} em {timestamp}"
+        if programacao_data.responsavel_id:
+            responsavel = db.query(Usuario).filter(Usuario.id == programacao_data.responsavel_id).first()
+            if responsavel:
+                historico_inicial += f"\n[ATRIBUIÇÃO] Atribuída para {responsavel.nome_completo} em {timestamp}"
+
+        # Criar a programação já ENVIADA ao setor (não precisa de envio separado)
         nova_programacao = Programacao(
             id_ordem_servico=id_ordem_servico,  # Usar o ID correto
             id_setor=programacao_data.id_setor,
@@ -375,18 +392,27 @@ async def create_programacao_pcp(
             inicio_previsto=programacao_data.inicio_previsto,
             fim_previsto=programacao_data.fim_previsto,
             observacoes=programacao_data.observacoes,
-            status=programacao_data.status or "PROGRAMADA",
-            criado_por_id=current_user.id
+            historico=historico_inicial,
+            status="ENVIADA",  # Já vai direto como ENVIADA
+            criado_por_id=current_user.id,
+            created_at=datetime.now(),
+            updated_at=datetime.now()
         )
         
         db.add(nova_programacao)
         
-        # Atualizar a ordem de serviço com setor e departamento
+        # Atualizar a ordem de serviço com setor, departamento e prioridade
+        update_data = {}
         if setor:
-            db.query(OrdemServico).filter(OrdemServico.id == ordem_servico.id).update({
-                'id_setor': programacao_data.id_setor,
-                'id_departamento': setor.id_departamento
-            })
+            update_data['id_setor'] = programacao_data.id_setor
+            update_data['id_departamento'] = setor.id_departamento
+
+        # Atualizar prioridade se fornecida
+        if programacao_data.prioridade:
+            update_data['prioridade'] = programacao_data.prioridade
+
+        if update_data:
+            db.query(OrdemServico).filter(OrdemServico.id == ordem_servico.id).update(update_data)
         
         db.commit()
         db.refresh(nova_programacao)
@@ -679,18 +705,48 @@ async def atribuir_programacao(
                 detail="Setor não encontrado"
             )
 
-        # Criar nova programação
-        nova_programacao = Programacao(
-            responsavel_id=dados.responsavel_id,
-            id_setor=setor.id,
-            inicio_previsto=datetime.fromisoformat(dados.data_inicio.replace('Z', '+00:00')),
-            fim_previsto=datetime.fromisoformat(dados.data_fim.replace('Z', '+00:00')),
-            prioridade=dados.prioridade,
-            observacoes=dados.observacoes,
-            status="PROGRAMADA",
-            criado_por_id=current_user.id,
-            data_criacao=datetime.now()
-        )
+        # Preparar histórico de atribuição
+        timestamp = datetime.now().strftime('%d/%m/%Y %H:%M')
+        historico_atribuicao = f"[CRIAÇÃO] Programação criada e atribuída por {current_user.nome_completo} em {timestamp}\n[ATRIBUIÇÃO] Atribuída para {responsavel.nome_completo} no setor {dados.setor_destino} em {timestamp}"
+
+        # Buscar programação existente sem responsável (mais recente)
+        programacao_existente = db.query(Programacao).filter(
+            Programacao.responsavel_id.is_(None),
+            Programacao.status == "ENVIADA"
+        ).order_by(Programacao.id.desc()).first()
+
+        if programacao_existente:
+            # Atualizar programação existente
+            programacao_existente.responsavel_id = dados.responsavel_id
+            programacao_existente.id_setor = setor.id
+            programacao_existente.inicio_previsto = datetime.fromisoformat(dados.data_inicio.replace('Z', '+00:00'))
+            programacao_existente.fim_previsto = datetime.fromisoformat(dados.data_fim.replace('Z', '+00:00'))
+            programacao_existente.observacoes = dados.observacoes
+            programacao_existente.historico = historico_atribuicao
+            programacao_existente.updated_at = datetime.now()
+
+            db.commit()
+            db.refresh(programacao_existente)
+            nova_programacao = programacao_existente
+        else:
+            # Criar nova programação (já ENVIADA) com OS padrão
+            nova_programacao = Programacao(
+                responsavel_id=dados.responsavel_id,
+                id_setor=setor.id,
+                id_ordem_servico=1,  # OS padrão para teste
+                inicio_previsto=datetime.fromisoformat(dados.data_inicio.replace('Z', '+00:00')),
+                fim_previsto=datetime.fromisoformat(dados.data_fim.replace('Z', '+00:00')),
+                observacoes=dados.observacoes,
+                historico=historico_atribuicao,
+                status="ENVIADA",  # Já vai direto como ENVIADA
+                criado_por_id=current_user.id,
+                created_at=datetime.now(),
+                updated_at=datetime.now()
+            )
+
+            db.add(nova_programacao)
+            db.commit()
+            db.refresh(nova_programacao)
 
         db.add(nova_programacao)
         db.commit()
@@ -703,7 +759,6 @@ async def atribuir_programacao(
             "departamento_destino": dados.departamento_destino,
             "data_inicio": nova_programacao.inicio_previsto.isoformat(),
             "data_fim": nova_programacao.fim_previsto.isoformat(),
-            "prioridade": nova_programacao.prioridade,
             "status": nova_programacao.status,
             "message": "Programação atribuída com sucesso"
         }
@@ -760,8 +815,8 @@ async def editar_programacao(
             'id_setor': setor.id,
             'inicio_previsto': datetime.fromisoformat(dados.data_inicio.replace('Z', '+00:00')),
             'fim_previsto': datetime.fromisoformat(dados.data_fim.replace('Z', '+00:00')),
-            'prioridade': dados.prioridade,
-            'observacoes': dados.observacoes
+            'observacoes': dados.observacoes,
+            'updated_at': datetime.now()
         })
 
         db.commit()
@@ -774,9 +829,85 @@ async def editar_programacao(
             "departamento_destino": dados.departamento_destino,
             "data_inicio": programacao.inicio_previsto.isoformat() if programacao is not None and programacao.inicio_previsto is not None else None,
             "data_fim": programacao.fim_previsto.isoformat() if programacao is not None and programacao.fim_previsto is not None else None,
-            "prioridade": programacao.prioridade if programacao else None,
             "status": programacao.status if programacao else None,
             "message": "Programação editada com sucesso"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Erro ao editar programação: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao editar programação: {str(e)}"
+        )
+
+@router.put("/programacoes/{programacao_id}", operation_id="pcp_put_programacao_editar")
+async def editar_programacao(
+    programacao_id: int,
+    programacao_data: ProgramacaoEditRequest,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Editar programação existente"""
+    try:
+        # Verificar permissão
+        if current_user.privilege_level not in ['ADMIN', 'PCP', 'SUPERVISOR']:
+            raise HTTPException(status_code=403, detail="Sem permissão para editar programações")
+
+        # Buscar programação existente
+        programacao = db.query(Programacao).filter(Programacao.id == programacao_id).first()
+        if not programacao:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Programação não encontrada"
+            )
+
+        # Preparar histórico de edição
+        timestamp = datetime.now().strftime('%d/%m/%Y %H:%M')
+        historico_atual = programacao.historico or ""
+        novo_historico = f"{historico_atual}\n[EDIÇÃO] Programação editada por {current_user.nome_completo} em {timestamp}"
+
+        # Atualizar programação apenas com campos fornecidos
+        update_data = {
+            'historico': novo_historico,
+            'updated_at': datetime.now()
+        }
+
+        # Adicionar campos opcionais se fornecidos
+        if programacao_data.inicio_previsto:
+            update_data['inicio_previsto'] = programacao_data.inicio_previsto
+        if programacao_data.fim_previsto:
+            update_data['fim_previsto'] = programacao_data.fim_previsto
+        if programacao_data.observacoes is not None:
+            update_data['observacoes'] = programacao_data.observacoes
+
+        # Atualizar responsável se fornecido
+        if programacao_data.responsavel_id:
+            update_data['responsavel_id'] = programacao_data.responsavel_id
+            responsavel = db.query(Usuario).filter(Usuario.id == programacao_data.responsavel_id).first()
+            if responsavel:
+                novo_historico += f"\n[REATRIBUIÇÃO] Reatribuída para {responsavel.nome_completo} em {timestamp}"
+                update_data['historico'] = novo_historico
+
+        # Atualizar setor se fornecido
+        if programacao_data.id_setor:
+            update_data['id_setor'] = programacao_data.id_setor
+
+        db.query(Programacao).filter(Programacao.id == programacao_id).update(update_data)
+
+        # Atualizar OS se necessário
+        if programacao.id_ordem_servico and programacao_data.prioridade:
+            db.query(OrdemServico).filter(OrdemServico.id == programacao.id_ordem_servico).update({
+                'prioridade': programacao_data.prioridade
+            })
+
+        db.commit()
+
+        return {
+            "id": programacao_id,
+            "message": "Programação editada com sucesso",
+            "updated_at": datetime.now().isoformat()
         }
 
     except HTTPException:
@@ -816,16 +947,28 @@ async def reatribuir_programacao(
         # Salvar responsável anterior para histórico
         responsavel_anterior_id = programacao.responsavel_id
 
+        # Preparar histórico de reatribuição
+        timestamp = datetime.now().strftime('%d/%m/%Y %H:%M')
+        historico_atual = programacao.historico or ""
+        novo_historico = f"{historico_atual}\n[REATRIBUIÇÃO] De ID {responsavel_anterior_id} para {novo_responsavel.nome_completo} em {timestamp}"
+
         # Reatribuir programação
         db.query(Programacao).filter(Programacao.id == programacao_id).update({
             'responsavel_id': dados.responsavel_id,
-            'observacoes': f"{programacao.observacoes or ''}\n[REATRIBUIÇÃO] De ID {responsavel_anterior_id} para {novo_responsavel.nome_completo} em {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            'historico': novo_historico,
+            'updated_at': datetime.now()
         })
+
+        # Commit para salvar as mudanças
+        db.commit()
+
+        # Refresh para obter dados atualizados
+        db.refresh(programacao)
 
         return {
             "id": programacao.id,
             "responsavel_anterior_id": responsavel_anterior_id,
-            "novo_responsavel_id": programacao.responsavel_id,
+            "novo_responsavel_id": dados.responsavel_id,  # Usar o valor novo
             "novo_responsavel_nome": novo_responsavel.nome_completo,
             "data_reatribuicao": datetime.now().isoformat(),
             "status": programacao.status,

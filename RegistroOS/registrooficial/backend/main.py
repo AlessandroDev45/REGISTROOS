@@ -51,7 +51,7 @@ try:
     app.include_router(desenvolvimento_router, prefix="/api/desenvolvimento", tags=["desenvolvimento"])
     app.include_router(os_router, prefix="/api", tags=["os"])
     app.include_router(catalogs_router, prefix="/api", tags=["catalogs"])
-    app.include_router(users_router, prefix="/api", tags=["users"])
+    app.include_router(users_router, prefix="/api/users", tags=["users"])
     app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
     app.include_router(admin_config_router, prefix="/api/admin/config", tags=["admin-config"])
 

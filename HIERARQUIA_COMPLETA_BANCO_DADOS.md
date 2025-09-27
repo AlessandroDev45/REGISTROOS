@@ -515,7 +515,7 @@ GET    /api/desenvolvimento/apontamentos/form     # Dados para formulário
 POST   /api/desenvolvimento/apontamentos/validar  # Validar apontamento
 ```
 
-##### **📋 6.7.3. Meus Apontamentos**
+##### **📋 6.7.3. Meu Dashboard**
 ```
 GET    /api/desenvolvimento/meus-apontamentos     # Apontamentos do usuário
 GET    /api/desenvolvimento/meus-apontamentos/{id} # Detalhes do apontamento

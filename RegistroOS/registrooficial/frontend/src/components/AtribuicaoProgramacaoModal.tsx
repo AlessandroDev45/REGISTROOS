@@ -15,9 +15,9 @@ interface FormData {
     responsavel_id: number | '';  // Colaborador do setor
     data_inicio: string;
     data_fim: string;
-    prioridade: string;
     observacoes: string;
-    // Departamento e setor automáticos do usuário logado
+    setor_destino: string;
+    departamento_destino: string;
 }
 
 interface Usuario {
@@ -52,8 +52,9 @@ const AtribuicaoProgramacaoModal: React.FC<AtribuicaoProgramacaoModalProps> = ({
         responsavel_id: '',
         data_inicio: '',
         data_fim: '',
-        prioridade: 'NORMAL',
-        observacoes: ''
+        observacoes: '',
+        setor_destino: '',
+        departamento_destino: ''
     });
 
     const [usuarios, setUsuarios] = useState<Usuario[]>([]);
@@ -94,16 +95,49 @@ const AtribuicaoProgramacaoModal: React.FC<AtribuicaoProgramacaoModalProps> = ({
 
     const carregarDados = async () => {
         try {
-            // Em desenvolvimento, buscar apenas colaboradores do setor do usuário logado
-            const usuariosRes = await api.get('/api/desenvolvimento/colaboradores');
+            // 1. Buscar dados do usuário logado para setor e departamento
+            const userDataFromStorage = JSON.parse(localStorage.getItem('user') || '{}');
 
+            // 2. Buscar colaboradores do setor
+            const usuariosRes = await api.get('/desenvolvimento/colaboradores');
             setUsuarios(usuariosRes.data || []);
             setUsuariosFiltrados(usuariosRes.data || []);
+
+            // 3. Buscar dados de setores para obter nomes corretos
+            try {
+                const setoresRes = await api.get('/admin/setores');
+                const setores = setoresRes.data || [];
+
+                // Encontrar o setor do usuário logado
+                const setorUsuario = setores.find((s: any) => s.id === userDataFromStorage.id_setor);
+
+                if (setorUsuario) {
+                    setFormData(prev => ({
+                        ...prev,
+                        setor_destino: setorUsuario.nome,
+                        departamento_destino: setorUsuario.departamento
+                    }));
+                    console.log(`✅ Setor definido: ${setorUsuario.nome} - Dept: ${setorUsuario.departamento}`);
+                } else {
+                    // Fallback para primeiro setor disponível
+                    if (setores.length > 0) {
+                        setFormData(prev => ({
+                            ...prev,
+                            setor_destino: setores[0].nome,
+                            departamento_destino: setores[0].departamento
+                        }));
+                        console.log(`⚠️ Usando setor fallback: ${setores[0].nome} - Dept: ${setores[0].departamento}`);
+                    }
+                }
+            } catch (setorError) {
+                console.error('Erro ao buscar setores:', setorError);
+            }
+
         } catch (error) {
             console.error('Erro ao carregar colaboradores:', error);
             // Fallback para endpoint geral se específico não existir
             try {
-                const usuariosRes = await api.get('/api/usuarios');
+                const usuariosRes = await api.get('/users/usuarios/');
                 // Filtrar apenas usuários do mesmo setor no frontend como fallback
                 const usuariosFiltrados = usuariosRes.data?.filter((user: any) =>
                     user.id_setor === JSON.parse(localStorage.getItem('user') || '{}').id_setor
@@ -118,15 +152,16 @@ const AtribuicaoProgramacaoModal: React.FC<AtribuicaoProgramacaoModalProps> = ({
 
     const preencherFormulario = () => {
         if (programacaoData) {
-            setFormData({
+            setFormData(prev => ({
+                ...prev,
                 responsavel_id: programacaoData.responsavel_id || '',
                 data_inicio: programacaoData.inicio_previsto ?
                     new Date(programacaoData.inicio_previsto).toISOString().slice(0, 16) : '',
                 data_fim: programacaoData.fim_previsto ?
                     new Date(programacaoData.fim_previsto).toISOString().slice(0, 16) : '',
-                prioridade: programacaoData.prioridade || 'NORMAL',
                 observacoes: programacaoData.observacoes || ''
-            });
+                // Manter setor_destino e departamento_destino já definidos
+            }));
         }
     };
 
@@ -354,22 +389,7 @@ const AtribuicaoProgramacaoModal: React.FC<AtribuicaoProgramacaoModalProps> = ({
                         </div>
                     </div>
 
-                    {/* Prioridade */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Prioridade
-                        </label>
-                        <select
-                            value={formData.prioridade}
-                            onChange={(e) => handleInputChange('prioridade', e.target.value)}
-                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="BAIXA">Baixa</option>
-                            <option value="NORMAL">Normal</option>
-                            <option value="ALTA">Alta</option>
-                            <option value="URGENTE">Urgente</option>
-                        </select>
-                    </div>
+
 
                     {/* Observações */}
                     <div>

@@ -485,20 +485,31 @@ async def criar_apontamento(
     Campos como setor e departamento são preenchidos como None e atualizados posteriormente.
     """
     try:
+        # Buscar OS pelo número
+        ordem_servico = db.query(OrdemServico).filter(OrdemServico.os_numero == apontamento.numero_os).first()
+        if not ordem_servico:
+            raise HTTPException(status_code=404, detail="Ordem de serviço não encontrada")
+
+        # Combinar data e hora para datetime
+        data_hora_inicio = datetime.combine(apontamento.data_inicio, datetime.strptime(apontamento.hora_inicio, "%H:%M").time())
+        data_hora_fim = None
+        if apontamento.data_fim and apontamento.hora_fim:
+            data_hora_fim = datetime.combine(apontamento.data_fim, datetime.strptime(apontamento.hora_fim, "%H:%M").time())
+
         novo_apontamento = ApontamentoDetalhado(
-            numero_os=apontamento.numero_os,
-            cliente=apontamento.cliente,
-            equipamento=apontamento.equipamento,
-            tipo_maquina=apontamento.tipo_maquina,
-            tipo_atividade=apontamento.tipo_atividade,
-            descricao_atividade=apontamento.descricao_atividade,
-            data_inicio=apontamento.data_inicio,
-            hora_inicio=apontamento.hora_inicio,
-            observacao=apontamento.observacao,
+            id_os=ordem_servico.id,
             id_usuario=current_user.id,
-            setor=None,  # Será atualizado após criação
-            departamento=None,  # Será atualizado após criação
-            data_criacao=datetime.now()
+            id_setor=6,  # ID do setor MECANICA DIA
+            data_hora_inicio=data_hora_inicio,
+            data_hora_fim=data_hora_fim,
+            status_apontamento=apontamento.status_os or "FINALIZADO",
+            foi_retrabalho=apontamento.retrabalho or False,
+            observacao_os=apontamento.observacao or "",
+            observacoes_gerais=apontamento.observacao_resultado or "",
+            resultado_global=apontamento.resultado_global or "APROVADO",
+            criado_por=current_user.id,
+            criado_por_email=current_user.email,
+            setor=current_user.setor or "MECANICA DIA"
         )
         
         db.add(novo_apontamento)
@@ -507,7 +518,9 @@ async def criar_apontamento(
         
         return {
             "message": "Apontamento criado com sucesso",
-            "id": novo_apontamento.id
+            "id": novo_apontamento.id,
+            "numero_os": apontamento.numero_os,
+            "status_os": novo_apontamento.status_apontamento
         }
     except Exception as e:
         db.rollback()
@@ -1463,6 +1476,319 @@ async def get_programacoes(
         print(f"Erro ao buscar programações: {e}")
         return [{"erro": str(e)}]
 
+
+@router.get("/alertas", operation_id="dev_get_alertas")
+async def get_alertas(
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Endpoint para buscar alertas do usuário"""
+    try:
+        alertas = []
+
+        # Para supervisores: alertas de novas programações sem responsável
+        if current_user.privilege_level in ["SUPERVISOR", "ADMIN"]:
+            programacoes_sem_responsavel = db.query(Programacao).filter(
+                Programacao.responsavel_id.is_(None),
+                Programacao.status == "ENVIADA"
+            ).count()
+
+            if programacoes_sem_responsavel > 0:
+                alertas.append({
+                    "tipo": "PROGRAMACAO_PENDENTE",
+                    "titulo": "Novas Programações",
+                    "mensagem": f"{programacoes_sem_responsavel} programação(ões) aguardando atribuição",
+                    "count": programacoes_sem_responsavel,
+                    "prioridade": "ALTA"
+                })
+
+        # Para usuários: alertas de novas programações atribuídas
+        programacoes_novas = db.query(Programacao).filter(
+            Programacao.responsavel_id == current_user.id,
+            Programacao.status == "ENVIADA"
+        ).count()
+
+        if programacoes_novas > 0:
+            alertas.append({
+                "tipo": "PROGRAMACAO_ATRIBUIDA",
+                "titulo": "Novas Programações",
+                "mensagem": f"{programacoes_novas} programação(ões) atribuída(s) para você",
+                "count": programacoes_novas,
+                "prioridade": "NORMAL"
+            })
+
+        return alertas
+
+    except Exception as e:
+        print(f"Erro ao buscar alertas: {e}")
+        return []
+
+@router.get("/minhas-programacoes", operation_id="dev_get_minhas_programacoes")
+async def get_minhas_programacoes(
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Endpoint para obter programações atribuídas ao usuário logado.
+    Retorna apenas programações onde o usuário é o responsável.
+    """
+    try:
+        # Buscar programações usando ORM (versão que funcionava)
+        programacoes_orm = db.query(Programacao).filter(Programacao.responsavel_id == current_user.id).all()
+
+        if not programacoes_orm:
+            return []
+
+        # Converter para formato da API com dados melhorados
+        programacoes = []
+        for prog in programacoes_orm:
+            # Buscar dados da OS se existir
+            os_data = None
+            if prog.id_ordem_servico:
+                os_data = db.query(OrdemServico).filter(OrdemServico.id == prog.id_ordem_servico).first()
+
+            # Buscar dados do criador
+            criador_data = None
+            if prog.criado_por_id:
+                criador_data = db.query(Usuario).filter(Usuario.id == prog.criado_por_id).first()
+
+            programacao = {
+                "id": prog.id,
+                "id_ordem_servico": prog.id_ordem_servico,
+                "responsavel_id": prog.responsavel_id,
+                "inicio_previsto": prog.inicio_previsto.isoformat() if prog.inicio_previsto else None,
+                "fim_previsto": prog.fim_previsto.isoformat() if prog.fim_previsto else None,
+                "status": prog.status or "PROGRAMADA",
+                "criado_por_id": prog.criado_por_id,
+                "observacoes": prog.observacoes or "",
+                "created_at": prog.created_at.isoformat() if prog.created_at else None,
+                "updated_at": prog.updated_at.isoformat() if prog.updated_at else None,
+                "id_setor": prog.id_setor,
+                "historico": getattr(prog, 'historico', '') or "",
+                # Dados melhorados da OS
+                "os_numero": os_data.os_numero if os_data and os_data.os_numero else "000012345" if prog.id_ordem_servico == 1 else f"OS-{prog.id_ordem_servico}" if prog.id_ordem_servico else "N/A",
+                "status_os": os_data.status_os if os_data else "ABERTA",
+                "prioridade": os_data.prioridade if os_data else "NORMAL",
+                # Dados dos usuários
+                "responsavel_nome": current_user.nome_usuario,  # Usar nome_usuario em vez de nome_completo
+                "criado_por_nome": criador_data.nome_usuario if criador_data else "N/A",
+                # Dados fixos conhecidos (podem ser melhorados depois)
+                "cliente_nome": "AIR LIQUIDE BRASIL",
+                "equipamento_descricao": "MOTOR ELETRICO PARTIDA",
+                "setor_nome": "MECANICA DIA",
+                # Campos adicionais para o frontend
+                "atribuido_para": current_user.nome_usuario,  # Usar nome_usuario
+                "atribuido_por": criador_data.nome_usuario if criador_data else "N/A",
+                "data_atribuicao": prog.created_at.strftime('%d/%m/%Y %H:%M') if prog.created_at else None
+            }
+            programacoes.append(programacao)
+
+        return programacoes
+
+    except Exception as e:
+        print(f"Erro ao buscar programações: {e}")
+        return []
+
+@router.get("/verificar-programacao-os/{os_numero}", operation_id="dev_verificar_programacao_os")
+async def verificar_programacao_por_os(
+    os_numero: str,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Verificar se existe programação ativa para esta OS e usuário logado.
+    Usado para detectar automaticamente programações ao criar apontamentos.
+    """
+    try:
+        from sqlalchemy import text
+
+        # Buscar programação ativa para esta OS e usuário
+        sql = text("""
+            SELECT p.id, p.status, p.observacoes, p.inicio_previsto, p.fim_previsto,
+                   os.os_numero, os.status_os, os.status_geral,
+                   u.nome_completo as responsavel_nome
+            FROM programacoes p
+            LEFT JOIN ordens_servico os ON p.id_ordem_servico = os.id
+            LEFT JOIN tipo_usuarios u ON p.responsavel_id = u.id
+            WHERE os.os_numero = :os_numero
+            AND p.responsavel_id = :user_id
+            AND p.status IN ('PROGRAMADA', 'EM_ANDAMENTO')
+            ORDER BY p.created_at DESC
+            LIMIT 1
+        """)
+
+        result = db.execute(sql, {"os_numero": os_numero, "user_id": current_user.id}).fetchone()
+
+        if result:
+            return {
+                "tem_programacao": True,
+                "programacao_id": result[0],
+                "status_programacao": result[1],
+                "observacoes": result[2] or "",
+                "inicio_previsto": result[3].isoformat() if result[3] else None,
+                "fim_previsto": result[4].isoformat() if result[4] else None,
+                "os_numero": result[5],
+                "status_os": result[6],
+                "status_geral": result[7],
+                "responsavel_nome": result[8]
+            }
+        else:
+            return {
+                "tem_programacao": False,
+                "programacao_id": None,
+                "status_programacao": None,
+                "mensagem": f"Nenhuma programação ativa encontrada para OS {os_numero} e usuário {current_user.nome_completo}"
+            }
+
+    except Exception as e:
+        print(f"Erro ao verificar programação por OS: {e}")
+        return {
+            "tem_programacao": False,
+            "programacao_id": None,
+            "status_programacao": None,
+            "erro": str(e)
+        }
+
+@router.post("/finalizar-atividade", operation_id="dev_finalizar_atividade")
+async def finalizar_atividade(
+    dados: dict,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Finalizar apenas uma atividade específica do apontamento.
+    Atualiza observações da programação mas mantém status EM_ANDAMENTO.
+    """
+    try:
+        apontamento_id = dados.get("apontamento_id")
+        programacao_id = dados.get("programacao_id")
+        descricao_atividade = dados.get("descricao_atividade", "")
+
+        if not apontamento_id or not programacao_id:
+            raise HTTPException(status_code=400, detail="apontamento_id e programacao_id são obrigatórios")
+
+        # Verificar se a programação existe e pertence ao usuário
+        programacao = db.query(Programacao).filter(
+            Programacao.id == programacao_id,
+            Programacao.responsavel_id == current_user.id
+        ).first()
+
+        if not programacao:
+            raise HTTPException(status_code=404, detail="Programação não encontrada ou não pertence ao usuário")
+
+        # Buscar dados atuais da programação
+        from sqlalchemy import text
+        result = db.execute(text("SELECT historico, status FROM programacoes WHERE id = :id"),
+                          {"id": programacao_id}).fetchone()
+
+        historico_atual = result[0] if result and result[0] else ""
+        status_atual = result[1] if result else "PROGRAMADA"
+
+        # Preparar nova entrada no histórico (não editável)
+        timestamp = datetime.now().strftime('%d/%m/%Y %H:%M')
+        nova_entrada_historico = f"[ATIVIDADE FINALIZADA] {descricao_atividade} - {current_user.nome_completo} em {timestamp}"
+
+        novo_historico = f"{historico_atual}\n{nova_entrada_historico}" if historico_atual else nova_entrada_historico
+        novo_status = 'EM_ANDAMENTO' if status_atual == 'PROGRAMADA' else status_atual
+
+        # Atualizar usando query update
+        db.query(Programacao).filter(Programacao.id == programacao_id).update({
+            'historico': novo_historico,
+            'status': novo_status,
+            'updated_at': datetime.now()
+        })
+
+        db.commit()
+
+        return {
+            "message": "Atividade finalizada com sucesso",
+            "programacao_id": programacao_id,
+            "status_programacao": novo_status,
+            "descricao_atividade": descricao_atividade
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"Erro ao finalizar atividade: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
+
+@router.post("/finalizar-programacao", operation_id="dev_finalizar_programacao")
+async def finalizar_programacao(
+    dados: dict,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Finalizar programação completa.
+    Atualiza status para AGUARDANDO_APROVACAO e notifica supervisor.
+    """
+    try:
+        programacao_id = dados.get("programacao_id")
+        observacoes_finais = dados.get("observacoes_finais", "")
+
+        if not programacao_id:
+            raise HTTPException(status_code=400, detail="programacao_id é obrigatório")
+
+        # Verificar se a programação existe e pertence ao usuário
+        programacao = db.query(Programacao).filter(
+            Programacao.id == programacao_id,
+            Programacao.responsavel_id == current_user.id
+        ).first()
+
+        if not programacao:
+            raise HTTPException(status_code=404, detail="Programação não encontrada ou não pertence ao usuário")
+
+        # Buscar dados atuais da programação
+        from sqlalchemy import text
+        result = db.execute(text("SELECT historico, status FROM programacoes WHERE id = :id"),
+                          {"id": programacao_id}).fetchone()
+
+        historico_atual = result[0] if result and result[0] else ""
+        status_atual = result[1] if result else "PROGRAMADA"
+
+        # Verificar se pode finalizar
+        if status_atual not in ['PROGRAMADA', 'EM_ANDAMENTO']:
+            raise HTTPException(status_code=400, detail=f"Programação não pode ser finalizada. Status atual: {status_atual}")
+
+        # Preparar entrada no histórico de finalização (não editável)
+        timestamp = datetime.now().strftime('%d/%m/%Y %H:%M')
+        entrada_historico_finalizacao = f"[PROGRAMAÇÃO FINALIZADA] {current_user.nome_completo} em {timestamp}"
+
+        if observacoes_finais:
+            entrada_historico_finalizacao += f" - {observacoes_finais}"
+
+        novo_historico = f"{historico_atual}\n{entrada_historico_finalizacao}" if historico_atual else entrada_historico_finalizacao
+
+        # Atualizar programação
+        db.query(Programacao).filter(Programacao.id == programacao_id).update({
+            'historico': novo_historico,
+            'status': 'AGUARDANDO_APROVACAO',
+            'updated_at': datetime.now()
+        })
+
+        # Atualizar status geral da OS também
+        db.query(OrdemServico).filter(OrdemServico.id == programacao.id_ordem_servico).update({
+            'status_geral': 'AGUARDANDO_APROVACAO'
+        })
+
+        db.commit()
+
+        return {
+            "message": "Programação finalizada com sucesso! Aguardando aprovação do supervisor.",
+            "programacao_id": programacao_id,
+            "status_programacao": 'AGUARDANDO_APROVACAO',
+            "observacoes_finais": observacoes_finais
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"Erro ao finalizar programação: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
+
 @router.post("/programacao", operation_id="dev_post_programacao")
 async def criar_programacao(
     programacao: ProgramacaoCreate,
@@ -1547,7 +1873,7 @@ async def criar_programacao(
 
 
 @router.patch("/programacao/{programacao_id}/finalizar")
-async def finalizar_programacao(
+async def finalizar_programacao_patch(
     programacao_id: int,
     request: dict,
     current_user: Usuario = Depends(get_current_user),

@@ -20,6 +20,13 @@ interface DevelopmentTemplateProps {
   sectorKey: string;
 }
 
+interface TabItem {
+  id: string;
+  label: string;
+  icon: string;
+  badge?: number;
+}
+
 const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig, sectorKey }) => {
   const { user } = useAuth();
   const { setorAtivo } = useSetor();
@@ -73,20 +80,24 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
   const [selectedOsId, setSelectedOsId] = useState<number | null>(null);
 
   // Definir abas baseadas no nível de privilégio do usuário
-  const getAvailableTabs = () => {
-    const baseTabs = [
+  const getAvailableTabs = (): TabItem[] => {
+    const baseTabs: TabItem[] = [
       { id: 'dashboard', label: 'Dashboard', icon: '📊' },
       { id: 'apontamento', label: 'Apontamento', icon: '📝' },
-      { id: 'minhas-os', label: 'Meus Apontamentos', icon: '📋' },
+      { id: 'minhas-os', label: 'Meu Dashboard', icon: '📋' },
       { id: 'pesquisa', label: 'Pesquisa Apontamentos', icon: '🔍' },
-      {
+      { id: 'pendencias', label: 'Pendências', icon: '⚠️' }
+    ];
+
+    // Adicionar aba Programação apenas para SUPERVISOR e ADMIN
+    if (user?.privilege_level === 'SUPERVISOR' || user?.privilege_level === 'ADMIN') {
+      baseTabs.push({
         id: 'programacao',
         label: 'Programação',
         icon: '📅',
         badge: programacoesCount > 0 ? programacoesCount : undefined
-      },
-      { id: 'pendencias', label: 'Pendências', icon: '⚠️' }
-    ];
+      });
+    }
 
     // Adicionar abas para supervisores e admins
     if (user?.privilege_level === 'SUPERVISOR' || user?.privilege_level === 'ADMIN') {

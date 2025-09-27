@@ -27,9 +27,29 @@ interface Apontamento {
     data_aprovacao_supervisor?: string;
 }
 
+interface Programacao {
+    id: number;
+    os_numero: string;
+    cliente_nome: string;
+    equipamento_descricao: string;
+    inicio_previsto: string;
+    fim_previsto: string;
+    status: string;
+    observacoes: string;
+    setor_nome: string;
+    responsavel_nome: string;
+    created_at: string;
+    updated_at: string;
+}
+
 const MinhasOsTab: React.FC = () => {
     const { setorAtivo } = useSetor();
     const { user } = useAuth();
+
+    // Estados para abas internas
+    const [activeInternalTab, setActiveInternalTab] = useState<'apontamentos' | 'programacoes'>('apontamentos');
+
+    // Estados para apontamentos
     const [apontamentos, setApontamentos] = useState<Apontamento[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -38,6 +58,10 @@ const MinhasOsTab: React.FC = () => {
     const [dataInicio, setDataInicio] = useState<string>('');
     const [dataFim, setDataFim] = useState<string>('');
     const [filtroStatus, setFiltroStatus] = useState<string>('');
+
+    // Estados para programações
+    const [programacoes, setProgramacoes] = useState<Programacao[]>([]);
+    const [loadingProgramacoes, setLoadingProgramacoes] = useState(false);
 
     useEffect(() => {
         const fetchApontamentos = async () => {
@@ -112,6 +136,83 @@ const MinhasOsTab: React.FC = () => {
 
         fetchApontamentos();
     }, [user, selectedDate, filtroUsuario, dataInicio, dataFim, filtroStatus]);
+
+    // Função para carregar programações
+    const fetchProgramacoes = async () => {
+        if (!user) return;
+
+        try {
+            setLoadingProgramacoes(true);
+
+            // Buscar programações atribuídas ao usuário logado
+            const response = await api.get('/desenvolvimento/minhas-programacoes');
+            setProgramacoes(response.data || []);
+        } catch (error) {
+            console.error('Erro ao carregar programações:', error);
+            setProgramacoes([]);
+        } finally {
+            setLoadingProgramacoes(false);
+        }
+    };
+
+    // Carregar programações quando a aba for selecionada
+    useEffect(() => {
+        if (activeInternalTab === 'programacoes') {
+            fetchProgramacoes();
+        }
+    }, [activeInternalTab, user]);
+
+    // Funções para gerenciar programações
+    const iniciarExecucao = async (programacao: Programacao) => {
+        try {
+            await api.patch(`/pcp/programacoes/${programacao.id}/status`, {
+                status: 'EM_ANDAMENTO'
+            });
+
+            alert('✅ Execução iniciada com sucesso!');
+            fetchProgramacoes();
+        } catch (error) {
+            console.error('Erro ao iniciar execução:', error);
+            alert('❌ Erro ao iniciar execução');
+        }
+    };
+
+    const finalizarExecucao = async (programacao: Programacao) => {
+        try {
+            await api.patch(`/pcp/programacoes/${programacao.id}/status`, {
+                status: 'AGUARDANDO_APROVACAO'
+            });
+
+            alert('✅ Execução finalizada! Aguardando aprovação do supervisor.');
+            fetchProgramacoes();
+        } catch (error) {
+            console.error('Erro ao finalizar execução:', error);
+            alert('❌ Erro ao finalizar execução');
+        }
+    };
+
+    // Funções utilitárias para programações
+    const getStatusColor = (status: string) => {
+        switch (status) {
+            case 'PROGRAMADA': return 'bg-blue-100 text-blue-800';
+            case 'EM_ANDAMENTO': return 'bg-yellow-100 text-yellow-800';
+            case 'AGUARDANDO_APROVACAO': return 'bg-purple-100 text-purple-800';
+            case 'APROVADA': return 'bg-green-100 text-green-800';
+            case 'REJEITADA': return 'bg-red-100 text-red-800';
+            default: return 'bg-gray-100 text-gray-800';
+        }
+    };
+
+    const getStatusIcon = (status: string) => {
+        switch (status) {
+            case 'PROGRAMADA': return '📋';
+            case 'EM_ANDAMENTO': return '⚡';
+            case 'AGUARDANDO_APROVACAO': return '⏳';
+            case 'APROVADA': return '✅';
+            case 'REJEITADA': return '❌';
+            default: return '📄';
+        }
+    };
 
     const calculateTotalHours = () => {
         return apontamentos.reduce((total, apt) => {
@@ -199,24 +300,49 @@ const MinhasOsTab: React.FC = () => {
                     <div className="flex justify-between items-center">
                         <div>
                             <h2 className="text-2xl font-bold text-white mb-1 flex items-center">
-                                📋 {user?.privilege_level === 'USER' ? 'Meus Apontamentos' :
-                                  user?.privilege_level === 'SUPERVISOR' ? `Apontamentos do Setor` :
-                                  'Todos os Apontamentos'}
+                                📊 Meu Dashboard
                             </h2>
                             <p className="text-blue-100 text-sm">
-                                {user?.privilege_level === 'USER' ? 'Visualize seus apontamentos diários e controle de horas' :
-                                  user?.privilege_level === 'SUPERVISOR' ? `Gerencie apontamentos do setor ${user.setor} - ${user.departamento}` :
-                                  'Visualize e gerencie apontamentos de todos os setores e departamentos'}
+                                Visualize seus apontamentos e programações atribuídas
                             </p>
                         </div>
                         <div className="text-right">
-                            <div className="text-blue-100 text-xs font-medium">Total</div>
-                            <div className="text-3xl font-bold text-white">{apontamentos.length}</div>
+                            <div className="text-blue-100 text-xs font-medium">
+                                {activeInternalTab === 'apontamentos' ? 'Apontamentos' : 'Programações'}
+                            </div>
+                            <div className="text-3xl font-bold text-white">
+                                {activeInternalTab === 'apontamentos' ? apontamentos.length : programacoes.length}
+                            </div>
                         </div>
+                    </div>
+
+                    {/* Abas Internas */}
+                    <div className="mt-4 flex space-x-1">
+                        <button
+                            onClick={() => setActiveInternalTab('apontamentos')}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                activeInternalTab === 'apontamentos'
+                                    ? 'bg-white text-blue-600'
+                                    : 'bg-blue-500 text-white hover:bg-blue-400'
+                            }`}
+                        >
+                            📝 Meus Apontamentos
+                        </button>
+                        <button
+                            onClick={() => setActiveInternalTab('programacoes')}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                activeInternalTab === 'programacoes'
+                                    ? 'bg-white text-blue-600'
+                                    : 'bg-blue-500 text-white hover:bg-blue-400'
+                            }`}
+                        >
+                            📋 Minhas Programações
+                        </button>
                     </div>
                 </div>
 
-                {/* Filtros Compactos */}
+                {/* Filtros Compactos - Apenas para Apontamentos */}
+                {activeInternalTab === 'apontamentos' && (
                 <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         {/* Data */}
@@ -304,6 +430,11 @@ const MinhasOsTab: React.FC = () => {
                         </div>
                     )}
                 </div>
+                )}
+
+                {/* Conteúdo baseado na aba ativa */}
+                {activeInternalTab === 'apontamentos' && (
+                <>
                 {/* Cards de Resumo Compactos */}
                 <div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
                     <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center">
@@ -565,6 +696,94 @@ const MinhasOsTab: React.FC = () => {
                         </div>
                     )}
                 </div>
+                </>
+                )}
+
+                {/* Seção de Programações */}
+                {activeInternalTab === 'programacoes' && (
+                <div className="px-4 py-4">
+                    {loadingProgramacoes ? (
+                        <div className="flex justify-center items-center h-64">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                        </div>
+                    ) : programacoes.length === 0 ? (
+                        <div className="text-center py-12">
+                            <div className="text-6xl mb-4">📋</div>
+                            <h3 className="text-lg font-medium text-gray-900 mb-2">
+                                Nenhuma programação atribuída
+                            </h3>
+                            <p className="text-gray-500">
+                                Você não possui programações atribuídas no momento.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="grid gap-6">
+                            {programacoes.map((programacao) => (
+                                <div
+                                    key={programacao.id}
+                                    className="bg-white rounded-lg shadow-md border border-gray-200 p-6"
+                                >
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <h3 className="text-lg font-semibold text-gray-900">
+                                                OS: {programacao.os_numero}
+                                            </h3>
+                                            <p className="text-sm text-gray-600">
+                                                {programacao.cliente_nome} - {programacao.equipamento_descricao}
+                                            </p>
+                                        </div>
+                                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(programacao.status)}`}>
+                                            {getStatusIcon(programacao.status)} {programacao.status.replace('_', ' ')}
+                                        </span>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4 mb-4">
+                                        <div>
+                                            <p className="text-sm font-medium text-gray-700">Início Previsto:</p>
+                                            <p className="text-sm text-gray-600">
+                                                {new Date(programacao.inicio_previsto).toLocaleString('pt-BR')}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium text-gray-700">Fim Previsto:</p>
+                                            <p className="text-sm text-gray-600">
+                                                {new Date(programacao.fim_previsto).toLocaleString('pt-BR')}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {programacao.observacoes && (
+                                        <div className="mb-4">
+                                            <p className="text-sm font-medium text-gray-700">Observações:</p>
+                                            <p className="text-sm text-gray-600">{programacao.observacoes}</p>
+                                        </div>
+                                    )}
+
+                                    <div className="flex space-x-3">
+                                        {programacao.status === 'PROGRAMADA' && (
+                                            <button
+                                                onClick={() => iniciarExecucao(programacao)}
+                                                className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
+                                            >
+                                                ▶️ Iniciar Execução
+                                            </button>
+                                        )}
+
+                                        {programacao.status === 'EM_ANDAMENTO' && (
+                                            <button
+                                                onClick={() => finalizarExecucao(programacao)}
+                                                className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+                                            >
+                                                ✅ Finalizar
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                )}
             </div>
         </div>
     );

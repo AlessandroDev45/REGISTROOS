@@ -64,6 +64,11 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
     const [mensagemOS, setMensagemOS] = useState<string>('');
     const [osBloqueadaParaApontamento, setOsBloqueadaParaApontamento] = useState(false);
 
+    // Estados para detecção de programação
+    const [programacaoDetectada, setProgramacaoDetectada] = useState<any>(null);
+    const [loadingProgramacao, setLoadingProgramacao] = useState(false);
+    const [mostraOpcoesFinalizacao, setMostraOpcoesFinalizacao] = useState(false);
+
     // Estados para testes selecionados
     const [testesSelecionados, setTestesSelecionados] = useState<{[key: number]: {
         selecionado: boolean;
@@ -806,6 +811,38 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
         console.log('✅ Formulário resetado com sucesso');
     };
 
+    // 🎯 FUNÇÃO PARA VERIFICAR PROGRAMAÇÃO ATIVA POR OS
+    const verificarProgramacaoPorOS = async (numeroOS: string) => {
+        if (!numeroOS || numeroOS.length < 3) {
+            setProgramacaoDetectada(null);
+            setMostraOpcoesFinalizacao(false);
+            return;
+        }
+
+        try {
+            setLoadingProgramacao(true);
+            console.log(`🔍 Verificando programação para OS: ${numeroOS}`);
+
+            const response = await api.get(`/api/desenvolvimento/verificar-programacao-os/${numeroOS}`);
+
+            if (response.data.tem_programacao) {
+                console.log('✅ Programação detectada:', response.data);
+                setProgramacaoDetectada(response.data);
+                setMostraOpcoesFinalizacao(true);
+            } else {
+                console.log('ℹ️ Nenhuma programação ativa encontrada');
+                setProgramacaoDetectada(null);
+                setMostraOpcoesFinalizacao(false);
+            }
+        } catch (error) {
+            console.error('❌ Erro ao verificar programação:', error);
+            setProgramacaoDetectada(null);
+            setMostraOpcoesFinalizacao(false);
+        } finally {
+            setLoadingProgramacao(false);
+        }
+    };
+
     // 🎯 FUNÇÃO PARA VERIFICAR SE PROGRAMAÇÃO FOI FINALIZADA
     const verificarProgramacaoFinalizada = async (numeroOS: string) => {
         try {
@@ -845,6 +882,75 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
         } catch (error) {
             console.error('Erro ao verificar programação:', error);
             // Não bloquear o fluxo se a verificação falhar
+        }
+    };
+
+    // 🎯 FUNÇÃO PARA FINALIZAR ATIVIDADE
+    const finalizarAtividade = async () => {
+        if (!programacaoDetectada?.programacao_id) {
+            alert('❌ Nenhuma programação detectada para finalizar atividade');
+            return;
+        }
+
+        const descricaoAtividade = prompt('📝 Descreva a atividade que foi finalizada:');
+        if (!descricaoAtividade) return;
+
+        try {
+            const dados = {
+                apontamento_id: 1, // Será o ID do apontamento atual quando salvo
+                programacao_id: programacaoDetectada.programacao_id,
+                descricao_atividade: descricaoAtividade
+            };
+
+            const response = await api.post('/api/desenvolvimento/finalizar-atividade', dados);
+
+            alert(`✅ ${response.data.message}`);
+
+            // Atualizar status da programação detectada
+            setProgramacaoDetectada({
+                ...programacaoDetectada,
+                status_programacao: response.data.status_programacao
+            });
+
+        } catch (error: any) {
+            console.error('❌ Erro ao finalizar atividade:', error);
+            alert(`❌ Erro ao finalizar atividade: ${error.response?.data?.detail || error.message}`);
+        }
+    };
+
+    // 🎯 FUNÇÃO PARA FINALIZAR PROGRAMAÇÃO
+    const finalizarProgramacao = async () => {
+        if (!programacaoDetectada?.programacao_id) {
+            alert('❌ Nenhuma programação detectada para finalizar');
+            return;
+        }
+
+        const observacoesFinais = prompt('📝 Observações finais da programação (opcional):') || '';
+
+        const confirmacao = confirm(
+            '🏁 Tem certeza que deseja finalizar esta programação?\n\n' +
+            'Isso enviará a programação para aprovação do supervisor.'
+        );
+
+        if (!confirmacao) return;
+
+        try {
+            const dados = {
+                programacao_id: programacaoDetectada.programacao_id,
+                observacoes_finais: observacoesFinais
+            };
+
+            const response = await api.post('/api/desenvolvimento/finalizar-programacao', dados);
+
+            alert(`🎉 ${response.data.message}`);
+
+            // Limpar detecção de programação após finalizar
+            setProgramacaoDetectada(null);
+            setMostraOpcoesFinalizacao(false);
+
+        } catch (error: any) {
+            console.error('❌ Erro ao finalizar programação:', error);
+            alert(`❌ Erro ao finalizar programação: ${error.response?.data?.detail || error.message}`);
         }
     };
 
@@ -1123,16 +1229,24 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
 
                                                     setFormData({ ...formData, inpNumOS: valor });
 
-                                                    // Buscar OS automaticamente quando o usuário parar de digitar
-                                                    if (valor.length === 5) {
+                                                    // Buscar OS e verificar programação automaticamente
+                                                    if (valor.length >= 3) {
                                                         const timeoutId = setTimeout(() => {
-                                                            buscarOS(valor);
-                                                        }, 1000); // 1 segundo de delay
+                                                            // Verificar programação primeiro
+                                                            verificarProgramacaoPorOS(valor);
+
+                                                            // Buscar OS se tiver 5 dígitos
+                                                            if (valor.length === 5) {
+                                                                buscarOS(valor);
+                                                            }
+                                                        }, 800); // 800ms de delay
 
                                                         return () => clearTimeout(timeoutId);
                                                     } else {
                                                         setOsEncontrada(null);
                                                         setMensagemOS(valor.length > 0 && valor.length < 5 ? 'OS deve ter exatamente 5 dígitos' : '');
+                                                        setProgramacaoDetectada(null);
+                                                        setMostraOpcoesFinalizacao(false);
                                                     }
                                                 }}
                                                 onBlur={(e) => {
@@ -1235,6 +1349,89 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                         )}
                                     </div>
                                 </div>
+
+                                {/* 🎯 PROGRAMAÇÃO DETECTADA */}
+                                {loadingProgramacao && (
+                                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                                        <div className="flex items-center">
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                                            <span className="text-blue-800">🔍 Verificando programação para esta OS...</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {programacaoDetectada && (
+                                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                                        <h4 className="font-semibold text-green-800 mb-3 flex items-center">
+                                            🎯 Programação Detectada!
+                                            <span className={`ml-2 px-2 py-1 rounded text-xs ${
+                                                programacaoDetectada.status_programacao === 'PROGRAMADA' ? 'bg-yellow-100 text-yellow-800' :
+                                                programacaoDetectada.status_programacao === 'EM_ANDAMENTO' ? 'bg-blue-100 text-blue-800' :
+                                                'bg-gray-100 text-gray-800'
+                                            }`}>
+                                                {programacaoDetectada.status_programacao}
+                                            </span>
+                                        </h4>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 text-sm">
+                                            <div>
+                                                <strong>📋 OS:</strong> {programacaoDetectada.os_numero}
+                                            </div>
+                                            <div>
+                                                <strong>👤 Responsável:</strong> {programacaoDetectada.responsavel_nome}
+                                            </div>
+                                            {programacaoDetectada.inicio_previsto && (
+                                                <div>
+                                                    <strong>📅 Início:</strong> {new Date(programacaoDetectada.inicio_previsto).toLocaleString()}
+                                                </div>
+                                            )}
+                                            {programacaoDetectada.fim_previsto && (
+                                                <div>
+                                                    <strong>🏁 Fim:</strong> {new Date(programacaoDetectada.fim_previsto).toLocaleString()}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {programacaoDetectada.observacoes && (
+                                            <div className="mb-4 p-3 bg-white rounded border">
+                                                <strong>📝 Observações:</strong>
+                                                <div className="mt-1 text-sm text-gray-700 whitespace-pre-line">
+                                                    {programacaoDetectada.observacoes}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {mostraOpcoesFinalizacao && (
+                                            <div className="border-t pt-3">
+                                                <p className="text-green-700 mb-3 font-medium">
+                                                    🎮 Como deseja finalizar ao concluir este apontamento?
+                                                </p>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    <button
+                                                        onClick={finalizarAtividade}
+                                                        className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition-colors"
+                                                    >
+                                                        ✅ Finalizar Atividade
+                                                        <div className="text-xs text-yellow-100 mt-1">
+                                                            (Apenas esta tarefa específica)
+                                                        </div>
+                                                    </button>
+
+                                                    <button
+                                                        onClick={finalizarProgramacao}
+                                                        className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+                                                    >
+                                                        🏁 Finalizar Programação
+                                                        <div className="text-xs text-green-100 mt-1">
+                                                            (Toda a programação completa)
+                                                        </div>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
                                 {/* Seleções - DADOS DO BANCO */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

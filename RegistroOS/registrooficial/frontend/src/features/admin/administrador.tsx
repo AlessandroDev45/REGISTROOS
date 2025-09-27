@@ -112,13 +112,13 @@ const Administrador: React.FC = () => {
 
                // Fetch pending users
                console.log('📋 Buscando usuários pendentes...');
-               const pendingResponse = await api.get('/usuarios/pendentes/');
+               const pendingResponse = await api.get('/users/pending-approval');
                console.log('✅ Usuários pendentes encontrados:', pendingResponse.data.length);
                setUsuariosPendentes(pendingResponse.data);
 
                // Fetch all users
                console.log('👥 Buscando todos os usuários...');
-               const allResponse = await api.get('/usuarios/');
+               const allResponse = await api.get('/users/usuarios/');
                console.log('✅ Todos os usuários encontrados:', allResponse.data.length);
                setTodosUsuarios(allResponse.data);
 
@@ -144,7 +144,7 @@ const Administrador: React.FC = () => {
    const handleAprovarUsuario = async (usuario: UsuarioPendente) => {
        setProcessando(usuario.id);
        try {
-           const response = await api.put(`/usuarios/${usuario.id}/approve`, {
+           const response = await api.put(`/users/usuarios/${usuario.id}/approve`, {
                privilege_level: usuario.privilege_level || 'USER',
                trabalha_producao: false
            });
@@ -176,7 +176,7 @@ const Administrador: React.FC = () => {
 
        setProcessando(usuarioId);
        try {
-           const response = await api.put(`/usuarios/${usuarioId}/reject`, {
+           const response = await api.put(`/users/usuarios/${usuarioId}/reject`, {
                motivo: motivo || 'Reprovado por administrador'
            });
 
@@ -225,7 +225,7 @@ const Administrador: React.FC = () => {
            }
 
            // Refresh users list
-           const allResponse = await api.get('/usuarios/');
+           const allResponse = await api.get('/users/usuarios/');
            setTodosUsuarios(allResponse.data);
 
            // Reset form

@@ -186,6 +186,7 @@ class Programacao(Base):
     criado_por_id = Column(Integer, ForeignKey("tipo_usuarios.id"), nullable=False)
     responsavel_id = Column(Integer, ForeignKey("tipo_usuarios.id"))
     observacoes = Column(Text)
+    historico = Column(Text)  # Campo não editável para histórico de mudanças
     status = Column(String)
     inicio_previsto = Column(DateTime, nullable=False)
     fim_previsto = Column(DateTime, nullable=False)

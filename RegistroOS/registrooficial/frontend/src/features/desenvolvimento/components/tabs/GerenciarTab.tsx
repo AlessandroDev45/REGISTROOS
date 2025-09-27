@@ -126,7 +126,7 @@ const GerenciarTab: React.FC = () => {
                 console.log('🔍 Buscando colaboradores...');
 
                 // Buscar usuários baseado no privilégio
-                const response = await api.get('/usuarios/');
+                const response = await api.get('/users/usuarios/');
 
                 // Filtrar colaboradores baseado no privilégio do usuário
                 let colaboradoresFiltrados = response.data;

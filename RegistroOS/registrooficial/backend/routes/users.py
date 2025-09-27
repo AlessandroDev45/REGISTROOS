@@ -68,7 +68,7 @@ async def get_pending_approval_users(current_user: Usuario = Depends(get_current
     """Get users pending approval"""
     try:
         # Verificar se o usuário tem privilégios para ver aprovações
-        if current_user.privilege_level not in ["ADMIN", "SUPERVISOR", "GESTAO"]:
+        if current_user.privilege_level not in ["ADMIN", "SUPERVISOR", "GESTAO", "PCP"]:
             raise HTTPException(status_code=403, detail="Acesso negado")
 
         pending_users = db.query(Usuario).filter(Usuario.is_approved == False).all()
@@ -80,8 +80,8 @@ async def get_pending_approval_users(current_user: Usuario = Depends(get_current
 async def get_pending_usuarios(current_user: Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get all users pending approval (for admin and supervisor users)."""
     # Verify the user has appropriate privileges
-    if current_user.privilege_level not in ["ADMIN", "SUPERVISOR", "GESTAO"]:
-        raise HTTPException(status_code=403, detail=f"Acesso negado: nível '{current_user.privilege_level}' não possui permissões. Requerido: ADMIN, SUPERVISOR, GESTAO")
+    if current_user.privilege_level not in ["ADMIN", "SUPERVISOR", "GESTAO", "PCP"]:
+        raise HTTPException(status_code=403, detail=f"Acesso negado: nível '{current_user.privilege_level}' não possui permissões. Requerido: ADMIN, SUPERVISOR, GESTAO, PCP")
 
     try:
         pending_users = get_pendent_users(db)
