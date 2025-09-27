@@ -30,8 +30,7 @@ def read_departamentos(skip: int = 0, limit: int = 100, db: Session = Depends(ge
     return [
         {
             "id": dept.id,
-            "nome_tipo": dept.nome_tipo,  # Campo correto da DB
-            "nome": dept.nome_tipo,       # Para compatibilidade
+            "nome_tipo": dept.nome_tipo,
             "descricao": dept.descricao,
             "ativo": dept.ativo,
             "data_criacao": dept.data_criacao
@@ -54,7 +53,7 @@ def create_departamento(departamento_data: Dict[str, Any], db: Session = Depends
         db.refresh(db_departamento)
         return {
             "id": db_departamento.id,
-            "nome": db_departamento.nome_tipo,
+            "nome_tipo": db_departamento.nome_tipo,
             "descricao": db_departamento.descricao,
             "ativo": db_departamento.ativo,
             "data_criacao": db_departamento.data_criacao
@@ -73,7 +72,7 @@ def read_departamento(departamento_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Departamento não encontrado")
     return {
         "id": db_departamento.id,
-        "nome": db_departamento.nome_tipo,
+        "nome_tipo": db_departamento.nome_tipo,
         "descricao": db_departamento.descricao,
         "ativo": db_departamento.ativo,
         "data_criacao": db_departamento.data_criacao
@@ -93,7 +92,7 @@ def update_departamento(departamento_id: int, departamento_data: Dict[str, Any],
     db.refresh(db_departamento)
     return {
         "id": db_departamento.id,
-        "nome": db_departamento.nome_tipo,
+        "nome_tipo": db_departamento.nome_tipo,
         "descricao": db_departamento.descricao,
         "ativo": db_departamento.ativo,
         "data_criacao": db_departamento.data_criacao

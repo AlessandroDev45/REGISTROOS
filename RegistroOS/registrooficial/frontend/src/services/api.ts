@@ -129,15 +129,8 @@ export const getProgramacaoFormData = async () => {
     return response.data;
   } catch (error) {
     console.error("Erro ao buscar dados do formulário de programação:", error);
-    return {
-      ordens_servico: [],
-      clientes: [],
-      equipamentos: [],
-      tipos_atividade: [],
-      descricoes_atividade: [],
-      setores: [],
-      supervisores: []
-    };
+    // Retornar estrutura vazia - dados devem vir apenas da API
+    throw error; // Propagar erro para que o frontend saiba que houve falha
   }
 };
 
@@ -147,7 +140,8 @@ export const getOsDisponiveisForPcp = async () => {
     return response.data;
   } catch (error) {
     console.error("Erro ao buscar OS disponíveis para PCP:", error);
-    return [];
+    // Não retornar array vazio - propagar erro para que o frontend saiba que houve falha
+    throw error;
   }
 };
 

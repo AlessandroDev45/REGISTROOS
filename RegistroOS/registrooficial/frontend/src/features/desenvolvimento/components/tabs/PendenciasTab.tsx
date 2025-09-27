@@ -55,15 +55,10 @@ const PendenciasTab: React.FC = () => {
                 if (dataInicio) params.data_inicio = dataInicio;
                 if (dataFim) params.data_fim = dataFim;
 
-                // Filtros baseados no privilégio do usuário
-                if (user.privilege_level === 'USER') {
-                    params.usuario_id = user.id;
-                } else if (user.privilege_level === 'SUPERVISOR') {
-                    params.setor = user.setor;
-                }
-                // ADMIN vê todas as pendências
+                // DESENVOLVIMENTO: Sempre filtra apenas pelo setor do usuário logado
+                // O backend já aplica o filtro automaticamente baseado no setor do usuário
 
-                const response = await api.get('/pendencias', { params });
+                const response = await api.get('/desenvolvimento/pendencias', { params });
 
                 setPendencias(response.data || []);
             } catch (error) {
@@ -86,7 +81,7 @@ const PendenciasTab: React.FC = () => {
     const handleResolucaoSuccess = async () => {
         // Recarregar lista de pendências
         try {
-            const response = await api.get('/pendencias', {
+            const response = await api.get('/desenvolvimento/pendencias', {
                 params: {
                     status: filtroStatus || undefined
                 }

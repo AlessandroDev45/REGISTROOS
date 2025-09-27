@@ -1267,10 +1267,15 @@ const [formData, setFormData] = useState<any>({
 
 ### 10.3 Sistema de Programação de Testes
 
-#### **10.3.1 Nova Tabela: `programacao_testes`**
-- ✅ **Tabela criada** com 25 campos
-- ✅ **4 programações de exemplo** criadas
-- ✅ **Endpoints de exemplo** gerados
+#### **10.3.1 Tabela Principal: `programacoes`**
+- ✅ **Tabela principal** para programações do PCP
+- ✅ **7 programações** existentes no banco
+- ✅ **Endpoints funcionais** no PCP e desenvolvimento
+
+#### **10.3.2 Tabela Secundária: `programacao_testes`** (NÃO USADA)
+- ❌ **Tabela não existe** no banco atual
+- ❌ **Não é usada** pelo sistema
+- ❌ **Apenas para referência** histórica
 
 #### **10.3.2 Programações Criadas:**
 1. **PROG_TESTE_001**: Teste Completo - Equipamento A (ALTA prioridade)
@@ -1278,12 +1283,27 @@ const [formData, setFormData] = useState<any>({
 3. **PROG_TESTE_003**: Validação Rápida - Equipamento C (URGENTE)
 4. **PROG_TESTE_004**: Bateria Completa - Todos Equipamentos (ALTA)
 
-#### **10.3.3 Campos da Tabela `programacao_testes`:**
-- `id`, `codigo_programacao`, `titulo`, `descricao`
-- `id_departamento`, `id_setor`, `id_tipo_maquina`
-- `data_inicio_programada`, `hora_inicio_programada`
-- `data_fim_programada`, `hora_fim_programada`
-- `status`, `prioridade`
+#### **10.3.3 Estrutura da Tabela `programacoes` (REAL):**
+```sql
+CREATE TABLE programacoes (
+    id INTEGER PRIMARY KEY,
+    id_ordem_servico INTEGER,
+    criado_por_id INTEGER NOT NULL,
+    responsavel_id INTEGER,
+    observacoes TEXT,
+    status VARCHAR,
+    inicio_previsto DATETIME NOT NULL,
+    fim_previsto DATETIME NOT NULL,
+    created_at DATETIME,
+    updated_at DATETIME,
+    id_setor INTEGER
+);
+```
+
+#### **10.3.4 Dados Atuais na Tabela:**
+- **Total**: 7 registros
+- **Exemplo**: ID 2, OS 000012345, Responsável 3, Setor 42
+- **Usado por**: PCP (criação) e Desenvolvimento (visualização)
 - `id_responsavel_programacao`, `id_responsavel_execucao`
 - `testes_programados` (JSON)
 - `observacoes_programacao`, `observacoes_execucao`
@@ -1380,3 +1400,22 @@ LEFT JOIN clientes c ON os.id_cliente = c.id
 - Hierarquia completa implementada
 
 ---
+
+📋 ESTRUTURA HIERÁRQUICA CONFIRMADA:
+1. ORDEM DE SERVIÇO (Tabela Principal)
+2. RELACIONAMENTOS 1:1 (Uma OS → Um Cliente → Um Equipamento)
+3. RELACIONAMENTOS 1:N (Uma OS → Muitos registros)
+-- Uma OS pode gerar MUITOS:
+SELECT * FROM apontamentos_detalhados WHERE numero_os = 'X'  -- Por vários usuários
+SELECT * FROM pendencias WHERE numero_os = 'X'              -- Por vários usuários  
+SELECT * FROM programacoes WHERE id_ordem_servico = Y       -- Por vários usuários
+🔄 FLUXO DE TRABALHO:
+📝 Criação: ordens_servico (os_numero único) + cliente + equipamento
+👥 Trabalho: Múltiplos usuários criam apontamentos, pendências, programações
+🔗 Ligação: Todos conectados pelo os_numero da OS original
+ 
+
+OS = Centro do sistema (os_numero único)
+Cliente + Equipamento = Dados fixos da OS
+Apontamentos + Pendências + Programações = Trabalho colaborativo
+Está 100% claro! Posso prosseguir com qualquer implementação baseada nessa hierarquia. 🚀

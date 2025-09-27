@@ -50,7 +50,8 @@ router = APIRouter(tags=["pcp"])
 # =============================================================================
 
 class ProgramacaoPCPCreate(BaseModel):
-    id_ordem_servico: int
+    id_ordem_servico: Optional[int] = None  # Opcional se os_numero for fornecido
+    os_numero: Optional[str] = None  # Novo campo para buscar OS por número
     inicio_previsto: datetime
     fim_previsto: datetime
     id_departamento: Optional[int] = None
@@ -145,13 +146,16 @@ async def get_programacao_form_data(
             for row in setores_rows
         ]
         
-        # Buscar todos os supervisores e admins
+        # Buscar TODOS os supervisores e admins (filtro por setor será feito no frontend)
         usuarios_sql = text("""
-            SELECT u.id, u.nome_completo, u.id_setor, s.nome as setor_nome, u.privilege_level, u.trabalha_producao
+            SELECT u.id, u.nome_completo, u.id_setor, s.nome as setor_nome,
+                   u.privilege_level, u.trabalha_producao, d.nome_tipo as departamento_nome,
+                   u.email, u.matricula, d.id as departamento_id
             FROM tipo_usuarios u
             LEFT JOIN tipo_setores s ON u.id_setor = s.id
-            WHERE u.privilege_level IN ('SUPERVISOR', 'ADMIN')
-            ORDER BY u.nome_completo
+            LEFT JOIN tipo_departamentos d ON s.id_departamento = d.id
+            WHERE u.privilege_level IN ('SUPERVISOR', 'ADMIN', 'GESTAO')
+            ORDER BY d.nome_tipo, s.nome, u.privilege_level DESC, u.nome_completo
         """)
 
         print(f"[DEBUG] Executando consulta de usuários...")
@@ -166,7 +170,15 @@ async def get_programacao_form_data(
                 "id_setor": row[2],
                 "setor": row[3] or "Não informado",
                 "privilege_level": row[4],
-                "trabalha_producao": bool(row[5]) if row[5] is not None else False
+                "trabalha_producao": bool(row[5]) if row[5] is not None else False,
+                "departamento": row[6] or "Não informado",
+                "email": row[7] or "",
+                "matricula": row[8] or "",
+                "departamento_id": row[9],
+                # Formatação para dropdown
+                "display_name": f"{row[1]} - {row[3] or 'Sem Setor'} ({row[4]})",
+                # Indicador se é supervisor do setor
+                "is_supervisor_setor": row[4] == 'SUPERVISOR' and bool(row[5])
             }
             for row in usuarios_rows
         ]
@@ -186,22 +198,26 @@ async def get_programacao_form_data(
         departamentos = [
             {
                 "id": row[0],
-                "nome": row[1]
+                "nome": row[1],  # Frontend espera 'nome', não 'nome_tipo'
+                "nome_tipo": row[1]  # Manter compatibilidade
             }
             for row in departamentos_rows
         ]
 
-        # Buscar ordens de serviço disponíveis
+        # Buscar ordens de serviço disponíveis com relacionamentos Cliente e Equipamento
         ordens_sql = text("""
             SELECT os.id, os.os_numero, os.descricao_maquina, os.status_os,
-                   c.razao_social as cliente_nome, 'N/A' as tipo_maquina_nome,
-                   s.nome as setor_nome
+                   c.razao_social as cliente_nome, tm.nome_tipo as tipo_maquina_nome,
+                   s.nome as setor_nome, e.descricao as equipamento_descricao,
+                   os.prioridade
             FROM ordens_servico os
             LEFT JOIN clientes c ON os.id_cliente = c.id
+            LEFT JOIN equipamentos e ON os.id_equipamento = e.id
+            LEFT JOIN tipos_maquina tm ON os.id_tipo_maquina = tm.id
             LEFT JOIN tipo_setores s ON os.id_setor = s.id
-            WHERE os.status_os IN ('ABERTA', 'EM_ANDAMENTO', 'PROGRAMADA', 'AGUARDANDO')
+            WHERE (os.status_os IS NULL OR os.status_os NOT IN ('TERMINADA - ARQUIVADA', 'RECUSADA - CONFERIDA'))
             ORDER BY os.os_numero DESC
-            LIMIT 50
+            LIMIT 100
         """)
 
         print(f"[DEBUG] Executando consulta de ordens de serviço...")
@@ -263,6 +279,61 @@ async def get_programacao_form_data(
             "erro": str(e)
         }
 
+@router.get("/supervisores-por-setor/{setor_id}", operation_id="pcp_get_supervisores_por_setor")
+async def get_supervisores_por_setor(
+    setor_id: int,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Buscar supervisores de um setor específico que trabalham na produção"""
+    try:
+        supervisores_sql = text("""
+            SELECT u.id, u.nome_completo, u.id_setor, s.nome as setor_nome,
+                   u.privilege_level, u.trabalha_producao, d.nome_tipo as departamento_nome,
+                   u.email, u.matricula
+            FROM tipo_usuarios u
+            LEFT JOIN tipo_setores s ON u.id_setor = s.id
+            LEFT JOIN tipo_departamentos d ON s.id_departamento = d.id
+            WHERE u.id_setor = :setor_id
+            AND u.privilege_level IN ('SUPERVISOR', 'ADMIN', 'GESTAO')
+            AND (u.trabalha_producao = 1 OR u.privilege_level = 'ADMIN')
+            ORDER BY u.privilege_level DESC, u.nome_completo
+        """)
+
+        result = db.execute(supervisores_sql, {"setor_id": setor_id})
+        supervisores_rows = result.fetchall()
+
+        supervisores = [
+            {
+                "id": row[0],
+                "nome_completo": row[1],
+                "id_setor": row[2],
+                "setor": row[3] or "Não informado",
+                "privilege_level": row[4],
+                "trabalha_producao": bool(row[5]) if row[5] is not None else False,
+                "departamento": row[6] or "Não informado",
+                "email": row[7] or "",
+                "matricula": row[8] or "",
+                "display_name": f"{row[1]} - {row[3] or 'Sem Setor'} ({row[4]})"
+            }
+            for row in supervisores_rows
+        ]
+
+        return {
+            "supervisores": supervisores,
+            "total": len(supervisores),
+            "setor_id": setor_id
+        }
+
+    except Exception as e:
+        print(f"Erro ao buscar supervisores do setor {setor_id}: {e}")
+        return {
+            "supervisores": [],
+            "total": 0,
+            "setor_id": setor_id,
+            "erro": str(e)
+        }
+
 @router.post("/programacoes", operation_id="pcp_create_programacao")
 async def create_programacao_pcp(
     programacao_data: ProgramacaoPCPCreate,
@@ -271,20 +342,34 @@ async def create_programacao_pcp(
 ):
     """Criar nova programação"""
     try:
-        # Buscar a ordem de serviço
-        ordem_servico = db.query(OrdemServico).filter(
-            OrdemServico.id == programacao_data.id_ordem_servico
-        ).first()
-        
-        if not ordem_servico:
-            raise HTTPException(status_code=404, detail="Ordem de serviço não encontrada")
+        # Buscar a ordem de serviço por os_numero se fornecido, senão por id
+        if hasattr(programacao_data, 'os_numero') and programacao_data.os_numero:
+            ordem_servico = db.query(OrdemServico).filter(
+                OrdemServico.os_numero == programacao_data.os_numero
+            ).first()
+
+            if not ordem_servico:
+                raise HTTPException(status_code=404, detail=f"Ordem de serviço {programacao_data.os_numero} não encontrada")
+
+            # Usar o ID da OS encontrada
+            id_ordem_servico = ordem_servico.id
+        else:
+            # Fallback para id_ordem_servico
+            ordem_servico = db.query(OrdemServico).filter(
+                OrdemServico.id == programacao_data.id_ordem_servico
+            ).first()
+
+            if not ordem_servico:
+                raise HTTPException(status_code=404, detail="Ordem de serviço não encontrada")
+
+            id_ordem_servico = programacao_data.id_ordem_servico
         
         # Buscar o setor para obter o departamento
         setor = db.query(Setor).filter(Setor.id == programacao_data.id_setor).first()
         
         # Criar a programação
         nova_programacao = Programacao(
-            id_ordem_servico=programacao_data.id_ordem_servico,
+            id_ordem_servico=id_ordem_servico,  # Usar o ID correto
             id_setor=programacao_data.id_setor,
             responsavel_id=programacao_data.responsavel_id,
             inicio_previsto=programacao_data.inicio_previsto,
@@ -331,11 +416,15 @@ async def get_programacoes_pcp(
                    p.fim_previsto, p.status, p.criado_por_id, p.observacoes,
                    p.created_at, p.updated_at, p.id_setor,
                    os.os_numero, u.nome_completo as responsavel_nome,
-                   s.nome as setor_nome
+                   s.nome as setor_nome,
+                   c.razao_social as cliente_nome,
+                   e.descricao as equipamento_descricao
             FROM programacoes p
             LEFT JOIN ordens_servico os ON p.id_ordem_servico = os.id
             LEFT JOIN tipo_usuarios u ON p.responsavel_id = u.id
             LEFT JOIN tipo_setores s ON p.id_setor = s.id
+            LEFT JOIN clientes c ON os.id_cliente = c.id
+            LEFT JOIN equipamentos e ON os.id_equipamento = e.id
             ORDER BY p.inicio_previsto DESC
             LIMIT 100
         """)
@@ -358,7 +447,10 @@ async def get_programacoes_pcp(
                 "id_setor": row[10],
                 "os_numero": row[11] or "",
                 "responsavel_nome": row[12] or "Não informado",
-                "setor_nome": row[13] or "Não informado"
+                "setor_nome": row[13] or "Não informado",
+                # Relacionamentos 1:1 conforme HIERARQUIA_COMPLETA_BANCO_DADOS.md
+                "cliente": row[14] if row[14] else "Não informado",
+                "equipamento": row[15] if row[15] else "Não informado"
             }
             for row in programacoes
         ]
@@ -411,16 +503,22 @@ async def get_alertas_pcp(
 async def get_pendencias_pcp(
     status: Optional[str] = Query(None, description="Filtrar por status: ABERTA, FECHADA"),
     setor: Optional[str] = Query(None, description="Filtrar por setor"),
-    prioridade: Optional[str] = Query(None, description="Filtrar por prioridade"),
+    # prioridade removida - não existe para pendências
     current_user: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Obter pendências do PCP"""
+    """Obter pendências do PCP - filtra por departamento do usuário"""
     try:
+        # Buscar setor do usuário para filtrar por departamento
+        user_setor = db.query(Setor).filter(Setor.id == current_user.id_setor).first()
+        departamento_usuario = user_setor.departamento if user_setor else None
+
+        # 🏭 PCP: QUERY SIMPLIFICADA PARA VER TODAS AS PENDÊNCIAS (SEM PRIORIDADE)
         sql = text("""
-            SELECT p.id, p.descricao_pendencia, p.status, p.prioridade, p.data_inicio,
+            SELECT p.id, p.descricao_pendencia, p.status, p.data_inicio,
                    p.data_fechamento, p.id_responsavel_inicio, p.numero_os,
-                   u.nome_completo as responsavel_nome, p.cliente
+                   p.cliente, p.tipo_maquina, p.descricao_maquina,
+                   COALESCE(u.nome_completo, 'Usuário ' || p.id_responsavel_inicio) as responsavel_nome
             FROM pendencias p
             LEFT JOIN tipo_usuarios u ON p.id_responsavel_inicio = u.id
             WHERE 1=1
@@ -428,33 +526,41 @@ async def get_pendencias_pcp(
 
         # Adicionar filtros se fornecidos
         conditions = []
+
+        # PCP VÊ TODAS AS PENDÊNCIAS (sem filtro por departamento)
+        print(f"🏭 PCP: Mostrando TODAS as pendências (sem filtro por departamento)")
+        # Não adicionar filtro por departamento - PCP vê tudo
+
         if status:
             conditions.append(f"AND p.status = '{status}'")
         if setor:
             conditions.append(f"AND p.numero_os LIKE '%{setor}%'")
-        if prioridade:
-            conditions.append(f"AND p.prioridade = '{prioridade}'")
+        # prioridade removida - não existe para pendências
 
         if conditions:
             sql = text(str(sql) + " " + " ".join(conditions))
 
         sql = text(str(sql) + " ORDER BY p.data_inicio DESC LIMIT 100")
 
+        print(f"🏭 PCP SQL Query: {sql}")
         result = db.execute(sql)
         pendencias = result.fetchall()
+        print(f"🏭 PCP Pendências encontradas: {len(pendencias)}")
 
         return [
             {
                 "id": row[0],
                 "descricao": row[1] or "",
                 "status": row[2] or "ABERTA",
-                "prioridade": row[3] or "NORMAL",
-                "data_abertura": str(row[4]) if row[4] else None,
-                "data_fechamento": str(row[5]) if row[5] else None,
-                "responsavel_id": row[6],
-                "numero_os": row[7] or "",
-                "responsavel_nome": row[8] or "Não informado",
-                "cliente": row[9] or "Não informado"
+                # prioridade removida - não existe para pendências
+                "data_abertura": str(row[3]) if row[3] else None,
+                "data_fechamento": str(row[4]) if row[4] else None,
+                "responsavel_id": row[5],
+                "numero_os": row[6] or "",
+                "cliente": row[7] or "Não informado",
+                "tipo_maquina": row[8] or "Não informado",
+                "equipamento": row[9] or "Não informado",
+                "responsavel_nome": row[10] or "Não informado"
             }
             for row in pendencias
         ]
@@ -471,6 +577,66 @@ async def get_pendencias_dashboard(
 ):
     """Dashboard de pendências do PCP"""
     try:
+        print(f"🏭 Calculando dashboard de pendências para período: {periodo_dias} dias")
+
+        # 📊 CALCULAR MÉTRICAS REAIS DAS PENDÊNCIAS
+        from datetime import datetime, timedelta
+
+        # Data limite para o período
+        data_limite = datetime.now() - timedelta(days=periodo_dias)
+
+        # Query simplificada para buscar todas as pendências
+        sql = text("""
+            SELECT p.id, p.status, p.data_inicio, p.data_fechamento,
+                   p.tempo_aberto_horas
+            FROM pendencias p
+            WHERE 1=1
+        """)
+
+        result = db.execute(sql)
+        todas_pendencias = result.fetchall()
+
+        print(f"📊 Total de pendências encontradas: {len(todas_pendencias)}")
+
+        # Calcular métricas (SEM prioridade)
+        total_pendencias = len(todas_pendencias)
+        pendencias_abertas = len([p for p in todas_pendencias if p[1] == 'ABERTA'])
+        pendencias_fechadas = len([p for p in todas_pendencias if p[1] == 'FECHADA'])
+
+        # Pendências do período
+        pendencias_periodo = len([p for p in todas_pendencias if p[2] and p[2] >= data_limite])
+
+        # Pendências críticas = pendências abertas (sem conceito de prioridade)
+        pendencias_criticas = pendencias_abertas
+
+        # Tempo médio de resolução
+        pendencias_com_tempo = [p for p in todas_pendencias if p[4] is not None and p[1] == 'FECHADA']
+        tempo_medio = sum([p[4] for p in pendencias_com_tempo]) / len(pendencias_com_tempo) if pendencias_com_tempo else 0.0
+
+        # Distribuição por setor (simplificada)
+        distribuicao_setor = [
+            {"setor": "Geral", "total": total_pendencias}
+        ] if total_pendencias > 0 else []
+
+        print(f"✅ Métricas calculadas: {total_pendencias} total, {pendencias_abertas} abertas, {pendencias_fechadas} fechadas")
+
+        return {
+            "metricas_gerais": {
+                "total_pendencias": total_pendencias,
+                "pendencias_abertas": pendencias_abertas,
+                "pendencias_fechadas": pendencias_fechadas,
+                "pendencias_periodo": pendencias_periodo,
+                "pendencias_criticas": pendencias_criticas,
+                "tempo_medio_resolucao_horas": round(tempo_medio, 2)
+            },
+            "distribuicao_prioridade": [],  # Vazio - prioridade não existe para pendências
+            "distribuicao_setor": distribuicao_setor,
+            "evolucao_7_dias": []  # Implementar depois se necessário
+        }
+    except Exception as e:
+        print(f"❌ Erro ao buscar dashboard de pendências: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "metricas_gerais": {
                 "total_pendencias": 0,
@@ -480,28 +646,9 @@ async def get_pendencias_dashboard(
                 "pendencias_criticas": 0,
                 "tempo_medio_resolucao_horas": 0.0
             },
-            "distribuicao_prioridade": [
-                {"prioridade": "ALTA", "total": 0},
-                {"prioridade": "MEDIA", "total": 0},
-                {"prioridade": "BAIXA", "total": 0}
-            ],
+            "distribuicao_prioridade": [],
             "distribuicao_setor": [],
             "evolucao_7_dias": []
-        }
-    except Exception as e:
-        print(f"Erro ao buscar dashboard de pendências: {e}")
-        return {
-            "total_pendencias": 0,
-            "pendencias_abertas": 0,
-            "pendencias_fechadas": 0,
-            "pendencias_por_setor": [],
-            "pendencias_por_prioridade": {
-                "ALTA": 0,
-                "MEDIA": 0,
-                "BAIXA": 0
-            },
-            "tempo_medio_resolucao": 0.0,
-            "tendencia": "estavel"
         }
 
 @router.post("/programacoes/atribuir", operation_id="pcp_post_programacoes_atribuir")

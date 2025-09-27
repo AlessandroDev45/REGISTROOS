@@ -154,8 +154,9 @@ const ProgramacaoForm: React.FC<ProgramacaoFormProps> = ({
   const validarFormulario = (): boolean => {
     const novosErrors: Record<string, string> = {};
 
-    if (!programacao.id_ordem_servico) {
-      novosErrors.id_ordem_servico = 'Selecione uma ordem de serviço';
+    // Validar OS número (campo obrigatório)
+    if (!programacao.os_numero || programacao.os_numero.trim() === '') {
+      novosErrors.os_numero = 'Número da OS é obrigatório';
     }
 
     if (!programacao.id_departamento) {
@@ -189,25 +190,57 @@ const ProgramacaoForm: React.FC<ProgramacaoFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validarFormulario()) {
       return;
     }
 
     setLoading(true);
     try {
-      let resultado;
-      
-      if (isEditing && programacaoInicial) {
-        resultado = await updateProgramacao(programacaoInicial.id, programacao);
-      } else {
-        resultado = await createProgramacao(programacao);
+      // Preparar dados para envio
+      // Formatar OS número com zeros à esquerda se necessário
+      let osNumeroFormatado = programacao.os_numero?.trim() || '';
+      if (osNumeroFormatado && !osNumeroFormatado.startsWith('000')) {
+        // Se não começar com 000, adicionar zeros à esquerda para ter 9 dígitos
+        osNumeroFormatado = osNumeroFormatado.padStart(9, '0');
+        if (!osNumeroFormatado.startsWith('000')) {
+          osNumeroFormatado = '000' + osNumeroFormatado.slice(-6);
+        }
       }
-      
+
+      const dadosParaEnvio = {
+        os_numero: osNumeroFormatado,
+        inicio_previsto: programacao.inicio_previsto,
+        fim_previsto: programacao.fim_previsto,
+        id_departamento: programacao.id_departamento,
+        id_setor: programacao.id_setor,
+        responsavel_id: programacao.responsavel_id,
+        observacoes: programacao.observacoes || '',
+        status: programacao.status || 'PROGRAMADA'
+      };
+
+      console.log('🚀 DADOS SENDO ENVIADOS PARA O BACKEND:', dadosParaEnvio);
+      console.log('🔍 URL da requisição:', '/pcp/programacoes');
+      console.log('📊 Método:', 'POST');
+
+      let resultado;
+
+      if (isEditing && programacaoInicial) {
+        resultado = await updateProgramacao(programacaoInicial.id, dadosParaEnvio);
+      } else {
+        resultado = await createProgramacao(dadosParaEnvio);
+      }
+
       onSalvar(resultado);
     } catch (error: any) {
-      console.error('Erro ao salvar programação:', error);
-      alert(error.message || 'Erro ao salvar programação');
+      console.error('🚨 ERRO AO SALVAR PROGRAMAÇÃO:', error);
+      console.error('🔍 Status do erro:', error.response?.status);
+      console.error('📄 Dados do erro:', error.response?.data);
+      console.error('🌐 URL do erro:', error.config?.url);
+      console.error('📊 Dados enviados:', error.config?.data);
+
+      const errorMessage = error.response?.data?.detail || error.message || 'Erro ao salvar programação';
+      alert(`Erro: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -277,11 +310,15 @@ const ProgramacaoForm: React.FC<ProgramacaoFormProps> = ({
             <input
               type="text"
               value={programacao.os_numero}
-              onChange={(e) => handleInputChange('os_numero', e.target.value)}
+              onChange={(e) => {
+                let valor = e.target.value.replace(/\D/g, ''); // Apenas números
+                handleInputChange('os_numero', valor);
+              }}
               className={`w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                 errors.os_numero ? 'border-red-300' : 'border-gray-300'
               }`}
-              placeholder="Digite o número da OS"
+              placeholder="Ex: 12345 (será formatado como 000012345)"
+              maxLength={9}
             />
             {errors.os_numero && (
               <p className="text-red-500 text-xs mt-1">{errors.os_numero}</p>
@@ -322,7 +359,29 @@ const ProgramacaoForm: React.FC<ProgramacaoFormProps> = ({
             </label>
             <select
               value={programacao.id_setor || ''}
-              onChange={(e) => handleInputChange('id_setor', e.target.value ? Number(e.target.value) : undefined)}
+              onChange={(e) => {
+                const setorId = e.target.value ? Number(e.target.value) : undefined;
+                handleInputChange('id_setor', setorId);
+
+                // Selecionar automaticamente o supervisor do setor
+                if (setorId) {
+                  const supervisorDoSetor = formData.usuarios.find(usuario =>
+                    usuario.id_setor === setorId &&
+                    usuario.privilege_level === 'SUPERVISOR' &&
+                    usuario.trabalha_producao === true
+                  );
+
+                  if (supervisorDoSetor) {
+                    handleInputChange('responsavel_id', supervisorDoSetor.id);
+                    console.log(`Supervisor selecionado automaticamente: ${supervisorDoSetor.nome_completo}`);
+                  } else {
+                    handleInputChange('responsavel_id', undefined);
+                    console.log('Nenhum supervisor encontrado para este setor');
+                  }
+                } else {
+                  handleInputChange('responsavel_id', undefined);
+                }
+              }}
               className={`w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                 errors.id_setor ? 'border-red-300' : 'border-gray-300'
               }`}
@@ -333,7 +392,7 @@ const ProgramacaoForm: React.FC<ProgramacaoFormProps> = ({
                 .filter(setor => !programacao.id_departamento || setor.id_departamento === programacao.id_departamento)
                 .map((setor) => (
                   <option key={setor.id} value={setor.id}>
-                    {setor.nome} {setor.departamento_nome ? `(${setor.departamento_nome})` : ''}
+                    {setor.nome}
                   </option>
                 ))}
             </select>
@@ -442,7 +501,11 @@ const ProgramacaoForm: React.FC<ProgramacaoFormProps> = ({
             >
               <option value="">Selecione um supervisor</option>
               {formData.usuarios
-                .filter(usuario => usuario.privilege_level === 'SUPERVISOR' && usuario.trabalha_producao === true)
+                .filter(usuario =>
+                  usuario.privilege_level === 'SUPERVISOR' &&
+                  usuario.trabalha_producao === true &&
+                  (!programacao.id_setor || usuario.id_setor === programacao.id_setor)
+                )
                 .map((usuario) => (
                   <option key={usuario.id} value={usuario.id}>
                     {usuario.nome_completo} - {usuario.setor}

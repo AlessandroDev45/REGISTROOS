@@ -57,7 +57,7 @@ async def get_tipos_atividade(
     """Get activity types, optionally filtered by sector and department"""
     try:
         from app.database_models import TipoAtividade
-        query = db.query(TipoAtividade).filter(TipoAtividade.ativo == True)
+        query = db.query(TipoAtividade).filter(TipoAtividade.ativo.is_(True))
         
         if setor:
             query = query.filter(TipoAtividade.setor == setor)
@@ -145,7 +145,7 @@ async def get_descricoes_atividade(
 ):
     """Get activity descriptions, optionally filtered by sector"""
     from app.database_models import TipoDescricaoAtividade
-    query = db.query(TipoDescricaoAtividade).filter(TipoDescricaoAtividade.ativo.is_(None) | (TipoDescricaoAtividade.ativo == True))
+    query = db.query(TipoDescricaoAtividade).filter(TipoDescricaoAtividade.ativo.is_(None) | (TipoDescricaoAtividade.ativo.is_(True)))
 
     if setor:
         query = query.filter(TipoDescricaoAtividade.setor == setor)
@@ -222,7 +222,7 @@ async def get_tipos_falha(
     """Get failure types from TipoFalha model"""
     try:
         from app.database_models import TipoFalha
-        query = db.query(TipoFalha).filter(TipoFalha.ativo == True)
+        query = db.query(TipoFalha).filter(TipoFalha.ativo.is_(True))
         
         if setor:
             query = query.filter(TipoFalha.setor == setor)
@@ -325,14 +325,42 @@ async def create_subtipo_maquina(
     current_user: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create new machine subtype
-    NOTA: Funcionalidade temporariamente desabilitada - CatalogoMaquinaSubTipo removido
-    """
-    return {
-        "message": "Funcionalidade desabilitada - CatalogoMaquinaSubTipo removido do modelo",
-        "success": False,
-        "status": "DISABLED"
-    }
+    """Add subcategoria to existing TipoMaquina"""
+    try:
+        from app.database_models import TipoMaquina
+        import json
+
+        tipo_maquina_id = subtipo_data.get("tipo_maquina_id")
+        nova_subcategoria = subtipo_data.get("nome")
+
+        if not tipo_maquina_id or not nova_subcategoria:
+            raise HTTPException(status_code=400, detail="tipo_maquina_id e nome são obrigatórios")
+
+        tipo_maquina = db.query(TipoMaquina).filter(TipoMaquina.id == tipo_maquina_id).first()
+        if not tipo_maquina:
+            raise HTTPException(status_code=404, detail="Tipo de máquina não encontrado")
+
+        # Atualizar subcategorias
+        subcategorias_atuais = []
+        if tipo_maquina.subcategoria:
+            try:
+                subcategorias_atuais = json.loads(tipo_maquina.subcategoria)
+            except:
+                subcategorias_atuais = [tipo_maquina.subcategoria]
+
+        if nova_subcategoria not in subcategorias_atuais:
+            subcategorias_atuais.append(nova_subcategoria)
+            tipo_maquina.subcategoria = json.dumps(subcategorias_atuais)  # type: ignore
+            db.commit()
+
+        return {
+            "message": "Subcategoria adicionada com sucesso",
+            "success": True,
+            "subcategoria": nova_subcategoria
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao criar subcategoria: {str(e)}")
 
 # =============================================================================
 # ENDPOINTS DE STATUS E INFORMAÇÃO
@@ -355,7 +383,7 @@ async def get_catalogs_status(
         "available_models": [
             "Usuario", "OrdemServico", "Programacao", "Pendencia", 
             "ApontamentoDetalhado", "Departamento", "Setor", 
-            "TipoMaquina", "TipoTeste", "CausaRetrabalho"
+            "TipoMaquina", "TipoTeste", "TipoCausaRetrabalho"
         ],
         "removed_models": [
             "CatalogoAtividadeTipo", "CatalogoAtividadeDescricao",
@@ -387,12 +415,12 @@ async def get_departamentos(
     """Get available departments from Departamento model"""
     try:
         from app.database_models import Departamento
-        departamentos = db.query(Departamento).filter(Departamento.ativo == True).all()
+        departamentos = db.query(Departamento).filter(Departamento.ativo.is_(True)).all()
         
         return [
             {
                 "id": dept.id,
-                "nome": dept.nome_tipo,  # Campo correto no banco
+                "nome_tipo": dept.nome_tipo,
                 "descricao": dept.descricao,
                 "ativo": dept.ativo,
                 "data_criacao": dept.data_criacao
@@ -415,7 +443,7 @@ async def get_setores(
     """Get available sectors from Setor model"""
     try:
         from app.database_models import Setor, Departamento
-        query = db.query(Setor).filter(Setor.ativo == True)
+        query = db.query(Setor).filter(Setor.ativo.is_(True))
 
         if departamento:
             # Join with Departamento to filter by department name
@@ -428,7 +456,7 @@ async def get_setores(
         for setor in setores:
             # Buscar nome do departamento
             departamento_nome = None
-            if setor.id_departamento:
+            if setor.id_departamento is not None:
                 dept_obj = db.query(Departamento).filter(Departamento.id == setor.id_departamento).first()
                 if dept_obj:
                     departamento_nome = dept_obj.nome_tipo
@@ -460,7 +488,7 @@ async def get_tipos_maquina(
     """Get available machine types from TipoMaquina model"""
     try:
         from app.database_models import TipoMaquina
-        tipos = db.query(TipoMaquina).filter(TipoMaquina.ativo == True).all()
+        tipos = db.query(TipoMaquina).filter(TipoMaquina.ativo.is_(True)).all()
         
         return [
             {
@@ -490,7 +518,7 @@ async def get_tipos_teste(
     """Get available test types from TipoTeste model"""
     try:
         from app.database_models import TipoTeste
-        query = db.query(TipoTeste).filter(TipoTeste.ativo == True)
+        query = db.query(TipoTeste).filter(TipoTeste.ativo.is_(True))
         
         if setor:
             query = query.filter(TipoTeste.setor == setor)

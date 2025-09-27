@@ -12,7 +12,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from app.database_models import (
-    Usuario, OrdemServico, ApontamentoDetalhado, Cliente, TipoMaquina
+    Usuario, OrdemServico, ApontamentoDetalhado, Cliente, TipoMaquina, Pendencia
 )
 from config.database_config import get_db
 from app.dependencies import get_current_user
@@ -135,7 +135,7 @@ async def listar_ordens_servico(
         # Calcular OFFSET
         offset = (page - 1) * per_page
 
-        # SQL para buscar OS únicas com dados agregados dos apontamentos
+        # SQL para buscar OS únicas com dados agregados e relacionamentos conforme HIERARQUIA_COMPLETA_BANCO_DADOS.md
         sql = text(f"""
             SELECT
                 os.id as os_id,
@@ -150,13 +150,17 @@ async def listar_ordens_servico(
                 SUM(CASE WHEN a.foi_retrabalho = 1 THEN 1 ELSE 0 END) as total_retrabalhos,
                 GROUP_CONCAT(a.causa_retrabalho) as causas_retrabalho,
                 SUM(a.horas_orcadas) as total_horas_orcadas,
-                COUNT(a.id) as total_apontamentos
+                COUNT(a.id) as total_apontamentos,
+                c.razao_social as cliente_nome,
+                e.descricao as equipamento_descricao
             FROM ordens_servico os
             LEFT JOIN apontamentos_detalhados a ON os.id = a.id_os
             LEFT JOIN tipo_usuarios u ON a.id_usuario = u.id
             LEFT JOIN tipo_setores s ON a.id_setor = s.id
+            LEFT JOIN clientes c ON os.id_cliente = c.id
+            LEFT JOIN equipamentos e ON os.id_equipamento = e.id
             {where_clause}
-            GROUP BY os.id, os.os_numero, os.descricao_maquina, os.status_os
+            GROUP BY os.id, os.os_numero, os.descricao_maquina, os.status_os, c.razao_social, e.descricao
             ORDER BY MIN(a.data_hora_inicio) DESC
             LIMIT {per_page} OFFSET {offset}
         """)
@@ -173,7 +177,8 @@ async def listar_ordens_servico(
             {where_clause}
         """)
 
-        total_count = db.execute(count_sql, params).fetchone()[0]
+        result = db.execute(count_sql, params).fetchone()
+        total_count = result[0] if result else 0
 
         # Calcular informações de paginação
         total_pages = (total_count + per_page - 1) // per_page  # Ceiling division
@@ -187,8 +192,9 @@ async def listar_ordens_servico(
                 "id_os": row[0],  # id_os
                 "os_numero": row[1] or str(row[0]),  # os_numero ou ID como fallback (apenas números)
                 "numero_os": row[1] or str(row[0]),  # Alias para compatibilidade (apenas números)
-                "cliente": _extrair_cliente_de_observacoes(row[2]) or "N/A",  # Extrair cliente da descrição
-                "equipamento": row[2] or "N/A",  # descricao_maquina
+                # Relacionamentos 1:1 conforme HIERARQUIA_COMPLETA_BANCO_DADOS.md
+                "cliente": row[13] if row[13] else "N/A",  # cliente_nome
+                "equipamento": row[14] if row[14] else (row[2] or "N/A"),  # equipamento_descricao ou descricao_maquina
                 "tipo_maquina": "MOTOR ELETRICO",  # Padrão para motores
                 "status": row[3] or "N/A",  # status_os
                 "status_geral": row[3] or "N/A",
@@ -279,7 +285,7 @@ async def obter_status_summary_os(
     
     # Verificar permissões básicas
     if current_user.privilege_level not in ["ADMIN", "GESTAO"]:
-        if os.id_setor != current_user.id_setor:
+        if hasattr(os, 'id_setor') and hasattr(current_user, 'id_setor') and os.id_setor != current_user.id_setor:  # type: ignore
             raise HTTPException(status_code=403, detail="Acesso negado")
     
     return {
@@ -353,7 +359,7 @@ async def dashboard_geral(
 
         # Métricas de usuários
         total_usuarios = db.query(Usuario).count()
-        usuarios_ativos = db.query(Usuario).filter(Usuario.is_approved == True).count()
+        usuarios_ativos = db.query(Usuario).filter(Usuario.is_approved.is_(True)).count()
 
         # Métricas de pendências
         total_pendencias = db.query(Pendencia).count()
@@ -372,7 +378,7 @@ async def dashboard_geral(
                 "status": os.status_os,
                 "prioridade": os.prioridade,
                 "id_departamento": os.id_departamento,
-                "data_criacao": os.data_criacao.isoformat() if os.data_criacao else None
+                "data_criacao": os.data_criacao.isoformat() if os.data_criacao is not None else None
             })
 
         # Performance por departamento

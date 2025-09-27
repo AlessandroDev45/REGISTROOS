@@ -62,28 +62,8 @@ const SectorCopyAssistant: React.FC<SectorCopyAssistantProps> = ({
             try {
                 const [depts, sectors] = await Promise.all([
                     departamentoService.getDepartamentos(),
-                    // Mapear os setores para garantir que tenham a estrutura correta
-                    setorService.getSetores().then((sectors: any[]) => 
-                        sectors.map((sector: any) => ({
-                            ...sector,
-                            tiposMaquina: sector.tiposMaquina || [],
-                            tiposAtividade: sector.tiposAtividade || [],
-                            descricoesAtividade: sector.descricoesAtividade || [],
-                            tiposFalha: sector.tiposFalha || [],
-                            testesEstaticos: sector.testesEstaticos || {
-                                carcaca: [],
-                                estator: [],
-                                rotor: [],
-                                auxPmg: [],
-                                rotorPmg: []
-                            },
-                            testesDinamicos: sector.testesDinamicos || {
-                                tipo: '',
-                                vazio: [],
-                                carga: []
-                            }
-                        }))
-                    )
+                    // Buscar setores reais da API sem dados fake
+                    setorService.getSetores()
                 ]);
                 
                 setDepartamentos(depts);

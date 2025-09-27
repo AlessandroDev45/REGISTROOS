@@ -63,6 +63,8 @@ const PesquisaOSTab: React.FC<PesquisaOSTabProps> = ({ setorFiltro, onVerOS }) =
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const [colaboradoresDisponiveis, setColaboradoresDisponiveis] = useState<string[]>([]);
     const [departamentosDisponiveis, setDepartamentosDisponiveis] = useState<string[]>([]);
+    const [statusDisponiveis, setStatusDisponiveis] = useState<string[]>([]);
+    const [prioridadesDisponiveis, setPrioridadesDisponiveis] = useState<string[]>([]);
 
     const [pagination, setPagination] = useState({
         page: 1,
@@ -72,36 +74,6 @@ const PesquisaOSTab: React.FC<PesquisaOSTabProps> = ({ setorFiltro, onVerOS }) =
         has_next: false,
         has_prev: false
     });
-
-    // Função para buscar IDs das OSs pelo número
-    const buscarIdsOSs = async (osArray: any[]) => {
-        try {
-            // Mapeamento conhecido de números para IDs (baseado no banco de dados)
-            const numeroParaId: { [key: string]: number } = {
-                '12345': 2,
-                '20203': 1,
-                '21120': 3,
-                '21111': 4,
-                '16609': 5,
-                '21129': 6,
-                '11111': 7,
-                '21155': 8,
-                '20204': 12,
-                '20004': 13
-            };
-
-            for (const os of osArray) {
-                if (os.numero_os && numeroParaId[os.numero_os]) {
-                    os.id_os = numeroParaId[os.numero_os];
-                    console.log(`✅ Mapeado OS ${os.numero_os} -> ID ${os.id_os}`);
-                } else {
-                    console.warn(`⚠️ ID não encontrado para OS ${os.numero_os}`);
-                }
-            }
-        } catch (error) {
-            console.error('Erro ao mapear IDs das OSs:', error);
-        }
-    };
 
     const handlePesquisa = async (page: number = 1) => {
         setLoading(true);
@@ -189,8 +161,26 @@ const PesquisaOSTab: React.FC<PesquisaOSTabProps> = ({ setorFiltro, onVerOS }) =
                 colaboradores: Array.from(os.colaboradores).join(', ')
             }));
 
-            // Buscar IDs das OSs pelo número
-            await buscarIdsOSs(osArray);
+            // Buscar IDs reais das OSs via API
+            try {
+                const osNumeros = osArray.map(os => os.numero_os).filter(Boolean);
+                if (osNumeros.length > 0) {
+                    const idsResponse = await api.post('/desenvolvimento/buscar-ids-os', {
+                        numeros_os: osNumeros
+                    });
+
+                    if (idsResponse.data && idsResponse.data.mapeamento) {
+                        for (const os of osArray) {
+                            if (os.numero_os && idsResponse.data.mapeamento[os.numero_os]) {
+                                os.id_os = idsResponse.data.mapeamento[os.numero_os];
+                                console.log(`✅ Mapeado OS ${os.numero_os} -> ID ${os.id_os}`);
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao buscar IDs das OSs:', error);
+            }
 
             setOsAgrupadas(osArray);
 
@@ -218,8 +208,40 @@ const PesquisaOSTab: React.FC<PesquisaOSTabProps> = ({ setorFiltro, onVerOS }) =
         }
     };
 
+    // Carregar dados dinâmicos para filtros
+    const carregarDadosFiltros = async () => {
+        try {
+            // 🔧 USAR VALORES PADRÃO DIRETO (não precisa de endpoint admin)
+            // Status padrão do sistema
+            setStatusDisponiveis([
+                'PROGRAMADA',
+                'EM_ANDAMENTO',
+                'PENDENTE',
+                'FINALIZADA',
+                'TERMINADA',
+                'CANCELADA'
+            ]);
+
+            // Prioridades padrão do sistema
+            setPrioridadesDisponiveis([
+                'URGENTE',
+                'ALTA',
+                'NORMAL',
+                'BAIXA'
+            ]);
+
+            console.log('✅ Dados dos filtros carregados com valores padrão');
+        } catch (error) {
+            console.error('Erro ao carregar dados dos filtros:', error);
+            // Fallback para valores padrão
+            setStatusDisponiveis(['FINALIZADA', 'EM_ANDAMENTO', 'PENDENTE']);
+            setPrioridadesDisponiveis(['URGENTE', 'ALTA', 'NORMAL', 'BAIXA']);
+        }
+    };
+
     useEffect(() => {
         // Carregar dados iniciais
+        carregarDadosFiltros();
         handlePesquisa();
     }, []);
 
@@ -295,7 +317,7 @@ const PesquisaOSTab: React.FC<PesquisaOSTabProps> = ({ setorFiltro, onVerOS }) =
                                 value={filtros.numeroOS}
                                 onChange={(e) => handleFiltroChange('numeroOS', e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="21155"
+                                placeholder="Ex: 20203"
                             />
                         </div>
                         <div>
@@ -361,9 +383,11 @@ const PesquisaOSTab: React.FC<PesquisaOSTabProps> = ({ setorFiltro, onVerOS }) =
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
                                 <option value="">Todos</option>
-                                <option value="FINALIZADO">Finalizado</option>
-                                <option value="EM_ANDAMENTO">Em Andamento</option>
-                                <option value="PENDENTE">Pendente</option>
+                                                {statusDisponiveis.map((status, index) => (
+                                                    <option key={`status-${index}`} value={status}>
+                                                        {status}
+                                                    </option>
+                                                ))}
                             </select>
                         </div>
                         <div>
@@ -415,10 +439,11 @@ const PesquisaOSTab: React.FC<PesquisaOSTabProps> = ({ setorFiltro, onVerOS }) =
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 >
                                     <option value="">Todas</option>
-                                    <option value="URGENTE">Urgente</option>
-                                    <option value="ALTA">Alta</option>
-                                    <option value="NORMAL">Normal</option>
-                                    <option value="BAIXA">Baixa</option>
+                                                    {prioridadesDisponiveis.map((prioridade, index) => (
+                                                        <option key={`prioridade-${index}`} value={prioridade}>
+                                                            {prioridade}
+                                                        </option>
+                                                    ))}
                                 </select>
                             </div>
                             <div>

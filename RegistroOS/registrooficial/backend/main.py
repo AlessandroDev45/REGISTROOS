@@ -26,21 +26,29 @@ app.add_middleware(
 
 # Importar e incluir rotas
 try:
+    import sys
+    import os
+    # Adiciona o diretório 'backend' ao sys.path
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    if current_dir not in sys.path:
+        sys.path.append(current_dir)
+
+    # Importar os routers dos arquivos de rota
     from routes.auth import router as auth_router
     from routes.os_routes_simple import router as os_router
     from routes.catalogs_validated import router as catalogs_router
     from routes.desenvolvimento import router as desenvolvimento_router
     from routes.users import router as users_router
-    from app.admin_routes_simple import router as admin_router
-    from app.admin_config_routes import router as admin_config_router
-
+    from routes.admin_routes_simple import router as admin_router
+    from routes.admin_config_routes import router as admin_config_router
     from routes.pcp_routes import router as pcp_router
-    from app.gestao_routes import router as gestao_router
+    from routes.gestao_routes import router as gestao_router
     from routes.relatorio_completo import router as relatorio_router
     from routes.general import router as general_router
 
+    # Incluir os routers na aplicação FastAPI
     app.include_router(auth_router, prefix="/api", tags=["auth"])
-    app.include_router(desenvolvimento_router, prefix="/api", tags=["desenvolvimento"])
+    app.include_router(desenvolvimento_router, prefix="/api/desenvolvimento", tags=["desenvolvimento"])
     app.include_router(os_router, prefix="/api", tags=["os"])
     app.include_router(catalogs_router, prefix="/api", tags=["catalogs"])
     app.include_router(users_router, prefix="/api", tags=["users"])
@@ -56,6 +64,9 @@ try:
     
 except ImportError as e:
     print(f"❌ Erro ao importar rotas: {e}")
+    print(f"Detalhes do erro: {e.__class__.__name__}: {e}")
+    import traceback
+    traceback.print_exc()
 
 @app.get("/")
 async def root():

@@ -34,13 +34,12 @@ async def get_departamentos(
 ):
     """Get available departments from Departamento model"""
     try:
-        departamentos = db.query(Departamento).filter(Departamento.ativo == True).all()
+        departamentos = db.query(Departamento).filter(Departamento.ativo.is_(True)).all()
         
         return [
             {
                 "id": dept.id,
-                "nome_tipo": dept.nome_tipo,  # Campo correto da DB
-                "nome": dept.nome_tipo,       # Para compatibilidade
+                "nome_tipo": dept.nome_tipo,
                 "descricao": dept.descricao,
                 "ativo": dept.ativo,
                 "data_criacao": dept.data_criacao
@@ -58,7 +57,7 @@ async def get_setores(
 ):
     """Get available sectors from Setor model"""
     try:
-        query = db.query(Setor).filter(Setor.ativo == True)
+        query = db.query(Setor).filter(Setor.ativo.is_(True))
 
         if departamento:
             # Filtra por nome do departamento usando FK id_departamento
@@ -72,7 +71,7 @@ async def get_setores(
         for setor in setores:
             # Buscar nome do departamento
             departamento_nome = None
-            if setor.id_departamento:
+            if setor.id_departamento is not None:
                 dept_obj = db.query(Departamento).filter(Departamento.id == setor.id_departamento).first()
                 if dept_obj:
                     departamento_nome = dept_obj.nome_tipo
@@ -111,7 +110,7 @@ async def get_estrutura_hierarquica(
                 setor = getattr(current_user, 'setor', None)
 
         # Buscar departamentos
-        dept_query = db.query(Departamento).filter(Departamento.ativo == True)
+        dept_query = db.query(Departamento).filter(Departamento.ativo.is_(True))
         if departamento:
             dept_query = dept_query.filter(Departamento.nome_tipo == departamento)
         departamentos = dept_query.all()
@@ -122,7 +121,7 @@ async def get_estrutura_hierarquica(
             # Buscar setores do departamento (fazendo trim do nome)
             dept_nome = getattr(dept, 'nome_tipo', '').strip() if getattr(dept, 'nome_tipo', None) else ""
             setores_query = db.query(Setor).filter(
-                Setor.ativo == True,
+                Setor.ativo.is_(True),
                 Setor.id_departamento == dept_nome
             )
             if setor:
@@ -133,32 +132,32 @@ async def get_estrutura_hierarquica(
             for setor_obj in setores:
                 # Buscar tipos de máquina do setor
                 tipos_maquina = db.query(TipoMaquina).filter(
-                    TipoMaquina.ativo == True
+                    TipoMaquina.ativo.is_(True)
                 ).all()
 
                 # Buscar tipos de teste do setor
                 tipos_teste = db.query(TipoTeste).filter(
-                    TipoTeste.ativo == True,
+                    TipoTeste.ativo.is_(True),
                     ).all()
 
                 # Buscar atividades (TipoAtividade não tem campo setor)
                 tipos_atividade = db.query(TipoAtividade).filter(
-                    TipoAtividade.ativo == True
+                    TipoAtividade.ativo.is_(True)
                 ).all()
 
-                # Buscar descrições de atividade (DescricaoAtividade não tem campo setor)
-                descricoes_atividade = db.query(DescricaoAtividade).filter(
-                    DescricaoAtividade.ativo == True
+                # Buscar descrições de atividade (TipoDescricaoAtividade não tem campo setor)
+                descricoes_atividade = db.query(TipoDescricaoAtividade).filter(
+                    TipoDescricaoAtividade.ativo.is_(True)
                 ).all()
 
                 # Buscar tipos de falha (TipoFalha não tem campo setor)
                 tipos_falha = db.query(TipoFalha).filter(
-                    TipoFalha.ativo == True
+                    TipoFalha.ativo.is_(True)
                 ).all()
 
-                # Buscar causas de retrabalho (CausaRetrabalho não tem campo setor)
-                causas_retrabalho = db.query(CausaRetrabalho).filter(
-                    CausaRetrabalho.ativo == True
+                # Buscar causas de retrabalho (TipoCausaRetrabalho não tem campo setor)
+                causas_retrabalho = db.query(TipoCausaRetrabalho).filter(
+                    TipoCausaRetrabalho.ativo.is_(True)
                 ).all()
 
                 setor_data = {
@@ -251,7 +250,7 @@ async def get_estrutura_hierarquica_debug(
         print(f"🌳 DEBUG: Buscando estrutura hierárquica - departamento: {departamento}, setor: {setor}")
 
         # Buscar departamentos
-        dept_query = db.query(Departamento).filter(Departamento.ativo == True)
+        dept_query = db.query(Departamento).filter(Departamento.ativo.is_(True))
         if departamento:
             dept_query = dept_query.filter(Departamento.nome_tipo == departamento)
         departamentos = dept_query.all()
@@ -262,7 +261,7 @@ async def get_estrutura_hierarquica_debug(
         for dept in departamentos:
             dept_nome = getattr(dept, 'nome_tipo', '').strip() if getattr(dept, 'nome_tipo', None) else ""
             setores_query = db.query(Setor).filter(
-                Setor.ativo == True,
+                Setor.ativo.is_(True),
                 Setor.departamento == dept_nome  # Corrigido para usar departamento em vez de id_departamento
             )
             if setor:
@@ -275,7 +274,7 @@ async def get_estrutura_hierarquica_debug(
                 try:
                     # Buscar tipos de máquina do setor com tratamento de erro JSON
                     tipos_maquina_query = db.query(TipoMaquina).filter(
-                        TipoMaquina.ativo == True,
+                        TipoMaquina.ativo.is_(True),
                         TipoMaquina.departamento == dept_nome,
                         TipoMaquina.setor == setor_obj.nome
                     )
@@ -284,14 +283,14 @@ async def get_estrutura_hierarquica_debug(
                         try:
                             # Tratar subcategoria JSON com segurança
                             subcategoria = None
-                            if hasattr(tm, 'subcategoria') and tm.subcategoria:
+                            if hasattr(tm, 'subcategoria') and tm.subcategoria is not None:
                                 try:
                                     if isinstance(tm.subcategoria, str):
                                         import json
                                         subcategoria = json.loads(tm.subcategoria)
                                     else:
                                         subcategoria = tm.subcategoria
-                                except (json.JSONDecodeError, TypeError):
+                                except (Exception,):
                                     subcategoria = None
 
                             tipos_maquina.append({
@@ -310,7 +309,7 @@ async def get_estrutura_hierarquica_debug(
 
                 # Buscar tipos de atividade do setor
                 tipos_atividade = db.query(TipoAtividade).filter(
-                    TipoAtividade.ativo == True,
+                    TipoAtividade.ativo.is_(True),
                     TipoAtividade.departamento == dept_nome,
                     TipoAtividade.setor == setor_obj.nome
                 ).all()
@@ -325,7 +324,7 @@ async def get_estrutura_hierarquica_debug(
                     setor_alternativo = setor_nome.replace("LABORATORIO ENSAIOS", "LABORATORIO DE ENSAIOS")
 
                 descricoes_query = db.query(TipoDescricaoAtividade).filter(
-                    TipoDescricaoAtividade.ativo == True
+                    TipoDescricaoAtividade.ativo.is_(True)
                 ).filter(
                     (TipoDescricaoAtividade.setor == setor_nome) |
                     (TipoDescricaoAtividade.setor == setor_alternativo if setor_alternativo else False)
@@ -337,14 +336,14 @@ async def get_estrutura_hierarquica_debug(
 
                 # Buscar tipos de falha do setor
                 tipos_falha = db.query(TipoFalha).filter(
-                    TipoFalha.ativo == True,
+                    TipoFalha.ativo.is_(True),
                     TipoFalha.departamento == dept_nome,
                     TipoFalha.setor == setor_obj.nome
                 ).all()
 
                 # Buscar causas de retrabalho do setor
                 causas_retrabalho = db.query(TipoCausaRetrabalho).filter(
-                    TipoCausaRetrabalho.ativo == True,
+                    TipoCausaRetrabalho.ativo.is_(True),
                     TipoCausaRetrabalho.departamento == dept_nome,
                     TipoCausaRetrabalho.setor == setor_obj.nome
                 ).all()
@@ -387,148 +386,6 @@ async def get_estrutura_hierarquica_debug(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro ao buscar estrutura hierárquica: {str(e)}")
 
-        # Filtrar por privilégio do usuário
-        if getattr(current_user, 'privilege_level', '') != 'ADMIN':
-            # Usuários não-admin veem apenas seu departamento/setor
-            if not departamento:
-                departamento = getattr(current_user, 'departamento', None)
-            if not setor:
-                setor = getattr(current_user, 'setor', None)
-
-        # Buscar departamentos
-        dept_query = db.query(Departamento).filter(Departamento.ativo == True)
-        if departamento:
-            dept_query = dept_query.filter(Departamento.nome_tipo == departamento)
-        departamentos = dept_query.all()
-
-        estrutura = []
-
-        for dept in departamentos:
-            # Buscar setores do departamento (fazendo trim do nome)
-            dept_nome = getattr(dept, 'nome_tipo', '').strip() if getattr(dept, 'nome_tipo', None) else ""
-            setores_query = db.query(Setor).filter(
-                Setor.ativo == True,
-                Setor.id_departamento == dept_nome
-            )
-            if setor:
-                setores_query = setores_query.filter(Setor.nome == setor)
-            setores = setores_query.all()
-
-            setores_data = []
-            for setor_obj in setores:
-                # Buscar tipos de máquina para este setor/departamento
-                tipos_maquina = db.query(TipoMaquina).filter(
-                    TipoMaquina.ativo == True,
-                    TipoMaquina.id_departamento == dept_nome
-                ).all()
-
-                # Buscar tipos de atividade para este setor/departamento
-                # TipoAtividade não tem campos departamento/setor diretos, buscar todos ativos
-                tipos_atividade = db.query(TipoAtividade).filter(
-                    TipoAtividade.ativo == True
-                ).all()
-
-                # Buscar descrições de atividade para este setor
-                # DescricaoAtividade não tem campo setor, buscar todos ativos
-                descricoes_atividade = db.query(DescricaoAtividade).filter(
-                    DescricaoAtividade.ativo == True
-                ).all()
-
-                # Buscar tipos de teste para este departamento/setor
-                tipos_teste = db.query(TipoTeste).filter(
-                    TipoTeste.ativo == True,
-                    ).all()
-
-                # Buscar tipos de falha para este departamento
-                # TipoFalha não tem campo departamento, buscar todos ativos
-                tipos_falha = db.query(TipoFalha).filter(
-                    TipoFalha.ativo == True
-                ).all()
-
-                # Buscar causas de retrabalho para este departamento
-                # CausaRetrabalho tem id_departamento, não departamento direto
-                causas_retrabalho = db.query(CausaRetrabalho).filter(
-                    CausaRetrabalho.ativo == True
-                ).all()
-
-                setor_data = {
-                    "id": setor_obj.id,
-                    "nome": setor_obj.nome,
-                    "descricao": setor_obj.descricao,
-                    "tipos_maquina": [
-                        {
-                            "id": tm.id,
-                            "nome_tipo": tm.nome_tipo,
-                            "categoria": tm.categoria,
-                            "descricao": tm.descricao,
-                            "tipos_teste": [
-                                {
-                                    "id": tt.id,
-                                    "nome_tipo": tt.nome,
-                                    "descricao": tt.descricao
-                                }
-                                for tt in tipos_teste if hasattr(tt, 'tipo_maquina') and getattr(tt, 'tipo_maquina', None) == tm.nome_tipo
-                            ]
-                        }
-                        for tm in tipos_maquina
-                    ],
-                    "tipos_atividade": [
-                        {
-                            "id": ta.id,
-                            "nome_tipo": ta.nome_tipo,
-                            "descricao": ta.descricao,
-                            "id_tipo_maquina": ta.id_tipo_maquina
-                        }
-                        for ta in tipos_atividade
-                    ],
-                    "descricoes_atividade": [
-                        {
-                            "id": da.id,
-                            "codigo": da.codigo,
-                            "descricao": da.descricao
-                        }
-                        for da in descricoes_atividade
-                    ],
-                    "tipos_falha": [
-                        {
-                            "id": tf.id,
-                            "codigo": tf.codigo,
-                            "descricao": tf.descricao
-                        }
-                        for tf in tipos_falha
-                    ],
-                    "causas_retrabalho": [
-                        {
-                            "id": cr.id,
-                            "codigo": cr.codigo,
-                            "descricao": cr.descricao
-                        }
-                        for cr in causas_retrabalho
-                    ]
-                }
-                setores_data.append(setor_data)
-
-            dept_data = {
-                "id": dept.id,
-                "nome": dept_nome,
-                "descricao": dept.descricao,
-                "setores": setores_data
-            }
-            estrutura.append(dept_data)
-
-        return {
-            "estrutura": estrutura,
-            "total_departamentos": len(estrutura),
-            "filtros_aplicados": {
-                "departamento": departamento,
-                "setor": setor,
-                "usuario_privilege": current_user.privilege_level
-            }
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao buscar estrutura hierárquica: {str(e)}")
-
 @router.get("/tipos-maquina")
 async def get_tipos_maquina(
     departamento: Optional[str] = None,
@@ -538,7 +395,7 @@ async def get_tipos_maquina(
 ):
     """Get available machine types from TipoMaquina model"""
     try:
-        query = db.query(TipoMaquina).filter(TipoMaquina.ativo == True)
+        query = db.query(TipoMaquina).filter(TipoMaquina.ativo.is_(True))
 
         if departamento:
             query = query.filter(TipoMaquina.id_departamento == departamento)
@@ -552,14 +409,14 @@ async def get_tipos_maquina(
             try:
                 # Tratar subcategoria JSON com segurança
                 subcategoria = None
-                if hasattr(tipo, 'subcategoria') and tipo.subcategoria:
+                if hasattr(tipo, 'subcategoria') and tipo.subcategoria is not None:
                     try:
                         if isinstance(tipo.subcategoria, str):
                             import json
                             subcategoria = json.loads(tipo.subcategoria)
                         else:
                             subcategoria = tipo.subcategoria
-                    except (json.JSONDecodeError, TypeError):
+                    except (Exception,):
                         subcategoria = None
 
                 result.append({
@@ -589,7 +446,7 @@ async def get_tipos_atividade(
 ):
     """Get available activity types"""
     try:
-        query = db.query(TipoAtividade).filter(TipoAtividade.ativo == True)
+        query = db.query(TipoAtividade).filter(TipoAtividade.ativo.is_(True))
 
         if departamento:
             query = query.filter(TipoAtividade.departamento == departamento)
@@ -625,16 +482,16 @@ async def get_descricoes_atividade(
 ):
     """Get available activity descriptions"""
     try:
-        query = db.query(DescricaoAtividade).filter(DescricaoAtividade.ativo == True)
+        query = db.query(TipoDescricaoAtividade).filter(TipoDescricaoAtividade.ativo.is_(True))
 
         if departamento:
-            query = query.filter(DescricaoAtividade.departamento == departamento)
+            query = query.filter(TipoDescricaoAtividade.departamento == departamento)
 
         if setor:
-            query = query.filter(DescricaoAtividade.setor == setor)
+            query = query.filter(TipoDescricaoAtividade.setor == setor)
 
         if atividade:
-            query = query.filter(DescricaoAtividade.atividade == atividade)
+            query = query.filter(TipoDescricaoAtividade.atividade == atividade)
 
         descricoes = query.all()
 
@@ -664,7 +521,7 @@ async def get_colaboradores(
 ):
     """Get available collaborators/users"""
     try:
-        query = db.query(Usuario).filter(Usuario.is_approved == True)
+        query = db.query(Usuario).filter(Usuario.is_approved.is_(True))
 
         if setor:
             query = query.filter(Usuario.setor == setor)
@@ -716,7 +573,7 @@ async def get_dashboard_metrics(
 
         # Pendências abertas
         pendencias_abertas = db.query(ApontamentoDetalhado).filter(
-            ApontamentoDetalhado.pendencia == True
+            ApontamentoDetalhado.pendencia.is_(True)
         ).count()
 
         return {
@@ -751,7 +608,7 @@ async def get_tipos_teste(
 ):
     """Get available test types from TipoTeste model"""
     try:
-        query = db.query(TipoTeste).filter(TipoTeste.ativo == True)
+        query = db.query(TipoTeste).filter(TipoTeste.ativo.is_(True))
 
         if departamento:
             query = query.filter()
@@ -763,7 +620,7 @@ async def get_tipos_teste(
             query = query.filter(TipoTeste.tipo_maquina == tipo_maquina)
 
         if teste_exclusivo_setor == '1':
-            query = query.filter(TipoTeste.teste_exclusivo_setor == True)
+            query = query.filter(TipoTeste.teste_exclusivo_setor.is_(True))
         
         tipos = query.all()
         
@@ -796,7 +653,7 @@ async def get_tipos_teste_valores(
     try:
         # Buscar valores únicos da coluna tipo_teste
         valores = db.query(TipoTeste.tipo_teste).filter(
-            TipoTeste.ativo == True,
+            TipoTeste.ativo.is_(True),
             TipoTeste.tipo_teste.isnot(None),
             TipoTeste.tipo_teste != ''
         ).distinct().all()
@@ -828,8 +685,8 @@ async def detectar_testes_exclusivos(
 
         # Buscar testes exclusivos do setor
         testes_exclusivos = db.query(TipoTeste).filter(
-            TipoTeste.teste_exclusivo_setor == True,
-            TipoTeste.ativo == True
+            TipoTeste.teste_exclusivo_setor.is_(True),
+            TipoTeste.ativo.is_(True)
         ).all()
 
         # Palavras-chave para detecção
@@ -965,7 +822,7 @@ async def get_testes_exclusivos_finalizados(
                 "hora_finalizacao": teste.hora_finalizacao,
                 "descricao_atividade": teste.descricao_atividade,
                 "observacoes": teste.observacoes,
-                "data_criacao": teste.data_criacao.isoformat() if teste.data_criacao else None
+                "data_criacao": teste.data_criacao.isoformat() if teste.data_criacao is not None else None
             }
             for teste in testes_finalizados
         ]
@@ -1028,7 +885,7 @@ async def get_usuarios(
 ):
     """Get all users from Usuario model"""
     try:
-        usuarios = db.query(Usuario).filter(Usuario.is_approved == True).all()
+        usuarios = db.query(Usuario).filter(Usuario.is_approved.is_(True)).all()
         
         return [
             {
@@ -1049,7 +906,7 @@ async def get_usuarios(
         raise HTTPException(status_code=500, detail=f"Erro ao buscar usuários: {str(e)}")
 
 @router.get("/tipo-atividade")
-async def get_tipos_atividade(
+async def get_tipos_atividade_simple(
     departamento: Optional[str] = None,
     setor: Optional[str] = None,
     current_user: Usuario = Depends(get_current_user),
@@ -1057,7 +914,7 @@ async def get_tipos_atividade(
 ):
     """Get activity types from TipoAtividade model"""
     try:
-        query = db.query(TipoAtividade).filter(TipoAtividade.ativo == True)
+        query = db.query(TipoAtividade).filter(TipoAtividade.ativo.is_(True))
         
         # TipoAtividade não tem campos departamento/setor diretos
         # Filtros removidos pois não existem esses campos no modelo
@@ -1078,7 +935,7 @@ async def get_tipos_atividade(
         raise HTTPException(status_code=500, detail=f"Erro ao buscar tipos de atividade: {str(e)}")
 
 @router.get("/descricao-atividade")
-async def get_descricoes_atividade(
+async def get_descricoes_atividade_simple(
     setor: Optional[str] = None,
     departamento: Optional[str] = None,
     current_user: Usuario = Depends(get_current_user),
@@ -1086,7 +943,7 @@ async def get_descricoes_atividade(
 ):
     """Get activity descriptions from TipoDescricaoAtividade model"""
     try:
-        query = db.query(TipoDescricaoAtividade).filter(TipoDescricaoAtividade.ativo == True)
+        query = db.query(TipoDescricaoAtividade).filter(TipoDescricaoAtividade.ativo.is_(True))
         
         if setor:
             query = query.filter()
@@ -1117,7 +974,7 @@ async def get_tipos_falha(
 ):
     """Get failure types from TipoFalha model"""
     try:
-        query = db.query(TipoFalha).filter(TipoFalha.ativo == True)
+        query = db.query(TipoFalha).filter(TipoFalha.ativo.is_(True))
         
         if departamento:
             query = query.filter(TipoFalha.id_departamento == departamento)
@@ -1149,7 +1006,7 @@ async def get_causas_retrabalho(
 ):
     """Get work order causes from TipoCausaRetrabalho model"""
     try:
-        query = db.query(TipoCausaRetrabalho).filter(TipoCausaRetrabalho.ativo == True)
+        query = db.query(TipoCausaRetrabalho).filter(TipoCausaRetrabalho.ativo.is_(True))
 
         # TipoCausaRetrabalho não tem campos departamento/setor diretos
         # Filtros removidos pois não existem esses campos no modelo

@@ -11,7 +11,7 @@ from typing import Callable, Dict, Any
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from utils.text_validators import limpar_texto, validar_texto
+from RegistroOS.registrooficial.backend.utils.text_validators import limpar_texto, validar_texto
 
 class TextValidationMiddleware(BaseHTTPMiddleware):
     """

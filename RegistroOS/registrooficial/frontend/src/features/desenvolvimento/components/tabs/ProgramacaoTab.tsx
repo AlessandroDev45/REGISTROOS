@@ -38,7 +38,7 @@ interface Programacao {
 const ProgramacaoTab: React.FC = () => {
     const { setorAtivo } = useSetor();
     const [ordensServico, setOrdensServico] = useState<OrdemServico[]>([]);
-    const [programacoes, setProgramacoes] = useState<Programacao[]>([]);
+    // const [programacoes, setProgramacoes] = useState<Programacao[]>([]); // Removido - usando apenas ordensServico
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState<'calendar' | 'list'>('list');
     const [filtroStatus, setFiltroStatus] = useState<string>('');
@@ -57,25 +57,43 @@ const ProgramacaoTab: React.FC = () => {
             try {
                 setLoading(true);
 
-                // Buscar programações reais
-                const programacoesResponse = await api.get('/api/pcp/programacoes', {
+                // DESENVOLVIMENTO: Buscar APENAS programações do setor do usuário
+                const response = await api.get('/desenvolvimento/programacao', {
                     params: {
-                        setor: setorAtivo.nome,
-                        departamento: setorAtivo.departamento,
                         status: filtroStatus || undefined
                     }
                 });
-                setProgramacoes(Array.isArray(programacoesResponse.data) ? programacoesResponse.data : []);
 
-                // Buscar programação real da API
-                const response = await api.get('/programacao', {
-                    params: {
-                        status: filtroStatus || undefined,
-                        prioridade: filtroPrioridade || undefined
+                // Programações do setor com deduplicação por ID único
+                const programacoesData = response.data || [];
+                console.log('🔧 Programações recebidas:', programacoesData.length);
+
+                // Deduplicar por ID da programação (não por OS)
+                const programacoesUnicas = new Map();
+                programacoesData.forEach((prog: any) => {
+                    if (!programacoesUnicas.has(prog.id)) {
+                        programacoesUnicas.set(prog.id, prog);
                     }
                 });
+                const programacoesDeduplicadas = Array.from(programacoesUnicas.values());
+                console.log('🔧 Após deduplicação:', programacoesDeduplicadas.length);
 
-                setOrdensServico(response.data || []);
+                // Converter para formato de OrdemServico para compatibilidade
+                const ordensFormatadas: OrdemServico[] = programacoesDeduplicadas.map((prog: any) => ({
+                    id: prog.id,
+                    numero: prog.os_numero || prog.numero || String(prog.id),
+                    status: prog.status || 'PROGRAMADA',
+                    responsavel_atual: prog.responsavel_nome || prog.responsavel_atual,
+                    data_prevista: prog.inicio_previsto?.split('T')[0] || prog.data_prevista,
+                    descricao: prog.observacoes || prog.descricao || `Programação ${prog.id}`,
+                    prioridade: prog.prioridade || 'MEDIA',
+                    tempo_estimado: prog.tempo_estimado || 8,
+                    cliente: prog.cliente_nome || '', // Dados reais do cliente
+                    equipamento: prog.equipamento_descricao || '' // Dados reais do equipamento
+                }));
+                setOrdensServico(ordensFormatadas);
+
+                // Usando apenas ordensServico - sem conversão desnecessária
 
                 // Usar apenas dados reais da API - sem fallback para dados mock
                 // Se não há dados, mostrar lista vazia
@@ -83,7 +101,6 @@ const ProgramacaoTab: React.FC = () => {
                 console.error('Erro ao buscar programação:', error);
                 // Em caso de erro, usar dados mock
                 setOrdensServico([]);
-                setProgramacoes([]);
             } finally {
                 setLoading(false);
             }
@@ -103,21 +120,8 @@ const ProgramacaoTab: React.FC = () => {
     };
 
     const handleModalSuccess = () => {
-        // Recarregar programações após sucesso
-        const fetchProgramacao = async () => {
-            try {
-                const response = await api.get('/api/pcp/programacoes', {
-                    params: {
-                        setor: setorAtivo?.nome,
-                        departamento: setorAtivo?.departamento
-                    }
-                });
-                setProgramacoes(Array.isArray(response.data) ? response.data : []);
-            } catch (error) {
-                console.error('Erro ao recarregar programações:', error);
-            }
-        };
-        fetchProgramacao();
+        // Recarregar dados após sucesso - usar o mesmo useEffect
+        window.location.reload(); // Força recarregamento completo
     };
 
     const getPriorityColor = (prioridade: string) => {
@@ -256,78 +260,7 @@ const ProgramacaoTab: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Seção de Programações */}
-                <div className="p-6 border-b border-gray-200">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-semibold text-gray-900">📅 Programações Ativas</h3>
-                        <button
-                            onClick={() => setShowAtribuicaoModal(true)}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                        >
-                            ➕ Nova Programação
-                        </button>
-                    </div>
-
-                    {programacoes.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">
-                            Nenhuma programação encontrada
-                        </div>
-                    ) : (
-                        <div className="space-y-3">
-                            {programacoes.map((programacao) => (
-                                <div
-                                    key={programacao.id}
-                                    className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                                >
-                                    <div className="flex justify-between items-start">
-                                        <div className="flex-1">
-                                            <div className="flex items-center space-x-2 mb-2">
-                                                <span className="font-semibold text-gray-900">
-                                                    OS {programacao.os_numero}
-                                                </span>
-                                                <span className={`px-2 py-1 text-xs rounded-full ${
-                                                    programacao.status === 'PROGRAMADA' ? 'bg-blue-100 text-blue-800' :
-                                                    programacao.status === 'EM_ANDAMENTO' ? 'bg-yellow-100 text-yellow-800' :
-                                                    programacao.status === 'CONCLUIDA' ? 'bg-green-100 text-green-800' :
-                                                    'bg-gray-100 text-gray-800'
-                                                }`}>
-                                                    {programacao.status}
-                                                </span>
-                                            </div>
-                                            <p className="text-sm text-gray-600 mb-1">
-                                                👨‍💼 {programacao.responsavel_nome || 'Não atribuído'}
-                                            </p>
-                                            <p className="text-sm text-gray-600 mb-1">
-                                                📅 {new Date(programacao.inicio_previsto).toLocaleDateString('pt-BR')} - {new Date(programacao.fim_previsto).toLocaleDateString('pt-BR')}
-                                            </p>
-                                            {programacao.observacoes && (
-                                                <p className="text-sm text-gray-500 mt-2">
-                                                    📝 {programacao.observacoes}
-                                                </p>
-                                            )}
-                                        </div>
-                                        <div className="flex space-x-2">
-                                            <button
-                                                onClick={() => handleEditProgramacao(programacao)}
-                                                className="px-3 py-1 text-sm bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200 transition-colors"
-                                                title="Editar Programação"
-                                            >
-                                                ✏️ Editar
-                                            </button>
-                                            <button
-                                                onClick={() => handleReatribuirProgramacao(programacao)}
-                                                className="px-3 py-1 text-sm bg-purple-100 text-purple-800 rounded hover:bg-purple-200 transition-colors"
-                                                title="Reatribuir Programação"
-                                            >
-                                                🔄 Reatribuir
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
+                {/* Seção de Programações removida para evitar duplicação */}
 
                 {/* Conteúdo */}
                 <div className="p-6">
@@ -387,13 +320,43 @@ const ProgramacaoTab: React.FC = () => {
                                             
                                             <div className="ml-6 flex space-x-2">
                                                 <button
-                                                    onClick={() => handleReatribuirOS(os.id)}
+                                                    onClick={() => handleReatribuirProgramacao({
+                                                        id: os.id,
+                                                        id_ordem_servico: os.id,
+                                                        os_numero: os.numero,
+                                                        status: os.status || 'PROGRAMADA',
+                                                        responsavel_nome: os.responsavel_atual || '',
+                                                        inicio_previsto: os.data_prevista || '',
+                                                        fim_previsto: os.data_prevista || '',
+                                                        setor_nome: setorAtivo?.nome || '',
+                                                        created_at: new Date().toISOString(),
+                                                        updated_at: new Date().toISOString(),
+                                                        observacoes: os.descricao || '',
+                                                        departamento_nome: '',
+                                                        id_setor: undefined,
+                                                        responsavel_id: undefined
+                                                    })}
                                                     className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
                                                 >
                                                     🔄 Reatribuir
                                                 </button>
                                                 <button
-                                                    onClick={() => alert(`Editando OS ${os.numero}`)}
+                                                    onClick={() => handleEditProgramacao({
+                                                        id: os.id,
+                                                        id_ordem_servico: os.id,
+                                                        os_numero: os.numero,
+                                                        status: os.status || 'PROGRAMADA',
+                                                        responsavel_nome: os.responsavel_atual || '',
+                                                        inicio_previsto: os.data_prevista || '',
+                                                        fim_previsto: os.data_prevista || '',
+                                                        setor_nome: setorAtivo?.nome || '',
+                                                        created_at: new Date().toISOString(),
+                                                        updated_at: new Date().toISOString(),
+                                                        observacoes: os.descricao || '',
+                                                        departamento_nome: '',
+                                                        id_setor: undefined,
+                                                        responsavel_id: undefined
+                                                    })}
                                                     className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 transition-colors"
                                                 >
                                                     ✏️ Editar

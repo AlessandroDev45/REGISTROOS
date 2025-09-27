@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import date, datetime
 
-from .database_models import Usuario, OrdemServico, Programacao, ApontamentoDetalhado
+from app.database_models import Usuario, OrdemServico, Programacao, ApontamentoDetalhado
 from config.database_config import get_db
 
 router = APIRouter(tags=["gestao"])

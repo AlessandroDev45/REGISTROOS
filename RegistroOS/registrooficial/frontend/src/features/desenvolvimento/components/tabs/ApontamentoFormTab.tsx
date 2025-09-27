@@ -98,7 +98,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
     // Funções para carregar dados dos dropdowns
     const loadTiposMaquina = async () => {
         try {
-            const response = await api.get('/formulario/tipos-maquina');
+            const response = await api.get('/desenvolvimento/formulario/tipos-maquina');
             setTiposMaquina(response.data || []);
         } catch (error) {
             console.error('Erro ao carregar tipos de máquina:', error);
@@ -108,7 +108,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
 
     const loadTiposAtividade = async (tipoMaquinaId?: number) => {
         try {
-            const response = await api.get('/formulario/tipos-atividade');
+            const response = await api.get('/desenvolvimento/formulario/tipos-atividade');
             setTiposAtividade(response.data || []);
         } catch (error) {
             console.error('Erro ao carregar tipos de atividade:', error);
@@ -121,7 +121,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
         try {
             // ✅ CORREÇÃO: Não enviar filtro por tipo_atividade pois não há relacionamento direto
             // Sempre carregar todas as descrições disponíveis
-            const url = `/formulario/descricoes-atividade`;
+            const url = `/desenvolvimento/formulario/descricoes-atividade`;
             console.log('📄 Carregando TODAS as descrições de atividade (sem filtro)');
             console.log('📡 URL da chamada:', url);
             console.log('🔧 API base URL:', api.defaults.baseURL);
@@ -159,7 +159,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
 
     const loadCausasRetrabalho = async () => {
         try {
-            const response = await api.get('/formulario/causas-retrabalho');
+            const response = await api.get('/desenvolvimento/formulario/causas-retrabalho');
             setCausasRetrabalho(response.data || []);
         } catch (error) {
             console.error('Erro ao carregar causas de retrabalho:', error);
@@ -341,7 +341,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
         try {
             // Usar o endpoint correto para categorias de máquina
             // O backend filtra por departamento/setor do usuário logado se não for ADMIN
-            const response = await api.get('/admin/categorias-maquina/');
+            const response = await api.get('/desenvolvimento/admin/categorias-maquina');
             console.log('🎯 Categorias carregadas:', response.data);
             setCategoriasMaquina(response.data || []);
         } catch (error) {
@@ -357,7 +357,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
             if (departamento) params.append('departamento', departamento);
             if (setor) params.append('setor', setor);
 
-            const response = await api.get(`/tipos-maquina/subcategorias?${params.toString()}`);
+            const response = await api.get(`/desenvolvimento/tipos-maquina/subcategorias?${params.toString()}`);
             console.log('🎯 Subcategorias carregadas para', categoria, ':', response.data);
             setSubcategoriasDisponiveis(response.data || []);
         } catch (error) {
@@ -368,7 +368,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
 
     const buscarCategoriaDoTipo = async (nomeType: string) => {
         try {
-            const response = await api.get(`/tipos-maquina/categoria-por-nome?nome_tipo=${encodeURIComponent(nomeType)}`);
+            const response = await api.get(`/desenvolvimento/tipos-maquina/categoria-por-nome?nome_tipo=${encodeURIComponent(nomeType)}`);
             console.log('🎯 Categoria encontrada para', nomeType, ':', response.data.categoria);
             return response.data.categoria;
         } catch (error) {
@@ -422,7 +422,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
             console.log('🔍 Buscando OS:', numeroOS);
 
             // Timeout maior para permitir scraping (5 minutos)
-            const response = await api.get(`/formulario/buscar-os/${numeroOS}`, {
+            const response = await api.get(`/desenvolvimento/formulario/buscar-os/${numeroOS}`, {
                 timeout: 300000 // 5 minutos
             });
 
@@ -806,6 +806,48 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
         console.log('✅ Formulário resetado com sucesso');
     };
 
+    // 🎯 FUNÇÃO PARA VERIFICAR SE PROGRAMAÇÃO FOI FINALIZADA
+    const verificarProgramacaoFinalizada = async (numeroOS: string) => {
+        try {
+            // Buscar programações da OS
+            const response = await api.get(`/api/desenvolvimento/programacao?os_numero=${numeroOS}`);
+
+            if (response.data && response.data.length > 0) {
+                const programacoes = response.data;
+
+                // Verificar se alguma programação está em andamento
+                const programacaoAtiva = programacoes.find((prog: any) =>
+                    prog.status === 'PROGRAMADA' || prog.status === 'EM_ANDAMENTO'
+                );
+
+                if (programacaoAtiva) {
+                    // Perguntar se a programação foi finalizada
+                    const finalizada = window.confirm(
+                        `🎯 PROGRAMAÇÃO DETECTADA!\n\n` +
+                        `OS: ${numeroOS}\n` +
+                        `Responsável: ${programacaoAtiva.responsavel_nome || 'N/A'}\n` +
+                        `Status: ${programacaoAtiva.status}\n\n` +
+                        `A programação foi FINALIZADA com este apontamento?`
+                    );
+
+                    if (finalizada) {
+                        // Atualizar status da programação para FINALIZADA
+                        await api.patch(`/api/desenvolvimento/programacao/${programacaoAtiva.id}/finalizar`, {
+                            status: 'FINALIZADA',
+                            data_finalizacao: new Date().toISOString(),
+                            finalizada_por: user?.id
+                        });
+
+                        alert(`✅ Programação marcada como FINALIZADA!`);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Erro ao verificar programação:', error);
+            // Não bloquear o fluxo se a verificação falhar
+        }
+    };
+
     // Funções para salvar apontamento
     const handleSaveApontamento = async () => {
         try {
@@ -863,9 +905,12 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                 }
             };
 
-            const response = await api.post('/apontamentos', apontamentoData);
+            const response = await api.post('/desenvolvimento/os/apontamentos', apontamentoData);
 
             alert(`✅ Apontamento salvo com sucesso! OS: ${response.data.numero_os || response.data.os_numero}`);
+
+            // 🎯 VERIFICAR SE PROGRAMAÇÃO FOI FINALIZADA
+            await verificarProgramacaoFinalizada(formData.inpNumOS);
 
             // RESET COMPLETO DA PÁGINA
             resetarFormulario();

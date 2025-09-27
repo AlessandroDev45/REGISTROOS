@@ -34,7 +34,7 @@ from app.dependencies import get_current_user
 from app.database_models import (
     Usuario, Departamento, Setor, TipoMaquina, TipoTeste,
     Cliente, Equipamento, TipoAtividade, TipoDescricaoAtividade,
-    TipoCausaRetrabalho, TipoFalha
+    TipoCausaRetrabalho, TipoFalha, OrdemServico
 )
 
 router = APIRouter(tags=["admin-config"])
@@ -103,9 +103,9 @@ class EquipamentoCreate(BaseModel):
 # MIDDLEWARE DE VERIFICAÇÃO DE ADMIN
 # ============================================================================
 
-def verificar_admin(current_user: Usuario = Depends(get_current_user)):
+def verificar_admin(current_user: Any = Depends(get_current_user)):
     """Verificar se o usuário é admin"""
-    if current_user.privilege_level != 'ADMIN':
+    if current_user.__dict__.get('privilege_level') != 'ADMIN':
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Apenas administradores podem acessar esta funcionalidade"
@@ -152,9 +152,7 @@ async def criar_departamento(
     """Criar novo departamento"""
     try:
         # Verificar se já existe
-        existente = db.query(Departamento).filter(
-            Departamento.nome_tipo == departamento_data.nome_tipo
-        ).first()
+        existente = db.query(Departamento).filter_by(nome_tipo=departamento_data.nome_tipo).first()
         
         if existente:
             raise HTTPException(
@@ -163,13 +161,12 @@ async def criar_departamento(
             )
         
         # Criar novo departamento
-        novo_departamento = Departamento(
-            nome_tipo=departamento_data.nome_tipo,
-            descricao=departamento_data.descricao,
-            ativo=departamento_data.ativo,
-            data_criacao=datetime.now(),
-            data_ultima_atualizacao=datetime.now()
-        )
+        novo_departamento = Departamento()  # type: ignore
+        novo_departamento.nome_tipo = departamento_data.nome_tipo  # type: ignore
+        novo_departamento.descricao = departamento_data.descricao  # type: ignore
+        novo_departamento.ativo = departamento_data.ativo  # type: ignore
+        novo_departamento.data_criacao = datetime.now()  # type: ignore
+        novo_departamento.data_ultima_atualizacao = datetime.now()  # type: ignore
         
         db.add(novo_departamento)
         db.commit()
@@ -255,10 +252,10 @@ async def atualizar_departamento(
             )
 
         # Atualizar dados
-        departamento.nome_tipo = departamento_data.nome_tipo
-        departamento.descricao = departamento_data.descricao
-        departamento.ativo = departamento_data.ativo
-        departamento.data_ultima_atualizacao = datetime.now()
+        departamento.nome_tipo = departamento_data.nome_tipo  # type: ignore
+        departamento.descricao = departamento_data.descricao  # type: ignore
+        departamento.ativo = departamento_data.ativo  # type: ignore
+        departamento.data_ultima_atualizacao = datetime.now()  # type: ignore
 
         db.commit()
         db.refresh(departamento)
@@ -513,7 +510,17 @@ async def get_configuracoes_sistema(
         total_setores = db.query(Setor).count()
         total_tipos_maquina = db.query(TipoMaquina).count()
         total_clientes = db.query(Cliente).count()
-        
+
+        # Buscar dados reais do banco
+        privilege_levels_query = db.query(Usuario.privilege_level).distinct().all()
+        privilege_levels = [p[0] for p in privilege_levels_query if p[0]]
+
+        status_os_query = db.query(OrdemServico.status_os).distinct().all()
+        status_os = [s[0] for s in status_os_query if s[0]]
+
+        tipos_area_query = db.query(Setor.area_tipo).distinct().all()
+        tipos_area = [a[0] for a in tipos_area_query if a[0]]
+
         return {
             "sistema": {
                 "nome": "RegistroOS",
@@ -529,9 +536,9 @@ async def get_configuracoes_sistema(
                 "total_clientes": total_clientes
             },
             "configuracoes": {
-                "privilege_levels": ["ADMIN", "GESTAO", "PCP", "SUPERVISOR", "USER"],
-                "status_os": ["ABERTA", "EM_ANDAMENTO", "FINALIZADA", "CANCELADA"],
-                "tipos_area": ["PRODUÇÃO", "QUALIDADE", "ADMINISTRATIVO"]
+                "privilege_levels": privilege_levels,
+                "status_os": status_os,
+                "tipos_area": tipos_area
             }
         }
         
@@ -539,6 +546,32 @@ async def get_configuracoes_sistema(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro ao obter configurações: {str(e)}"
+        )
+
+@router.get("/setores", response_model=List[Dict[str, Any]])
+async def listar_setores(
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(verificar_admin)
+):
+    """Listar todos os setores"""
+    try:
+        setores = db.query(Setor).all()
+        return [
+            {
+                "id": setor.id,
+                "nome": setor.nome,
+                "departamento": setor.departamento,
+                "descricao": setor.descricao,
+                "ativo": setor.ativo,
+                "data_criacao": setor.data_criacao,
+                "data_ultima_atualizacao": setor.data_ultima_atualizacao
+            }
+            for setor in setores
+        ]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao listar setores: {str(e)}"
         )
 
 @router.get("/status")
@@ -555,7 +588,8 @@ async def get_admin_config_status(
             "POST /tipos-teste - Criar tipo de teste",
             "POST /clientes - Criar cliente",
             "POST /equipamentos - Criar equipamento",
-            "GET /sistema - Configurações do sistema"
+            "GET /sistema - Configurações do sistema",
+            "GET /setores - Listar setores"
         ],
         "privilege_required": "ADMIN",
         "current_user": {

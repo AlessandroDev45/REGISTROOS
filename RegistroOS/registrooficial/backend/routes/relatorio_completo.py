@@ -38,7 +38,7 @@ async def get_relatorio_completo_geral(
 
         # Pendências
         total_pendencias = db.query(ApontamentoDetalhado).filter(
-            ApontamentoDetalhado.pendencia == True
+            ApontamentoDetalhado.pendencia.is_(True)
         ).count()
 
         return {
@@ -187,7 +187,7 @@ async def get_relatorio_completo_os(
                     }
                     testes_data.append(teste_json)
 
-            except (json.JSONDecodeError, KeyError, TypeError):
+            except (Exception,):
                 # Não é JSON, continuar com dados simples já adicionados
                 pass
         
@@ -288,28 +288,28 @@ def calcular_metricas_os(apontamentos: List[Dict], testes: List[Dict], pendencia
             fim = datetime.fromisoformat(str(apt['data_hora_fim']).replace('Z', '+00:00'))
             horas = (fim - inicio).total_seconds() / 3600
 
-            horas_por_etapa["total"] += horas
+            horas_por_etapa["total"] += int(horas)
 
             setor = apt.get('setor_nome', 'Não informado')
             if setor not in horas_por_setor:
                 horas_por_setor[setor] = 0
-            horas_por_setor[setor] += horas
+            horas_por_setor[setor] += int(horas)
 
         # Processar etapas específicas
         if apt.get('etapa_inicial'):
             etapas_realizadas["inicial"] += 1
             horas_etapa = float(apt.get('horas_etapa_inicial', 0) or 0)
-            horas_por_etapa["inicial"] += horas_etapa
+            horas_por_etapa["inicial"] += int(horas_etapa)
 
         if apt.get('etapa_parcial'):
             etapas_realizadas["parcial"] += 1
             horas_etapa = float(apt.get('horas_etapa_parcial', 0) or 0)
-            horas_por_etapa["parcial"] += horas_etapa
+            horas_por_etapa["parcial"] += int(horas_etapa)
 
         if apt.get('etapa_final'):
             etapas_realizadas["final"] += 1
             horas_etapa = float(apt.get('horas_etapa_final', 0) or 0)
-            horas_por_etapa["final"] += horas_etapa
+            horas_por_etapa["final"] += int(horas_etapa)
     
     # Processar testes
     for teste in testes:

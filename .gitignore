@@ -1,51 +1,49 @@
-# Arquivos de ambiente
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Banco de dados
-*.db
-*.sqlite
-*.sqlite3
-
-# Logs
-logs
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
 
-# Dependências do node
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Databases
+*.db
+*.db-journal
+registrooficial/backend/*.db
+
+# Node.js
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Build
-dist/
+# Build outputs
 build/
-.next/
-out/
+dist/
+.vscode/settings.json
+
+# Temporary/Scratch
+SCRATCK HERE/
+backups/
 
 # IDE
-.vscode/
 .idea/
-*.swp
-*.swo
-
-# Sistema operacional
+.vscode/
 .DS_Store
-Thumbs.db
 
-# Outros
-*.pyc
-__pycache__/
-.coverage
-htmlcov/
-.pytest_cache/
-.mypy_cache/
-.dmypy.json
-dmypy.json
+# OS
+Thumbs.db
+.DS_Store

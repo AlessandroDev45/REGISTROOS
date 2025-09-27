@@ -22,6 +22,20 @@ interface UsuarioPendente {
    privilege_level?: string;
 }
 
+interface Usuario {
+    id: number;
+    nome_completo: string;
+    email: string;
+    matricula?: string;
+    cargo?: string;
+    setor: string;
+    departamento: string;
+    privilege_level: string;
+    trabalha_producao: boolean;
+    is_approved: boolean;
+    status?: string;
+}
+
 interface NovoUsuario {
    nome_completo: string;
    email: string;
@@ -49,13 +63,13 @@ const Administrador: React.FC = () => {
    const { setorAtivo } = useSetor();
    const { user } = useAuth();
    const [usuariosPendentes, setUsuariosPendentes] = useState<UsuarioPendente[]>([]);
-   const [todosUsuarios, setTodosUsuarios] = useState<UsuarioPendente[]>([]);
+   const [todosUsuarios, setTodosUsuarios] = useState<Usuario[]>([]);
    const [loading, setLoading] = useState(true);
    const [processando, setProcessando] = useState<number | null>(null);
    const [activeTab, setActiveTab] = useState<'aprovacao' | 'gerenciar' | 'novo'>('aprovacao');
    const [showForm, setShowForm] = useState(false);
    const [showEditModal, setShowEditModal] = useState(false);
-   const [editingUser, setEditingUser] = useState<UsuarioPendente | null>(null);
+   const [editingUser, setEditingUser] = useState<Usuario | null>(null);
    const [savingUser, setSavingUser] = useState(false);
    const [novoUsuario, setNovoUsuario] = useState<NovoUsuario>({
        nome_completo: '',
@@ -76,7 +90,7 @@ const Administrador: React.FC = () => {
                params: { departamento }
            });
            setSetores(response.data);
-       } catch (error) {
+       } catch (error: any) {
            console.error('Erro ao carregar setores:', error);
            setSetores([]);
        } finally {
@@ -108,7 +122,7 @@ const Administrador: React.FC = () => {
                console.log('✅ Todos os usuários encontrados:', allResponse.data.length);
                setTodosUsuarios(allResponse.data);
 
-           } catch (error) {
+           } catch (error: any) {
                console.error('❌ Erro ao buscar dados:', error);
                // Tentar endpoints alternativos se o principal falhar
                try {
@@ -116,7 +130,7 @@ const Administrador: React.FC = () => {
                    const altPendingResponse = await api.get('/admin/usuarios-pendentes');
                    setUsuariosPendentes(altPendingResponse.data);
                    console.log('✅ Usuários pendentes encontrados via endpoint alternativo:', altPendingResponse.data.length);
-               } catch (altError) {
+               } catch (altError: any) {
                    console.error('❌ Erro no endpoint alternativo:', altError);
                }
            } finally {
@@ -143,13 +157,13 @@ const Administrador: React.FC = () => {
            setTodosUsuarios(prev =>
                prev.map(u =>
                    u.id === usuario.id
-                       ? { ...u, status: 'APROVADO' as const, privilege_level: usuario.privilege_level }
+                       ? { ...u, status: 'APROVADO' as const, privilege_level: usuario.privilege_level || 'USER' }
                        : u
                )
            );
 
            alert('Usuário aprovado com sucesso!');
-       } catch (error) {
+       } catch (error: any) {
            console.error('Erro ao aprovar usuário:', error);
            alert('Erro ao aprovar usuário');
        } finally {
@@ -179,7 +193,7 @@ const Administrador: React.FC = () => {
            );
 
            alert('Usuário reprovado.');
-       } catch (error) {
+       } catch (error: any) {
            console.error('Erro ao reprovar usuário:', error);
            alert('Erro ao reprovar usuário');
        } finally {
@@ -228,19 +242,19 @@ const Administrador: React.FC = () => {
            });
            setShowForm(false);
 
-       } catch (error) {
+       } catch (error: any) {
            console.error('Erro ao criar usuário:', error);
            const errorMessage = error.response?.data?.detail || 'Erro ao criar usuário';
            alert(errorMessage);
        }
    };
 
-   const handleEditUser = (usuario: UsuarioPendente) => {
+   const handleEditUser = (usuario: Usuario) => {
        setEditingUser(usuario);
        setShowEditModal(true);
    };
 
-   const handleSaveUser = async (userData: Partial<UsuarioPendente>) => {
+   const handleSaveUser = async (userData: Partial<Usuario>) => {
        if (!editingUser) return;
 
        setSavingUser(true);
@@ -257,7 +271,7 @@ const Administrador: React.FC = () => {
            );
 
            alert('Usuário atualizado com sucesso!');
-       } catch (error) {
+       } catch (error: any) {
            console.error('Erro ao atualizar usuário:', error);
            const errorMessage = error.response?.data?.detail || 'Erro ao atualizar usuário';
            alert(errorMessage);

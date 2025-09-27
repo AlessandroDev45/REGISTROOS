@@ -6,15 +6,15 @@ interface Pendencia {
   numero_os: string;
   cliente: string;
   tipo_maquina: string;
-  descricao_maquina: string;
-  descricao_pendencia: string;
+  equipamento: string; // Backend retorna 'equipamento', não 'descricao_maquina'
+  descricao: string; // Backend retorna 'descricao', não 'descricao_pendencia'
   status: string;
-  prioridade: string;
-  data_inicio: string;
+  // prioridade removida - não deve existir para pendências
+  data_abertura: string; // Backend retorna 'data_abertura', não 'data_inicio'
   data_fechamento?: string;
-  responsavel_inicio_id: number;
-  responsavel_fechamento_id?: number;
-  tempo_aberto_horas: number;
+  responsavel_id: number; // Backend retorna 'responsavel_id'
+  responsavel_nome: string; // Backend retorna 'responsavel_nome'
+  tempo_aberto_horas?: number;
   observacoes_fechamento?: string;
 }
 
@@ -41,8 +41,11 @@ const PendenciasList: React.FC<PendenciasListProps> = ({ filtros, onPendenciaSel
     try {
       const response = await getPendencias(filtros);
       console.log('✅ Resposta pendências:', response);
-      setPendencias(Array.isArray(response?.pendencias) ? response.pendencias : []);
-      console.log('✅ Pendências carregadas:', response?.pendencias?.length || 0);
+
+      // 🔧 CORREÇÃO: Backend retorna array direto, não objeto com propriedade pendencias
+      const pendenciasData = Array.isArray(response) ? response : (Array.isArray(response?.pendencias) ? response.pendencias : []);
+      setPendencias(pendenciasData);
+      console.log('✅ Pendências carregadas:', pendenciasData.length);
     } catch (error: any) {
       console.error('❌ Erro ao carregar pendências:', error);
       setError(error.message || 'Erro ao carregar pendências');
@@ -69,20 +72,7 @@ const PendenciasList: React.FC<PendenciasListProps> = ({ filtros, onPendenciaSel
     }
   };
 
-  const getPrioridadeColor = (prioridade: string) => {
-    switch (prioridade?.toUpperCase()) {
-      case 'URGENTE':
-        return 'bg-red-100 text-red-800 border-red-200';
-      case 'ALTA':
-        return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'MEDIA':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'BAIXA':
-        return 'bg-green-100 text-green-800 border-green-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
+  // getPrioridadeColor removida - prioridade não existe para pendências
 
   const getStatusColor = (status: string) => {
     switch (status?.toUpperCase()) {
@@ -149,12 +139,6 @@ const PendenciasList: React.FC<PendenciasListProps> = ({ filtros, onPendenciaSel
         <h3 className="text-lg font-semibold text-gray-900">
           Pendências ({pendencias.length})
         </h3>
-        <button
-          onClick={carregarPendencias}
-          className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          Atualizar
-        </button>
       </div>
 
       {/* Lista de Pendências */}
@@ -179,31 +163,28 @@ const PendenciasList: React.FC<PendenciasListProps> = ({ filtros, onPendenciaSel
                     <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(pendencia.status)}`}>
                       {pendencia.status}
                     </span>
-                    <span className={`px-2 py-1 text-xs rounded border ${getPrioridadeColor(pendencia.prioridade)}`}>
-                      {pendencia.prioridade || 'NORMAL'}
-                    </span>
                   </div>
                   <p className="text-sm text-gray-600 mb-1">
                     <strong>Cliente:</strong> {pendencia.cliente}
                   </p>
                   <p className="text-sm text-gray-600 mb-2">
-                    <strong>Máquina:</strong> {pendencia.tipo_maquina} - {pendencia.descricao_maquina}
+                    <strong>Máquina:</strong> {pendencia.tipo_maquina} - {pendencia.equipamento}
                   </p>
                   <p className="text-sm text-gray-800">
-                    {pendencia.descricao_pendencia}
+                    {pendencia.descricao}
                   </p>
                 </div>
                 <div className="text-right text-sm text-gray-500">
                   <div>Aberta há:</div>
                   <div className="font-semibold">
-                    {formatarTempo(pendencia.tempo_aberto_horas)}
+                    {formatarTempo(pendencia.tempo_aberto_horas || 0)}
                   </div>
                 </div>
               </div>
               
               <div className="flex justify-between items-center text-xs text-gray-500 pt-2 border-t border-gray-100">
                 <span>
-                  Iniciada em: {new Date(pendencia.data_inicio).toLocaleDateString('pt-BR')}
+                  Iniciada em: {new Date(pendencia.data_abertura).toLocaleDateString('pt-BR')}
                 </span>
                 {pendencia.data_fechamento && (
                   <span>
@@ -242,12 +223,7 @@ const PendenciasList: React.FC<PendenciasListProps> = ({ filtros, onPendenciaSel
                     {selectedPendencia.status}
                   </span>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Prioridade</label>
-                  <span className={`inline-block px-2 py-1 text-sm rounded border ${getPrioridadeColor(selectedPendencia.prioridade)}`}>
-                    {selectedPendencia.prioridade || 'NORMAL'}
-                  </span>
-                </div>
+                {/* Prioridade removida - não existe para pendências */}
               </div>
               
               <div>
@@ -258,7 +234,7 @@ const PendenciasList: React.FC<PendenciasListProps> = ({ filtros, onPendenciaSel
               <div>
                 <label className="block text-sm font-medium text-gray-700">Descrição da Pendência</label>
                 <p className="text-sm text-gray-900 bg-gray-50 p-3 rounded">
-                  {selectedPendencia.descricao_pendencia}
+                  {selectedPendencia.descricao}
                 </p>
               </div>
               
@@ -274,7 +250,7 @@ const PendenciasList: React.FC<PendenciasListProps> = ({ filtros, onPendenciaSel
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <label className="block font-medium text-gray-700">Data de Início</label>
-                  <p>{new Date(selectedPendencia.data_inicio).toLocaleString('pt-BR')}</p>
+                  <p>{new Date(selectedPendencia.data_abertura).toLocaleString('pt-BR')}</p>
                 </div>
                 {selectedPendencia.data_fechamento && (
                   <div>

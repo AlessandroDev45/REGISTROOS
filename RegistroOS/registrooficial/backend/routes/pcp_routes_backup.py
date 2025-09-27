@@ -37,6 +37,8 @@ class FiltragemPCP(BaseModel):
     departamento: Optional[str] = None
     status_os: Optional[str] = None
     prioridade: Optional[str] = None
+    id_setor: Optional[int] = None
+    id_departamento: Optional[int] = None
 
 # =============================================================================
 # ENDPOINTS PRINCIPAIS DO PCP
@@ -173,7 +175,7 @@ async def get_pcp_dashboard(
                 "os_numero": os_relacionada.os_numero if os_relacionada else f"OS-{prog.id_ordem_servico}",
                 "setor": "Não informado",  # Setor seria obtido via relacionamento
                 "status": prog.status or "PENDENTE",
-                "data_criacao": prog.created_at.isoformat() if prog.created_at else datetime.now().isoformat(),
+                "data_criacao": prog.created_at.isoformat() if prog.created_at is not None else datetime.now().isoformat(),
                 "prioridade": "MEDIA"  # Valor padrão
             })
 
@@ -220,17 +222,17 @@ async def gerar_programacoes_pcp(
         
         # Filtrar por datas
         if filtros:
-            if filtros.data_inicio:
+            if filtros.data_inicio is not None:
                 query = query.filter(OrdemServico.data_criacao >= filtros.data_inicio)
-            if filtros.data_fim:
+            if filtros.data_fim is not None:
                 query = query.filter(OrdemServico.data_criacao <= filtros.data_fim)
-            if filtros.id_setor:
+            if filtros.id_setor is not None:
                 query = query.filter(OrdemServico.id_setor == filtros.id_setor)
-            if filtros.id_departamento:
+            if filtros.id_departamento is not None:
                 query = query.filter(OrdemServico.id_departamento == filtros.id_departamento)
-            if filtros.status_os:
+            if filtros.status_os is not None:
                 query = query.filter(OrdemServico.status_os == filtros.status_os)
-            if filtros.prioridade:
+            if filtros.prioridade is not None:
                 query = query.filter(OrdemServico.prioridade == filtros.prioridade)
         
         # Filtrar por prioridade - apenas OS com prioridade NORMAL ou ALTA
@@ -253,13 +255,13 @@ async def gerar_programacoes_pcp(
             # Buscar tipo de atividade padrão para o setor
             tipo_atividade = db.query(TipoAtividade).filter(
                 TipoAtividade.id_setor == os.id_setor,  # type: ignore
-                TipoAtividade.ativo == True
+                TipoAtividade.ativo.is_(True)
             ).first()
             
             # Buscar colaboradores disponíveis do setor
             colaboradores_disponiveis = db.query(Usuario).filter(
                 Usuario.id_setor == os.id_setor,  # type: ignore
-                Usuario.is_approved == True,
+                Usuario.is_approved.is_(True),
                 Usuario.privilege_level.in_(['USER', 'SUPERVISOR'])
             ).all()
             
@@ -277,14 +279,14 @@ async def gerar_programacoes_pcp(
                 
                 # Buscar cliente da OS
                 cliente = "Cliente não informado"
-                if os.id_cliente:  # type: ignore
+                if os.id_cliente is not None:  # type: ignore
                     cliente_info = db.query(Cliente).filter(Cliente.id == os.id_cliente).first()  # type: ignore
                     if cliente_info:
                         cliente = cliente_info.razao_social or cliente_info.nome_fantasia or "Cliente não informado"
 
                 # Buscar equipamento da OS
                 equipamento = os.descricao_maquina or "Equipamento não informado"  # type: ignore
-                if os.id_equipamento:  # type: ignore
+                if os.id_equipamento is not None:  # type: ignore
                     equipamento_info = db.query(Equipamento).filter(Equipamento.id == os.id_equipamento).first()  # type: ignore
                     if equipamento_info:
                         equipamento = equipamento_info.descricao or "Equipamento não informado"
@@ -362,15 +364,15 @@ async def get_ordens_disponiveis_pcp(
         
         # Aplicar filtros
         if filtros:
-            if filtros.data_inicio:
+            if filtros.data_inicio is not None:
                 query = query.filter(OrdemServico.data_criacao >= filtros.data_inicio)
-            if filtros.data_fim:
+            if filtros.data_fim is not None:
                 query = query.filter(OrdemServico.data_criacao <= filtros.data_fim)
-            if filtros.id_setor:
+            if filtros.id_setor is not None:
                 query = query.filter(OrdemServico.id_setor == filtros.id_setor)
-            if filtros.id_departamento:
+            if filtros.id_departamento is not None:
                 query = query.filter(OrdemServico.id_departamento == filtros.id_departamento)
-            if filtros.prioridade:
+            if filtros.prioridade is not None:
                 query = query.filter(OrdemServico.prioridade == filtros.prioridade)
         
         ordens = query.order_by(
@@ -389,7 +391,7 @@ async def get_ordens_disponiveis_pcp(
                 "horas_reais": float(os.horas_reais) if os.horas_reais else 0,  # type: ignore
                 "id_setor": os.id_setor,
                 "id_departamento": os.id_departamento,
-                "data_criacao": os.data_criacao.isoformat() if os.data_criacao else None,  # type: ignore
+                "data_criacao": os.data_criacao.isoformat() if os.data_criacao is not None else None,  # type: ignore
                 "id_responsavel_registro": os.id_responsavel_registro,
                 "tem_programacao": db.query(Programacao).filter(
                     Programacao.id_ordem_servico == os.id
@@ -475,14 +477,14 @@ async def get_setores_producao(
     """
     try:
         # Buscar todos os setores ativos
-        setores = db.query(Setor).filter(Setor.ativo == True).all()  # type: ignore
+        setores = db.query(Setor).filter(Setor.ativo.is_(True)).all()  # type: ignore
         
         setores_com_detalhes = []
         for setor in setores:
             # Buscar colaboradores disponíveis do setor
             colaboradores = db.query(Usuario).filter(
                 Usuario.id_setor == setor.id,  # type: ignore
-                Usuario.is_approved == True,
+                Usuario.is_approved.is_(True),
                 Usuario.privilege_level.in_(['USER', 'SUPERVISOR'])
             ).all()
 
@@ -564,8 +566,8 @@ async def get_programacoes_enviadas(
                 "departamento": "Não informado",
                 "responsavel_id": prog.responsavel_id,
                 "observacoes": prog.observacoes or "",
-                "created_at": str(prog.created_at) if prog.created_at else None,
-                "updated_at": str(prog.updated_at) if prog.updated_at else None
+                "created_at": str(prog.created_at) if prog.created_at is not None else None,
+                "updated_at": str(prog.updated_at) if prog.updated_at is not None else None
             }
             for prog in programacoes
         ]
@@ -600,7 +602,7 @@ async def atualizar_status_programacao(
         programacao.updated_at = datetime.now()  # type: ignore
         
         if observacoes:
-            if not programacao.observacoes:  # type: ignore
+            if programacao.observacoes is None:  # type: ignore
                 programacao.observacoes = observacoes  # type: ignore
             else:
                 programacao.observacoes += f" | {observacoes}"  # type: ignore
@@ -714,10 +716,12 @@ async def get_pendencias_pcp(
             # Filtrar por setor através do apontamento origem
             setor_obj = db.query(Setor).filter(Setor.nome == setor).first()
             if setor_obj:
-                subquery = db.query(ApontamentoDetalhado.id).filter(
+                apontamento_ids = db.query(ApontamentoDetalhado.id).filter(
                     ApontamentoDetalhado.id_setor == setor_obj.id
-                ).subquery()
-                query = query.filter(Pendencia.id_apontamento_origem.in_(subquery))
+                ).all()
+                ids_list = [apt.id for apt in apontamento_ids]
+                if ids_list:
+                    query = query.filter(Pendencia.id_apontamento_origem.in_(ids_list))
 
         # Ordenar por data de criação (mais recentes primeiro)
         pendencias = query.order_by(desc(Pendencia.data_inicio)).limit(100).all()
@@ -734,8 +738,8 @@ async def get_pendencias_pcp(
                     "descricao_pendencia": pend.descricao_pendencia,
                     "status": pend.status,
                     "prioridade": pend.prioridade,
-                    "data_inicio": pend.data_inicio.isoformat() if pend.data_inicio else None,
-                    "data_fechamento": pend.data_fechamento.isoformat() if pend.data_fechamento else None,
+                    "data_inicio": pend.data_inicio.isoformat() if pend.data_inicio is not None else None,
+                    "data_fechamento": pend.data_fechamento.isoformat() if pend.data_fechamento is not None else None,
                     "responsavel_inicio_id": pend.id_responsavel_inicio,
                     "responsavel_fechamento_id": pend.id_responsavel_fechamento,
                     "id_apontamento_origem": pend.id_apontamento_origem,
@@ -767,7 +771,7 @@ async def get_pendencias_dashboard(
         from sqlalchemy import func, case
 
         # Data limite para análise
-        data_limite = datetime.now() - timedelta(days=periodo_dias)
+        data_limite = datetime.now() - timedelta(days=periodo_dias or 30)
 
         # Métricas básicas
         total_pendencias = db.query(Pendencia).count()
@@ -879,12 +883,12 @@ async def get_pendencia_detalhes(
 
         # Buscar dados do responsável de fechamento (se houver)
         responsavel_fechamento = None
-        if pendencia.id_responsavel_fechamento:
+        if pendencia.id_responsavel_fechamento is not None:
             responsavel_fechamento = db.query(Usuario).filter(Usuario.id == pendencia.id_responsavel_fechamento).first()
 
         # Buscar apontamento de origem
         apontamento_origem = None
-        if pendencia.id_apontamento_origem:
+        if pendencia.id_apontamento_origem is not None:
             apontamento_origem = db.query(ApontamentoDetalhado).filter(
                 ApontamentoDetalhado.id == pendencia.id_apontamento_origem
             ).first()
@@ -896,7 +900,7 @@ async def get_pendencia_detalhes(
 
         # Calcular tempo aberto atual
         tempo_aberto_atual = 0
-        if pendencia.status == 'ABERTA' and pendencia.data_inicio:
+        if str(pendencia.status) == 'ABERTA' and pendencia.data_inicio is not None:
             tempo_aberto_atual = (datetime.now() - pendencia.data_inicio).total_seconds() / 3600
 
         return {
@@ -908,8 +912,8 @@ async def get_pendencia_detalhes(
             "descricao_pendencia": pendencia.descricao_pendencia,
             "status": pendencia.status,
             "prioridade": pendencia.prioridade,
-            "data_inicio": pendencia.data_inicio.isoformat() if pendencia.data_inicio else None,
-            "data_fechamento": pendencia.data_fechamento.isoformat() if pendencia.data_fechamento else None,
+            "data_inicio": pendencia.data_inicio.isoformat() if pendencia.data_inicio is not None else None,
+            "data_fechamento": pendencia.data_fechamento.isoformat() if pendencia.data_fechamento is not None else None,
             "solucao_aplicada": pendencia.solucao_aplicada,
             "observacoes_fechamento": pendencia.observacoes_fechamento,
             "tempo_aberto_horas": pendencia.tempo_aberto_horas or tempo_aberto_atual,
@@ -932,8 +936,8 @@ async def get_pendencia_detalhes(
                 "id_departamento": setor_relacionado.id_departamento if setor_relacionado else None
             } if setor_relacionado else None,
             "apontamento_origem_id": pendencia.id_apontamento_origem,
-            "data_criacao": pendencia.data_criacao.isoformat() if pendencia.data_criacao else None,
-            "data_ultima_atualizacao": pendencia.data_ultima_atualizacao.isoformat() if pendencia.data_ultima_atualizacao else None
+            "data_criacao": pendencia.data_criacao.isoformat() if pendencia.data_criacao is not None else None,
+            "data_ultima_atualizacao": pendencia.data_ultima_atualizacao.isoformat() if pendencia.data_ultima_atualizacao is not None else None
         }
 
     except HTTPException:
@@ -1015,7 +1019,7 @@ async def get_programacao_form_data(
         departamentos_sql = text("SELECT id, nome_tipo FROM tipo_departamentos ORDER BY nome_tipo")
         departamentos_result = db.execute(departamentos_sql)
         departamentos = [
-            {"id": row[0], "nome": row[1]}
+            {"id": row[0], "nome_tipo": row[1]}
             for row in departamentos_result.fetchall()
         ]
 
@@ -1185,15 +1189,15 @@ async def update_programacao_pcp(
             raise HTTPException(status_code=404, detail="Programação não encontrada")
 
         # Atualizar campos
-        programacao.id_ordem_servico = programacao_data.id_ordem_servico
-        programacao.responsavel_id = programacao_data.responsavel_id
-        programacao.inicio_previsto = programacao_data.inicio_previsto
-        programacao.fim_previsto = programacao_data.fim_previsto
-        programacao.observacoes = programacao_data.observacoes
-        programacao.status = programacao_data.status or programacao.status
+        programacao.id_ordem_servico = programacao_data.id_ordem_servico  # type: ignore
+        programacao.responsavel_id = programacao_data.responsavel_id  # type: ignore
+        programacao.inicio_previsto = programacao_data.inicio_previsto  # type: ignore
+        programacao.fim_previsto = programacao_data.fim_previsto  # type: ignore
+        programacao.observacoes = programacao_data.observacoes  # type: ignore
+        programacao.status = programacao_data.status or programacao.status  # type: ignore
         if programacao_data.id_setor is not None:
-            programacao.id_setor = programacao_data.id_setor
-        programacao.updated_at = datetime.now()
+            programacao.id_setor = programacao_data.id_setor  # type: ignore
+        programacao.updated_at = datetime.now()  # type: ignore
 
         db.commit()
         db.refresh(programacao)
@@ -1231,12 +1235,12 @@ async def delete_programacao_pcp(
             raise HTTPException(status_code=404, detail="Programação não encontrada")
 
         # Verificar se pode ser cancelada
-        if programacao.status == 'CONCLUIDA':
+        if str(programacao.status) == 'CONCLUIDA':
             raise HTTPException(status_code=400, detail="Não é possível cancelar uma programação já concluída")
 
         # Marcar como cancelada ao invés de deletar
-        programacao.status = 'CANCELADA'
-        programacao.updated_at = datetime.now()
+        programacao.status = 'CANCELADA'  # type: ignore
+        programacao.updated_at = datetime.now()  # type: ignore
 
         db.commit()
 
@@ -1279,9 +1283,9 @@ async def enviar_programacao_setor(
             raise HTTPException(status_code=404, detail="Setor não encontrado")
 
         # Atualizar programação com setor
-        programacao.id_setor = setor_id
-        programacao.status = 'ENVIADA'
-        programacao.updated_at = datetime.now()
+        programacao.id_setor = setor_id  # type: ignore
+        programacao.status = 'ENVIADA'  # type: ignore
+        programacao.updated_at = datetime.now()  # type: ignore
 
         db.commit()
 
@@ -1313,7 +1317,7 @@ async def get_programacoes_dashboard(
         from sqlalchemy import func
 
         # Data limite para análise
-        data_limite = datetime.now() - timedelta(days=periodo_dias)
+        data_limite = datetime.now() - timedelta(days=periodo_dias or 30)
 
         # Métricas básicas
         total_programacoes = db.query(Programacao).count()
@@ -1437,7 +1441,7 @@ async def get_dashboard_avancado(
         from sqlalchemy import func, case, extract
 
         # Data limite para análise
-        data_limite = datetime.now() - timedelta(days=periodo_dias)
+        data_limite = datetime.now() - timedelta(days=periodo_dias or 30)
 
         # =============================================================================
         # MÉTRICAS GERAIS DE PRODUÇÃO
@@ -1504,7 +1508,7 @@ async def get_dashboard_avancado(
             Setor.id.label('id_setor'),
             Setor.nome.label('setor'),
             func.count(ApontamentoDetalhado.id).label('total_apontamentos'),
-            func.sum(case((ApontamentoDetalhado.foi_retrabalho == True, 1), else_=0)).label('retrabalhos')
+            func.sum(case((ApontamentoDetalhado.foi_retrabalho.is_(True), 1), else_=0)).label('retrabalhos')
         ).join(
             Setor, ApontamentoDetalhado.id_setor == Setor.id
         ).filter(
@@ -1694,10 +1698,10 @@ async def get_relatorio_eficiencia_setores(
         from datetime import datetime, timedelta
         from sqlalchemy import func, case
 
-        data_limite = datetime.now() - timedelta(days=periodo_dias)
+        data_limite = datetime.now() - timedelta(days=periodo_dias or 30)
 
         # Query base para setores
-        query_setores = db.query(Setor).filter(Setor.ativo == True)
+        query_setores = db.query(Setor).filter(Setor.ativo.is_(True))
         if setor_id:
             query_setores = query_setores.filter(Setor.id == setor_id)
 
@@ -1721,7 +1725,7 @@ async def get_relatorio_eficiencia_setores(
                 (a.horas_etapa_final or 0)
                 for a in apontamentos
             )
-            retrabalhos = sum(1 for a in apontamentos if a.foi_retrabalho)
+            retrabalhos = sum(1 for a in apontamentos if a.foi_retrabalho is True)
 
             # Pendências do setor
             pendencias_setor = db.query(Pendencia).join(
@@ -1730,8 +1734,8 @@ async def get_relatorio_eficiencia_setores(
                 ApontamentoDetalhado.id_setor == setor.id
             ).all()
 
-            pendencias_abertas = sum(1 for p in pendencias_setor if p.status == 'ABERTA')
-            pendencias_fechadas = sum(1 for p in pendencias_setor if p.status == 'FECHADA')
+            pendencias_abertas = sum(1 for p in pendencias_setor if str(p.status) == 'ABERTA')
+            pendencias_fechadas = sum(1 for p in pendencias_setor if str(p.status) == 'FECHADA')
 
             # Cálculos de eficiência
             taxa_retrabalho = (retrabalhos / total_apontamentos * 100) if total_apontamentos > 0 else 0
@@ -1741,7 +1745,7 @@ async def get_relatorio_eficiencia_setores(
             eficiencia_geral = max(0, 100 - taxa_retrabalho - (pendencias_abertas * 3))
 
             # Produtividade (apontamentos por dia)
-            produtividade_diaria = total_apontamentos / periodo_dias if periodo_dias > 0 else 0
+            produtividade_diaria = total_apontamentos / (periodo_dias or 1) if (periodo_dias or 1) > 0 else 0
 
             relatorio_setores.append({
                 "setor": {
@@ -1752,8 +1756,8 @@ async def get_relatorio_eficiencia_setores(
                 },
                 "metricas": {
                     "total_apontamentos": total_apontamentos,
-                    "horas_trabalhadas": round(horas_trabalhadas, 2),
-                    "tempo_medio_apontamento": round(tempo_medio_apontamento, 2),
+                    "horas_trabalhadas": 0.0 if horas_trabalhadas is None else float(str(horas_trabalhadas)),
+                    "tempo_medio_apontamento": 0.0 if tempo_medio_apontamento is None else float(str(tempo_medio_apontamento)),
                     "produtividade_diaria": round(produtividade_diaria, 2)
                 },
                 "qualidade": {
@@ -1845,11 +1849,11 @@ async def get_alertas_pcp(
         ).all()
 
         for pend in pendencias_criticas:
-            tempo_aberto = (datetime.now() - pend.data_inicio).total_seconds() / 3600 if pend.data_inicio else 0
+            tempo_aberto = (datetime.now() - pend.data_inicio).total_seconds() / 3600 if pend.data_inicio is not None else 0
 
             alertas.append({
                 "tipo": "PENDENCIA_CRITICA",
-                "prioridade": "URGENTE" if pend.prioridade == 'URGENTE' else "ALTA",
+                "prioridade": "URGENTE" if str(pend.prioridade) == 'URGENTE' else "ALTA",
                 "titulo": f"Pendência crítica - OS {pend.numero_os}",
                 "descricao": f"Pendência {pend.prioridade} aberta há {round(tempo_aberto, 1)} horas",
                 "data_alerta": datetime.now().isoformat(),
@@ -1862,14 +1866,14 @@ async def get_alertas_pcp(
             })
 
         # Setores com baixa eficiência (simulado)
-        setores_baixa_eficiencia = db.query(Setor).filter(Setor.ativo == True).limit(2).all()
+        setores_baixa_eficiencia = db.query(Setor).filter(Setor.ativo.is_(True)).limit(2).all()
 
         for setor in setores_baixa_eficiencia:
             # Verificar se há muitos retrabalhos recentes
             retrabalhos_recentes = db.query(ApontamentoDetalhado).filter(
                 and_(
                     ApontamentoDetalhado.id_setor == setor.id,
-                    ApontamentoDetalhado.foi_retrabalho == True,
+                    ApontamentoDetalhado.foi_retrabalho.is_(True),
                     ApontamentoDetalhado.data_hora_inicio >= datetime.now() - timedelta(days=7)
                 )
             ).count()

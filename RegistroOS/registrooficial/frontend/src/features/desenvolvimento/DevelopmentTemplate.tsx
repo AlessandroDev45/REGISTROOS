@@ -30,7 +30,7 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
       if (!setorAtivo) return;
 
       try {
-        const response = await api.get('/programacao', {
+        const response = await api.get('/desenvolvimento/programacao', {
           params: { status: 'PROGRAMADA' }
         });
         setProgramacoesCount(response.data?.length || 0);

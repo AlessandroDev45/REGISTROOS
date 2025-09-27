@@ -34,40 +34,40 @@ async def login(login_data: LoginRequest, response: Response, db: Session = Depe
             detail="Credenciais inválidas"
         )
 
-    if not user.is_approved:
+    if user.is_approved is False:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Usuário não aprovado pelo administrador"
         )
 
     # Criar token de acesso
-    access_token = create_access_token(data={"sub": user.nome_usuario})
+    access_token = create_access_token(data={"sub": str(user.id)}, db=db)
 
     # Definir cookie httpOnly
     response.set_cookie(
         key="access_token",
         value=f"Bearer {access_token}",
         httponly=True,
-        max_age=1800,  # 30 minutos
-        expires=1800,
+        secure=False,  # Para desenvolvimento local
         samesite="lax",
-        secure=False  # Para desenvolvimento local
+        max_age=1800,  # 30 minutos
+        path="/"
     )
 
     # Extrair primeiro nome do usuário
-    primeiro_nome = user.nome_completo.split(' ')[0] if user.nome_completo else 'Usuário'
+    primeiro_nome = user.nome_completo.split(' ')[0] if user.nome_completo is not None else 'Usuário'
 
     # Buscar nomes do setor e departamento com fallback para campos string
     setor_nome = user.setor  # Campo string como fallback
     departamento_nome = user.departamento  # Campo string como fallback
 
     try:
-        if user.id_setor:
+        if user.id_setor is not None:
             setor_obj = db.query(Setor).filter(Setor.id == user.id_setor).first()
             if setor_obj:
                 setor_nome = setor_obj.nome
 
-        if user.id_departamento:
+        if user.id_departamento is not None:
             departamento_obj = db.query(Departamento).filter(Departamento.id == user.id_departamento).first()
             if departamento_obj:
                 departamento_nome = departamento_obj.nome_tipo
@@ -109,10 +109,6 @@ class ChangePasswordRequest(BaseModel):
     senha_atual: str
     nova_senha: str
 
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
 @router.post("/register", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
     """
@@ -145,8 +141,8 @@ async def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
         "trabalha_producao": user_data.trabalha_producao,
         "privilege_level": "USER",  # Padrão
         "is_approved": False,       # Precisa de aprovação
-        "data_criacao": datetime.datetime.utcnow(),
-        "data_ultima_atualizacao": datetime.datetime.utcnow()
+        "data_criacao": datetime.datetime.now(),
+        "data_ultima_atualizacao": datetime.datetime.now()
     }
 
     try:
@@ -230,26 +226,25 @@ async def login_for_access_token(response: Response, form_data: OAuth2PasswordRe
         key="access_token",
         value=access_token,
         httponly=True,
-        max_age=3600,  # 1 hour
-        expires=None,
-        path="/",
         secure=False,  # Set to True in production with HTTPS
-        samesite="lax"
+        samesite="lax",  # Use lax for localhost development
+        max_age=3600,  # 1 hour
+        path="/"
     )
 
     # Extrair primeiro nome do usuário
-    primeiro_nome = user.nome_completo.split(' ')[0] if user.nome_completo else 'Usuário'
+    primeiro_nome = user.nome_completo.split(' ')[0] if user.nome_completo is not None else 'Usuário'
 
     # Buscar nomes do setor e departamento
     setor_nome = None
     departamento_nome = None
 
-    if user.id_setor:
+    if user.id_setor is not None:
         setor_obj = db.query(Setor).filter(Setor.id == user.id_setor).first()
         if setor_obj:
             setor_nome = setor_obj.nome
 
-    if user.id_departamento:
+    if user.id_departamento is not None:
         departamento_obj = db.query(Departamento).filter(Departamento.id == user.id_departamento).first()
         if departamento_obj:
             departamento_nome = departamento_obj.nome_tipo
@@ -307,7 +302,7 @@ async def debug_users(db: Session = Depends(get_db)):
         return {
             "total_usuarios": total,
             "usuarios": emails,
-            "database_path": db.bind.url,
+            "database_path": "sqlite:///registroos_new.db",  # Hardcoded para evitar problemas de acesso
             "status": "success"
         }
 
@@ -335,7 +330,7 @@ async def test_login(user_email: str, response: Response, db: Session = Depends(
             detail=f"Usuário não encontrado: {user_email}"
         )
 
-    if not user.is_approved:
+    if user.is_approved is False:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Usuário não aprovado"
@@ -350,8 +345,9 @@ async def test_login(user_email: str, response: Response, db: Session = Depends(
         value=access_token,
         httponly=True,
         secure=False,  # Set to True in production with HTTPS
-        samesite="lax",
-        max_age=3600  # 1 hour
+        samesite="lax",  # Use lax for localhost development
+        max_age=3600,  # 1 hour
+        path="/"
     )
 
     return {
@@ -385,9 +381,9 @@ async def change_password(
             raise HTTPException(status_code=400, detail="Senha atual incorreta")
 
         # Atualizar a senha
-        current_user.senha_hash = get_password_hash(password_data.nova_senha)
-        current_user.primeiro_login = False  # Marca que não é mais primeiro login
-        current_user.data_ultima_atualizacao = datetime.datetime.utcnow()
+        current_user.senha_hash = get_password_hash(password_data.nova_senha)  # type: ignore
+        current_user.primeiro_login = False  # type: ignore # Marca que não é mais primeiro login
+        current_user.data_ultima_atualizacao = datetime.datetime.now()  # type: ignore
 
         db.commit()
 
@@ -403,18 +399,18 @@ async def change_password(
 async def read_me(current_user: Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
     """Endpoint para obter informações do usuário atual (para depuração)"""
     # Extrair primeiro nome do usuário
-    primeiro_nome = current_user.nome_completo.split(' ')[0] if current_user.nome_completo else 'Usuário'
+    primeiro_nome = current_user.nome_completo.split(' ')[0] if current_user.nome_completo is not None else 'Usuário'
 
     # Buscar nomes do setor e departamento
     setor_nome = None
     departamento_nome = None
 
-    if current_user.id_setor:
+    if current_user.id_setor is not None:
         setor_obj = db.query(Setor).filter(Setor.id == current_user.id_setor).first()
         if setor_obj:
             setor_nome = setor_obj.nome
 
-    if current_user.id_departamento:
+    if current_user.id_departamento is not None:
         departamento_obj = db.query(Departamento).filter(Departamento.id == current_user.id_departamento).first()
         if departamento_obj:
             departamento_nome = departamento_obj.nome_tipo

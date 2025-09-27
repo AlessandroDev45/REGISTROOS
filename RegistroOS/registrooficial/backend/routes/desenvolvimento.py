@@ -27,7 +27,7 @@ router = APIRouter(tags=["desenvolvimento"])
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 # Configurar handler se ainda não estiver configurado (evita duplicar handlers)
-if not logger.handlers:
+if logger.handlers is None:
     handler = logging.StreamHandler(sys.stdout)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
@@ -86,7 +86,7 @@ async def get_setores_admin(
     Retorna apenas setores ativos.
     """
     try:
-        setores = db.query(Setor).filter(Setor.ativo == True).all()
+        setores = db.query(Setor).filter(Setor.ativo.is_(True)).all()
         
         return [
             {
@@ -151,7 +151,7 @@ async def get_categorias_maquina_admin(
         ).distinct()
 
         # Adicionar filtros de departamento e setor se o usuário não for ADMIN
-        if current_user.privilege_level != 'ADMIN':
+        if current_user.privilege_level != 'ADMIN':  # type: ignore
             query = query.filter(
                 and_(
                     TipoMaquina.departamento == current_user.departamento,
@@ -369,11 +369,17 @@ async def get_apontamentos(
             where_clause = f"WHERE a.status_apontamento = '{status}'"
 
         sql = text(f"""
-            SELECT a.*, os.os_numero, os.descricao_maquina, os.testes_exclusivo_os,
-                   u.nome_completo, u.matricula
+            SELECT a.id, a.id_os, a.data_hora_inicio, a.data_hora_fim, a.foi_retrabalho,
+                   a.status_apontamento, a.observacao_os, a.criado_por, a.id_setor,
+                   os.os_numero, os.descricao_maquina, os.testes_exclusivo_os,
+                   u.nome_completo, u.matricula,
+                   c.razao_social as cliente_nome,
+                   e.descricao as equipamento_descricao
             FROM apontamentos_detalhados a
             LEFT JOIN ordens_servico os ON a.id_os = os.id
             LEFT JOIN tipo_usuarios u ON a.id_usuario = u.id
+            LEFT JOIN clientes c ON os.id_cliente = c.id
+            LEFT JOIN equipamentos e ON os.id_equipamento = e.id
             {where_clause}
             ORDER BY a.data_hora_inicio DESC
             LIMIT 50
@@ -385,25 +391,26 @@ async def get_apontamentos(
         return [
             {
                 "id": row[0],
-                "numero_os": row[22] or "",
+                "numero_os": row[9] or "",  # os.os_numero
                 "status_os": "EM ANDAMENTO",  # Status padrão
-                "cliente": "Cliente não informado",
-                "equipamento": row[23] or "",
-                "tipo_maquina": "Não informado",
-                "tipo_atividade": "Atividade padrão",
-                "data_inicio": str(row[5])[:10] if row[5] else None,
-                "hora_inicio": str(row[5])[11:16] if row[5] else None,
-                "data_fim": str(row[6])[:10] if row[6] else None,
-                "hora_fim": str(row[6])[11:16] if row[6] else None,
-                "eh_retrabalho": bool(row[10]) if row[10] is not None else False,
-                "observacao_geral": row[17] or "",
-                "resultado_global": row[7] or "PENDENTE",
-                "testes_exclusivo_os": row[24],
-                "usuario_nome": row[25] or "",
-                "matricula": row[26] or "",
-                "status_apontamento": row[7] or "PENDENTE",
-                "criado_por": row[18] or "",
-                "setor": row[20] or ""
+                # Relacionamentos 1:1 conforme HIERARQUIA_COMPLETA_BANCO_DADOS.md
+                "cliente": row[14] if row[14] else None,  # cliente_nome
+                "equipamento": row[15] if row[15] else None,  # equipamento_descricao
+                "tipo_maquina": None,
+                "tipo_atividade": None,
+                "data_inicio": str(row[2])[:10] if row[2] else None,  # data_hora_inicio
+                "hora_inicio": str(row[2])[11:16] if row[2] else None,
+                "data_fim": str(row[3])[:10] if row[3] else None,  # data_hora_fim
+                "hora_fim": str(row[3])[11:16] if row[3] else None,
+                "eh_retrabalho": bool(row[4]) if row[4] is not None else False,  # foi_retrabalho
+                "observacao_geral": row[6] or "",  # observacao_os
+                "resultado_global": row[5] or "PENDENTE",  # status_apontamento
+                "testes_exclusivo_os": row[11],  # os.testes_exclusivo_os
+                "usuario_nome": row[12] or "",  # u.nome_completo
+                "matricula": row[13] or "",  # u.matricula
+                "status_apontamento": row[5] or "PENDENTE",
+                "criado_por": row[7] or "",  # criado_por
+                "setor": row[8] or ""  # id_setor
             }
             for row in apontamentos
         ]
@@ -448,17 +455,17 @@ async def get_meus_apontamentos(
             {
                 "id": apt.id,
                 "numero_os": apt.numero_os,
-                "cliente": apt.cliente or "Cliente não informado",
-                "equipamento": apt.equipamento or "Equipamento não informado",
-                "data_inicio": apt.data_inicio.isoformat() if apt.data_inicio else None,
+                "cliente": apt.cliente or None,  # Dados conforme hierarquia do banco
+                "equipamento": apt.equipamento or None,  # Dados conforme hierarquia do banco
+                "data_inicio": apt.data_inicio.isoformat() if apt.data_inicio is not None else None,
                 "hora_inicio": apt.hora_inicio,
-                "data_fim": apt.data_fim.isoformat() if apt.data_fim else None,
+                "data_fim": apt.data_fim.isoformat() if apt.data_fim is not None else None,
                 "hora_fim": apt.hora_fim,
                 "tempo_trabalhado": apt.tempo_trabalhado,
-                "tipo_atividade": apt.tipo_atividade or "Não informado",
-                "descricao_atividade": apt.descricao_atividade or "Não informado",
+                "tipo_atividade": apt.tipo_atividade or None,
+                "descricao_atividade": apt.descricao_atividade or None,
                 "status": "CONCLUIDO" if apt.data_fim else "EM_ANDAMENTO",
-                "setor_responsavel": "Não informado"  # Será atualizado via id_setor
+                "setor_responsavel": None  # Será atualizado via id_setor
             }
             for apt in apontamentos
         ]
@@ -475,7 +482,7 @@ async def criar_apontamento(
     """
     Endpoint para criar novo apontamento.
     Associa o apontamento ao usuário atual.
-    Campos como setor e departamento são preenchidos como "Não informado" e atualizados posteriormente.
+    Campos como setor e departamento são preenchidos como None e atualizados posteriormente.
     """
     try:
         novo_apontamento = ApontamentoDetalhado(
@@ -489,8 +496,8 @@ async def criar_apontamento(
             hora_inicio=apontamento.hora_inicio,
             observacao=apontamento.observacao,
             id_usuario=current_user.id,
-            setor="Não informado",  # Será atualizado após criação
-            departamento="Não informado",  # Será atualizado após criação
+            setor=None,  # Será atualizado após criação
+            departamento=None,  # Será atualizado após criação
             data_criacao=datetime.now()
         )
         
@@ -681,6 +688,110 @@ async def get_descricoes_atividade_formulario(db: Session = Depends(get_db)):
         print(f"Erro ao buscar descrições de atividade: {e}")
         return []
 
+
+@router.post("/buscar-ids-os")
+async def buscar_ids_os(
+    request_data: dict,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Busca IDs reais das OSs pelos números conforme HIERARQUIA_COMPLETA_BANCO_DADOS.md"""
+    try:
+        numeros_os = request_data.get("numeros_os", [])
+        if not numeros_os:
+            return {"mapeamento": {}}
+
+        # Buscar OSs no banco de dados - versão simplificada para debug
+        logger.info(f"Buscando OSs pelos números: {numeros_os}")
+
+        try:
+            # Query simples primeiro para testar - CAMPO CORRETO: os_numero
+            os_encontradas = db.query(OrdemServico).filter(
+                OrdemServico.os_numero.in_(numeros_os)
+            ).all()
+
+            logger.info(f"OSs encontradas: {len(os_encontradas)}")
+
+            # Criar mapeamento numero -> dados básicos (versão funcional)
+            mapeamento = {}
+            dados_completos = {}
+
+            for os in os_encontradas:
+                numero_os = os.os_numero  # CAMPO CORRETO: os_numero
+                mapeamento[numero_os] = os.id
+
+                # Buscar relacionamentos 1:1 conforme HIERARQUIA_COMPLETA_BANCO_DADOS.md
+                cliente_info = None
+                equipamento_info = None
+                tipo_maquina_info = None
+
+                # Relacionamento 1:1 com Cliente
+                if getattr(os, 'id_cliente', None) is not None:
+                    try:
+                        cliente = db.query(Cliente).filter(Cliente.id == os.id_cliente).first()
+                        if cliente:
+                            cliente_info = {
+                                "id": cliente.id,
+                                "nome": cliente.razao_social,
+                                "cnpj": getattr(cliente, 'cnpj', None)
+                            }
+                    except Exception as e:
+                        logger.warning(f"Erro ao buscar cliente {os.id_cliente}: {e}")
+
+                # Relacionamento 1:1 com Equipamento
+                if getattr(os, 'id_equipamento', None) is not None:
+                    try:
+                        equipamento = db.query(Equipamento).filter(Equipamento.id == os.id_equipamento).first()
+                        if equipamento:
+                            equipamento_info = {
+                                "id": equipamento.id,
+                                "descricao": equipamento.descricao,
+                                "numero_serie": getattr(equipamento, 'numero_serie', None)
+                            }
+                    except Exception as e:
+                        logger.warning(f"Erro ao buscar equipamento {os.id_equipamento}: {e}")
+
+                # Relacionamento com Tipo de Máquina
+                if getattr(os, 'id_tipo_maquina', None) is not None:
+                    try:
+                        tipo_maquina = db.query(TipoMaquina).filter(TipoMaquina.id == os.id_tipo_maquina).first()
+                        if tipo_maquina:
+                            tipo_maquina_info = tipo_maquina.nome_tipo
+                    except Exception as e:
+                        logger.warning(f"Erro ao buscar tipo máquina {os.id_tipo_maquina}: {e}")
+
+                # Dados completos conforme HIERARQUIA_COMPLETA_BANCO_DADOS.md
+                dados_completos[numero_os] = {
+                    "id": os.id,
+                    "numero_os": os.os_numero,  # CAMPO CORRETO: os_numero
+                    "status_os": os.status_os,
+                    "descricao_maquina": os.descricao_maquina,
+                    "prioridade": getattr(os, 'prioridade', None),
+                    "status_geral": getattr(os, 'status_geral', None),
+                    # Relacionamentos 1:1 implementados
+                    "cliente": cliente_info,
+                    "equipamento": equipamento_info,
+                    "tipo_maquina": tipo_maquina_info,
+                    "setor": None,  # TODO: Implementar relacionamento
+                    "departamento": None  # TODO: Implementar relacionamento
+                }
+
+        except Exception as query_error:
+            logger.error(f"Erro na query: {query_error}")
+            raise HTTPException(status_code=500, detail=f"Erro na consulta: {str(query_error)}")
+
+        return {
+            "mapeamento": mapeamento,
+            "dados_completos": dados_completos,
+            "total_encontradas": len(mapeamento),
+            "total_solicitadas": len(numeros_os),
+            "hierarquia_conforme": "HIERARQUIA_COMPLETA_BANCO_DADOS.md"
+        }
+
+    except Exception as e:
+        logger.error(f"Erro ao buscar IDs das OSs: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar IDs: {str(e)}")
+
 @router.get("/formulario/teste-simples/{numero_os}", operation_id="dev_teste_simples")
 async def teste_simples(numero_os: str):
     """
@@ -795,28 +906,40 @@ async def get_detalhes_os_formulario(
         if result:
             logger.info(f"✅ OS encontrada no banco: {numero_os}")
 
-            # Buscar dados relacionados
-            cliente_nome = "Cliente não informado"
+            # Buscar dados relacionados conforme HIERARQUIA_COMPLETA_BANCO_DADOS.md
+            # Seção 3.1 - Clientes (clientes) e 3.2 - Equipamentos (equipamentos)
+            cliente_nome = None
             equipamento_nome = ""
-            tipo_maquina_nome = "Não informado"
+            tipo_maquina_nome = None
 
-            # Buscar cliente
-            # Corrigido: id_cliente está na posição 32 (não 52)
+            # Buscar cliente usando relacionamento FK conforme hierarquia
             if len(result) > 32 and result[32]:
-                cliente_sql = text("SELECT razao_social FROM clientes WHERE id = :id_cliente")
-                cliente_result = db.execute(cliente_sql, {"id_cliente": result[32]}).fetchone()
-                if cliente_result:
-                    cliente_nome = cliente_result[0]
+                try:
+                    cliente_obj = db.query(Cliente).filter(Cliente.id == result[32]).first()
+                    if cliente_obj:
+                        cliente_nome = cliente_obj.razao_social  # Campo correto conforme hierarquia
+                except Exception as e:
+                    logger.warning(f"Erro ao buscar cliente: {e}")
 
-            # Buscar equipamento
-            # Corrigido: id_equipamento está na posição 33 (não 53)
+            # Buscar equipamento usando relacionamento FK conforme hierarquia
             if len(result) > 33 and result[33]:
-                equip_sql = text("SELECT descricao FROM equipamentos WHERE id = :id_equipamento")
-                equip_result = db.execute(equip_sql, {"id_equipamento": result[33]}).fetchone()
-                if equip_result:
-                    equipamento_nome = equip_result[0]
-            elif len(result) > 38 and result[38]:  # descricao_maquina está na posição 38
+                try:
+                    equipamento_obj = db.query(Equipamento).filter(Equipamento.id == result[33]).first()
+                    if equipamento_obj:
+                        equipamento_nome = equipamento_obj.descricao  # Campo correto conforme hierarquia
+                except Exception as e:
+                    logger.warning(f"Erro ao buscar equipamento: {e}")
+            elif len(result) > 38 and result[38]:  # descricao_maquina como fallback
                 equipamento_nome = result[38]
+
+            # Buscar tipo de máquina usando relacionamento FK conforme hierarquia
+            if len(result) > 34 and result[34]:
+                try:
+                    tipo_maquina_obj = db.query(TipoMaquina).filter(TipoMaquina.id == result[34]).first()
+                    if tipo_maquina_obj:
+                        tipo_maquina_nome = tipo_maquina_obj.nome_tipo  # Campo correto conforme hierarquia
+                except Exception as e:
+                    logger.warning(f"Erro ao buscar tipo de máquina: {e}")
 
             return {
                 "id": result[0],
@@ -943,35 +1066,38 @@ async def get_detalhes_os_formulario(
                 logger.info(f"✅ OS encontrada no banco após scraping: {numero_os}")
 
                 # Processar os dados da OS encontrada após scraping (mesmo código de cima)
-                cliente_nome = "Cliente não informado"
+                cliente_nome = None
                 equipamento_nome = ""
-                tipo_maquina_nome = "Não informado"
+                tipo_maquina_nome = None
 
-                # Buscar cliente
-                # Corrigido: id_cliente está na posição 32 (não 52)
+                # Buscar cliente usando relacionamento FK conforme hierarquia
                 if len(result_after_scraping) > 32 and result_after_scraping[32]:
-                    cliente_sql = text("SELECT razao_social FROM clientes WHERE id = :id_cliente")
-                    cliente_result = db.execute(cliente_sql, {"id_cliente": result_after_scraping[32]}).fetchone()
-                    if cliente_result:
-                        cliente_nome = cliente_result[0]
+                    try:
+                        cliente_obj = db.query(Cliente).filter(Cliente.id == result_after_scraping[32]).first()
+                        if cliente_obj:
+                            cliente_nome = cliente_obj.razao_social  # Campo correto conforme hierarquia
+                    except Exception as e:
+                        logger.warning(f"Erro ao buscar cliente após scraping: {e}")
 
-                # Buscar equipamento
-                # Corrigido: id_equipamento está na posição 33 (não 53)
+                # Buscar equipamento usando relacionamento FK conforme hierarquia
                 if len(result_after_scraping) > 33 and result_after_scraping[33] is not None:
-                    equip_sql = text("SELECT descricao FROM equipamentos WHERE id = :id_equipamento")
-                    equipamento_result = db.execute(equip_sql, {"id_equipamento": result_after_scraping[33]}).fetchone()
-                    if equipamento_result:
-                        equipamento_nome = equipamento_result[0]
-                elif len(result_after_scraping) > 38 and result_after_scraping[38] is not None:  # descricao_maquina está na posição 38
+                    try:
+                        equipamento_obj = db.query(Equipamento).filter(Equipamento.id == result_after_scraping[33]).first()
+                        if equipamento_obj:
+                            equipamento_nome = equipamento_obj.descricao  # Campo correto conforme hierarquia
+                    except Exception as e:
+                        logger.warning(f"Erro ao buscar equipamento após scraping: {e}")
+                elif len(result_after_scraping) > 38 and result_after_scraping[38] is not None:  # descricao_maquina como fallback
                     equipamento_nome = result_after_scraping[38]
 
-                # Buscar tipo de máquina
-                # Corrigido: id_tipo_maquina está na posição 16 (não 35)
+                # Buscar tipo de máquina usando relacionamento FK conforme hierarquia
                 if len(result_after_scraping) > 16 and result_after_scraping[16]: # id_tipo_maquina
-                    tipo_maquina_sql = text("SELECT nome_tipo FROM tipos_maquina WHERE id = :id_tipo_maquina")
-                    tipo_maquina_result = db.execute(tipo_maquina_sql, {"id_tipo_maquina": result_after_scraping[16]}).fetchone()
-                    if tipo_maquina_result:
-                        tipo_maquina_nome = tipo_maquina_result[0]
+                    try:
+                        tipo_maquina_obj = db.query(TipoMaquina).filter(TipoMaquina.id == result_after_scraping[16]).first()
+                        if tipo_maquina_obj:
+                            tipo_maquina_nome = tipo_maquina_obj.nome_tipo  # Campo correto conforme hierarquia
+                    except Exception as e:
+                        logger.warning(f"Erro ao buscar tipo de máquina após scraping: {e}")
                 
                 # Verificar se está bloqueada
                 status_finalizados = [
@@ -1035,8 +1161,12 @@ async def get_programacao_desenvolvimento(
         where_conditions = []
         params: Dict[str, Any] = {"user_id": current_user.id, "setor_id": current_user.id_setor}
 
-        # Filtrar por setor do usuário ou programações que ele criou/é responsável
-        where_conditions.append("(p.id_setor = :setor_id OR p.responsavel_id = :user_id OR p.criado_por_id = :user_id)")
+        # DESENVOLVIMENTO: Filtrar por setor OU por responsável (supervisor pode ver suas programações)
+        # Se usuário não tem setor (admin), mostrar apenas programações onde ele é responsável
+        if current_user.id_setor is not None:
+            where_conditions.append("(p.id_setor = :setor_id OR p.responsavel_id = :user_id)")
+        else:
+            where_conditions.append("p.responsavel_id = :user_id")
 
         if status:
             where_conditions.append("p.status = :status")
@@ -1044,15 +1174,18 @@ async def get_programacao_desenvolvimento(
 
         where_clause = " AND ".join(where_conditions)
 
-        # Buscar programações relacionadas ao usuário e setor
+        # Buscar programações com relacionamentos 1:1 (OS → Cliente → Equipamento)
         sql = text(f"""
             SELECT p.id, p.id_ordem_servico, p.responsavel_id, p.inicio_previsto,
                    p.fim_previsto, p.status, p.criado_por_id, p.observacoes,
                    p.created_at, p.updated_at, p.id_setor,
-                   os.os_numero, os.status_os, os.prioridade, u.nome_completo as responsavel_nome
+                   os.os_numero, os.status_os, os.prioridade, u.nome_completo as responsavel_nome,
+                   c.razao_social as cliente_nome, e.descricao as equipamento_descricao
             FROM programacoes p
             LEFT JOIN ordens_servico os ON p.id_ordem_servico = os.id
             LEFT JOIN tipo_usuarios u ON p.responsavel_id = u.id
+            LEFT JOIN clientes c ON os.id_cliente = c.id
+            LEFT JOIN equipamentos e ON os.id_equipamento = e.id
             WHERE {where_clause}
             ORDER BY p.inicio_previsto DESC
             LIMIT 50
@@ -1065,14 +1198,12 @@ async def get_programacao_desenvolvimento(
             {
                 "id": row[0],
                 "numero": row[11] or str(row[0]),  # os_numero como numero (apenas números)
-                "cliente": "Cliente não informado",
-                "equipamento": "Equipamento não informado",
                 "prioridade": row[13] or "MEDIA",  # os.prioridade
                 "status": row[5] or "PROGRAMADA",  # p.status
                 "data_prevista": str(row[3])[:10] if row[3] else None,  # inicio_previsto como data
-                "responsavel_atual": row[14] or "Não informado",  # responsavel_nome
+                "responsavel_atual": row[14] or None,  # responsavel_nome
                 "tempo_estimado": 8,  # valor padrão
-                "descricao": row[7] or "Programação automática",  # observacoes
+                "descricao": row[7] or f"OS {row[11] or row[0]} - Programação PCP",  # observacoes
                 # Campos originais para compatibilidade
                 "id_ordem_servico": row[1],
                 "responsavel_id": row[2],
@@ -1084,13 +1215,71 @@ async def get_programacao_desenvolvimento(
                 "updated_at": str(row[9]) if row[9] else None,
                 "id_setor": row[10],
                 "os_numero": row[11] or "",
-                "responsavel_nome": row[14] or "Não informado"
+                "status_os": row[12] or "",
+                "responsavel_nome": row[14] or None,
+                "cliente_nome": row[15] if len(row) > 15 else "",  # Dados do cliente
+                "equipamento_descricao": row[16] if len(row) > 16 else ""  # Dados do equipamento
             }
             for row in programacoes
         ]
 
     except Exception as e:
-        print(f"Erro ao buscar programação: {e}")
+        print(f"🚨 ERRO ao buscar programação: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+# =============================================================================
+# ENDPOINT: COLABORADORES - BUSCAR COLABORADORES DO SETOR
+# =============================================================================
+
+@router.get("/colaboradores", operation_id="dev_get_colaboradores")
+async def get_colaboradores_setor(
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Buscar colaboradores do setor do usuário logado para modais de atribuição.
+    Retorna apenas usuários do mesmo setor.
+    """
+    try:
+        print(f"🔍 Buscando colaboradores do setor {current_user.id_setor}")
+
+        # Buscar colaboradores do mesmo setor com JOIN
+        from sqlalchemy import text
+
+        sql = text("""
+            SELECT u.id, u.nome_completo, u.email, u.privilege_level,
+                   s.nome as setor_nome, s.departamento
+            FROM tipo_usuarios u
+            LEFT JOIN tipo_setores s ON u.id_setor = s.id
+            WHERE u.id_setor = :setor_id
+            ORDER BY u.nome_completo
+        """)
+
+        result = db.execute(sql, {"setor_id": current_user.id_setor})
+        colaboradores = result.fetchall()
+
+        print(f"🔍 Encontrados {len(colaboradores)} colaboradores")
+        for row in colaboradores:
+            print(f"   - {row[1]} (ID: {row[0]}) - {row[3]}")
+
+        return [
+            {
+                "id": row[0],
+                "nome_completo": row[1],
+                "email": row[2],
+                "privilege_level": row[3],
+                "setor": row[4] or "Não definido",
+                "departamento": row[5] or "Não definido"
+            }
+            for row in colaboradores
+        ]
+
+    except Exception as e:
+        print(f"🚨 ERRO ao buscar colaboradores: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 # =============================================================================
@@ -1101,8 +1290,6 @@ async def get_programacao_desenvolvimento(
 async def get_pendencias(
     data: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
-    setor: Optional[str] = Query(None),
-    departamento: Optional[str] = Query(None),
     current_user: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -1113,27 +1300,17 @@ async def get_pendencias(
     try:
         query = db.query(Pendencia)
         
-        # Filtros baseados no privilégio usando id_apontamento_origem
-        if current_user.privilege_level in ['SUPERVISOR', 'USER']:  # type: ignore
-            # Filtrar por setor através do apontamento origem
-            apontamento_ids = db.query(ApontamentoDetalhado.id).filter(
-                ApontamentoDetalhado.id_setor == current_user.id_setor
-            ).all()
-            ids_list = [apt_id[0] for apt_id in apontamento_ids]
-            if ids_list:
-                query = query.filter(Pendencia.id_apontamento_origem.in_(ids_list))
-        elif current_user.privilege_level == 'ADMIN':  # type: ignore
-            # Admin pode filtrar por setor através do apontamento
-            if setor:
-                # Buscar id_setor pelo nome do setor
-                setor_obj = db.query(Setor).filter(Setor.nome == setor).first()
-                if setor_obj:
-                    apontamento_ids = db.query(ApontamentoDetalhado.id).filter(
-                        ApontamentoDetalhado.id_setor == setor_obj.id
-                    ).all()
-                    ids_list = [apt_id[0] for apt_id in apontamento_ids]
-                    if ids_list:
-                        query = query.filter(Pendencia.id_apontamento_origem.in_(ids_list))
+        # DESENVOLVIMENTO: Filtrar APENAS por setor do usuário (não pode ver outros setores)
+        # Filtrar por setor através do apontamento origem
+        apontamento_ids = db.query(ApontamentoDetalhado.id).filter(
+            ApontamentoDetalhado.id_setor == current_user.id_setor
+        ).all()
+        ids_list = [apt_id[0] for apt_id in apontamento_ids]
+        if ids_list:
+            query = query.filter(Pendencia.id_apontamento_origem.in_(ids_list))
+        else:
+            # Se não há apontamentos do setor, não retornar nenhuma pendência
+            query = query.filter(Pendencia.id == -1)
         
         if status:
             query = query.filter(Pendencia.status == status)
@@ -1152,7 +1329,7 @@ async def get_pendencias(
         for pend in pendencias:
             # Buscar apontamento origem para obter setor
             apontamento = None
-            setor_nome = "Não informado"
+            setor_nome = None
             if pend.id_apontamento_origem is not None:
                 apontamento = db.query(ApontamentoDetalhado).filter(
                     ApontamentoDetalhado.id == pend.id_apontamento_origem
@@ -1160,7 +1337,7 @@ async def get_pendencias(
                 if apontamento:
                     # Buscar setor através do id_setor
                     setor_obj = db.query(Setor).filter(Setor.id == apontamento.id_setor).first()
-                    setor_nome = setor_obj.nome if setor_obj else "Não informado"
+                    setor_nome = setor_obj.nome if setor_obj else None
 
             resultado.append({
                 "id": pend.id,
@@ -1320,7 +1497,7 @@ async def criar_programacao(
 
         # Criar datas de início e fim
         inicio_previsto = programacao.data_programada
-        if programacao.hora_inicio:
+        if programacao.hora_inicio is not None:
             try:
                 hora_inicio = datetime.strptime(programacao.hora_inicio, '%H:%M').time()
                 inicio_previsto = datetime.combine(programacao.data_programada, hora_inicio)
@@ -1328,7 +1505,7 @@ async def criar_programacao(
                 pass
 
         fim_previsto = None
-        if programacao.hora_fim:
+        if programacao.hora_fim is not None:
             try:
                 hora_fim = datetime.strptime(programacao.hora_fim, '%H:%M').time()
                 fim_previsto = datetime.combine(programacao.data_programada, hora_fim)
@@ -1367,3 +1544,99 @@ async def criar_programacao(
         db.rollback()
         print(f"Erro ao criar programação: {e}")
         raise HTTPException(status_code=500, detail="Erro ao criar programação")
+
+
+@router.patch("/programacao/{programacao_id}/finalizar")
+async def finalizar_programacao(
+    programacao_id: int,
+    request: dict,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    🎯 FINALIZAR PROGRAMAÇÃO
+    Marca uma programação como finalizada quando apontamento é feito
+    """
+    try:
+        print(f"🎯 Finalizando programação ID: {programacao_id}")
+        print(f"👤 Usuário: {current_user.nome_completo}")
+        print(f"📋 Dados: {request}")
+
+        # Buscar programação
+        sql = text("SELECT * FROM programacoes WHERE id = :id")
+        result = db.execute(sql, {"id": programacao_id})
+        programacao = result.fetchone()
+
+        if not programacao:
+            raise HTTPException(status_code=404, detail="Programação não encontrada")
+
+        # Atualizar status para FINALIZADA
+        update_sql = text("""
+            UPDATE programacoes
+            SET status = 'FINALIZADA',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = :id
+        """)
+
+        db.execute(update_sql, {"id": programacao_id})
+        db.commit()
+
+        print(f"✅ Programação {programacao_id} finalizada com sucesso")
+
+        return {
+            "message": "Programação finalizada com sucesso",
+            "programacao_id": programacao_id,
+            "status": "FINALIZADA"
+        }
+
+    except Exception as e:
+        print(f"❌ Erro ao finalizar programação: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
+
+
+@router.post("/notificacoes")
+async def criar_notificacao(
+    notificacao: dict,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    🔔 CRIAR NOTIFICAÇÃO
+    Cria notificação para colaborador atribuído/editado
+    """
+    try:
+        print(f"🔔 Criando notificação para usuário: {notificacao.get('usuario_id')}")
+        print(f"📋 Dados: {notificacao}")
+
+        # Por enquanto, apenas log da notificação
+        # Em uma implementação completa, salvaria em tabela de notificações
+
+        usuario_id = notificacao.get('usuario_id')
+        titulo = notificacao.get('titulo', 'Notificação')
+        mensagem = notificacao.get('mensagem', '')
+        tipo = notificacao.get('tipo', 'GERAL')
+        prioridade = notificacao.get('prioridade', 'NORMAL')
+
+        # Buscar dados do usuário
+        sql = text("SELECT nome_completo, email FROM tipo_usuarios WHERE id = :id")
+        result = db.execute(sql, {"id": usuario_id})
+        usuario = result.fetchone()
+
+        if usuario:
+            print(f"✅ Notificação criada:")
+            print(f"   👤 Para: {usuario[0]} ({usuario[1]})")
+            print(f"   📝 Título: {titulo}")
+            print(f"   💬 Mensagem: {mensagem}")
+            print(f"   🏷️ Tipo: {tipo}")
+            print(f"   ⚡ Prioridade: {prioridade}")
+
+        return {
+            "message": "Notificação criada com sucesso",
+            "usuario_id": usuario_id,
+            "titulo": titulo
+        }
+
+    except Exception as e:
+        print(f"❌ Erro ao criar notificação: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")

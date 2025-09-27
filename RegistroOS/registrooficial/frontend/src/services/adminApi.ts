@@ -91,12 +91,12 @@ export interface CentroCustoData {
 
 // Exemplo de como seus services deveriam estar estruturados
 export const setorService = {
-    getSetores: () => api.get<SetorData[]>('/admin/setores/').then(res => res.data),  // ROTA CORRIGIDA COM BARRA FINAL
-    getSetorById: (id: number) => api.get<SetorData>(`/admin/setores/${id}`).then(res => res.data),
-    createSetor: (data: SetorData) => api.post<SetorData>('/admin/setores/', data).then(res => res.data),  // BARRA FINAL ADICIONADA
-    updateSetor: (id: number, data: SetorData) => api.put<SetorData>(`/admin/setores/${id}`, data).then(res => res.data),
-    deleteSetor: (id: number) => api.delete(`/admin/setores/${id}`).then(res => res.data),
-    getDepartamentos: () => api.get<DepartamentoData[]>('/admin/departamentos/').then(res => res.data), // ROTA CORRIGIDA COM BARRA FINAL
+    getSetores: () => api.get<SetorData[]>('/setores').then(res => res.data),  // ROTA PÚBLICA PARA TODOS OS USUÁRIOS
+    getSetorById: (id: number) => api.get<SetorData>(`/admin/config/setores/${id}`).then(res => res.data),
+    createSetor: (data: SetorData) => api.post<SetorData>('/admin/config/setores/', data).then(res => res.data),  // BARRA FINAL ADICIONADA
+    updateSetor: (id: number, data: SetorData) => api.put<SetorData>(`/admin/config/setores/${id}`, data).then(res => res.data),
+    deleteSetor: (id: number) => api.delete(`/admin/config/setores/${id}`).then(res => res.data),
+    getDepartamentos: () => api.get<DepartamentoData[]>('/admin/config/departamentos/').then(res => res.data), // ROTA CORRIGIDA COM BARRA FINAL
 };
 
 export const tipoMaquinaService = {
@@ -204,8 +204,7 @@ export const centroCustoService = {
         };
     },
     createCentroCusto: async (data: CentroCustoData): Promise<CentroCustoData> => {
-        const deptData: DepartamentoData = {
-            id: data.id || 0,
+        const deptData = {
             nome_tipo: data.nome,
             descricao: data.descricao,
             ativo: data.ativo

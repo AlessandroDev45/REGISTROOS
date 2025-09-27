@@ -1,180 +1,167 @@
 // frontend/src/features/admin/components/config/fullInstanceTemplates.ts
+// DADOS DINÂMICOS - BUSCAR DA API
 
-export const DEPARTMENTS_TEMPLATE = {
-    "departamentos": [
-        {
-            "nome": "MOTORES",
-            "descricao": "Departamento de Motores Elétricos",
-            "ativo": true
-        },
-        {
-            "nome": "TRANSFORMADORES",
-            "descricao": "Departamento de Transformadores",
-            "ativo": true
-        }
-    ]
+import api from '../../../../services/api';
+
+// Função para buscar departamentos reais da API
+export const getDepartmentsTemplate = async () => {
+    try {
+        const response = await api.get('/admin/departamentos');
+        return {
+            "departamentos": response.data.map((dept: any) => ({
+                "nome": dept.nome_tipo,
+                "descricao": dept.descricao,
+                "ativo": dept.ativo
+            }))
+        };
+    } catch (error) {
+        console.error('Erro ao buscar departamentos:', error);
+        return { "departamentos": [] };
+    }
 };
 
-export const SECTORS_BY_DEPARTMENT_TEMPLATE = {
-    "setores_por_departamento": [
-        {
-            "departamento": "MOTORES",
-            "setores": [
-                {
-                    "nome": "LAB",
-                    "descricao": "Laboratório de Ensaios Elétricos",
-                    "area_tipo": "PRODUCAO",
-                    "permite_apontamento": true,
-                },
-                {
-                    "nome": "MECANICA",
-                    "descricao": "Setor de Mecânica e Produção",
-                    "area_tipo": "PRODUCAO",
-                    "permite_apontamento": true,
-                },
-                {
-                    "nome": "PCP",
-                    "descricao": "Planejamento e Controle da Produção",
-                    "area_tipo": "ADMINISTRATIVA",
-                    "permite_apontamento": false,
-                },
-                {
-                    "nome": "GESTAO",
-                    "descricao": "Gestão e Administração",
-                    "area_tipo": "ADMINISTRATIVA",
-                    "permite_apontamento": false,
-                }
-            ]
-        },
-        {
-            "departamento": "TRANSFORMADORES",
-            "setores": [
-                {
-                    "nome": "LAB",
-                    "descricao": "Laboratório de Ensaios Elétricos",
-                    "area_tipo": "PRODUCAO",
-                    "permite_apontamento": true,
-                },
-                {
-                    "nome": "MECANICA",
-                    "descricao": "Setor de Mecânica e Produção",
-                    "area_tipo": "PRODUCAO",
-                    "permite_apontamento": true,
-                },
-                {
-                    "nome": "PCP",
-                    "descricao": "Planejamento e Controle da Produção",
-                    "area_tipo": "ADMINISTRATIVA",
-                    "permite_apontamento": false,
-                },
-                {
-                    "nome": "GESTAO",
-                    "descricao": "Gestão e Administração",
-                    "area_tipo": "ADMINISTRATIVA",
-                    "permite_apontamento": false,
-                }
-            ]
-        }
-    ]
+// Função para buscar setores reais da API
+export const getSectorsByDepartmentTemplate = async () => {
+    try {
+        const response = await api.get('/admin/setores');
+        const setoresPorDepartamento: any = {};
+
+        response.data.forEach((setor: any) => {
+            const dept = setor.departamento;
+            if (!setoresPorDepartamento[dept]) {
+                setoresPorDepartamento[dept] = [];
+            }
+            setoresPorDepartamento[dept].push({
+                "nome": setor.nome,
+                "descricao": setor.descricao,
+                "area_tipo": setor.area_tipo,
+                "permite_apontamento": setor.permite_apontamento
+            });
+        });
+
+        return {
+            "setores_por_departamento": Object.keys(setoresPorDepartamento).map(dept => ({
+                "departamento": dept,
+                "setores": setoresPorDepartamento[dept]
+            }))
+        };
+    } catch (error) {
+        console.error('Erro ao buscar setores:', error);
+        return { "setores_por_departamento": [] };
+    }
 };
 
-export const MACHINE_TYPES_TEMPLATE = {
-    "tipos_maquina_padrao": [
-        {
-            "nome": "Motor Trifásico",
-            "categoria": "MOTOR", // Mapped to 'departamento' in backend
-            "descricao": "Motor elétrico trifásico de indução",
-            "ativo": true // Default active
-        },
-        {
-            "nome": "Motor Monofásico",
-            "categoria": "MOTOR",
-            "descricao": "Motor elétrico monofásico",
-            "ativo": true
-        },
-        {
-            "nome": "Transformador Distribuição",
-            "categoria": "TRANSFORMADOR",
-            "descricao": "Transformador de distribuição",
-            "ativo": true
-        },
-        {
-            "nome": "Transformador Potência",
-            "categoria": "TRANSFORMADOR",
-            "descricao": "Transformador de potência",
-            "ativo": true
-        }
-    ]
+// Função para buscar tipos de máquina reais da API
+export const getMachineTypesTemplate = async () => {
+    try {
+        const response = await api.get('/admin/tipos-maquina');
+        return {
+            "tipos_maquina_padrao": response.data.map((tipo: any) => ({
+                "nome_tipo": tipo.nome_tipo,
+                "categoria": tipo.categoria,
+                "subcategoria": tipo.subcategoria,
+                "descricao": tipo.descricao,
+                "ativo": tipo.ativo
+            }))
+        };
+    } catch (error) {
+        console.error('Erro ao buscar tipos de máquina:', error);
+        return { "tipos_maquina_padrao": [] };
+    }
 };
 
-export const ACTIVITY_TYPES_TEMPLATE = {
-    "tipos_atividade_padrao": [
-        {"nome_tipo": "Inspeção", "descricao": "Inspeção visual e dimensional", "ativo": true},
-        {"nome_tipo": "Teste Elétrico", "descricao": "Ensaios elétricos de rotina", "ativo": true},
-        {"nome_tipo": "Montagem", "descricao": "Montagem de componentes", "ativo": true},
-        {"nome_tipo": "Desmontagem", "descricao": "Desmontagem para inspeção/reparo", "ativo": true},
-        {"nome_tipo": "Reparo", "descricao": "Reparo ou substituição de peças", "ativo": true},
-        {"nome_tipo": "Pintura", "descricao": "Processo de pintura e acabamento", "ativo": true},
-        {"nome_tipo": "Embalagem", "descricao": "Preparação para expedição", "ativo": true}
-    ]
+// Função para buscar tipos de atividade reais da API
+export const getActivityTypesTemplate = async () => {
+    try {
+        const response = await api.get('/admin/tipos-atividade');
+        return {
+            "tipos_atividade_padrao": response.data.map((tipo: any) => ({
+                "nome_tipo": tipo.nome_tipo,
+                "descricao": tipo.descricao,
+                "ativo": tipo.ativo
+            }))
+        };
+    } catch (error) {
+        console.error('Erro ao buscar tipos de atividade:', error);
+        return { "tipos_atividade_padrao": [] };
+    }
 };
 
-export const ACTIVITY_DESCRIPTIONS_TEMPLATE = {
-    "descricoes_atividade_padrao": [
-        // LAB
-        {"codigo": "LAB-001", "descricao": "Verificação de Resistência de Isolamento", "setor": "LAB", "ativo": true},
-        {"codigo": "LAB-002", "descricao": "Teste de Hipot (Rigidez Dielétrica)", "setor": "LAB", "ativo": true},
-        {"codigo": "LAB-003", "descricao": "Medição de Perdas em Vazio", "setor": "LAB", "ativo": true},
-        // MECANICA
-        {"codigo": "MEC-001", "descricao": "Inspeção Visual Componentes Mecânicos", "setor": "MECANICA", "ativo": true},
-        {"codigo": "MEC-002", "descricao": "Substituição de Rolamentos", "setor": "MECANICA", "ativo": true},
-        {"codigo": "MEC-003", "descricao": "Alinhamento de Eixo", "setor": "MECANICA", "ativo": true},
-        // PCP
-        {"codigo": "PCP-001", "descricao": "Emissão de Ordem de Produção", "setor": "PCP", "ativo": true},
-        {"codigo": "PCP-002", "descricao": "Acompanhamento de Prazos", "setor": "PCP", "ativo": true},
-        // GESTAO
-        {"codigo": "GES-001", "descricao": "Análise de Relatórios de Produção", "setor": "GESTAO", "ativo": true}
-    ]
+// Função para buscar descrições de atividade reais da API
+export const getActivityDescriptionsTemplate = async () => {
+    try {
+        const response = await api.get('/admin/descricoes-atividade');
+        return {
+            "descricoes_atividade_padrao": response.data.map((desc: any) => ({
+                "codigo": desc.codigo,
+                "descricao": desc.descricao,
+                "ativo": desc.ativo
+            }))
+        };
+    } catch (error) {
+        console.error('Erro ao buscar descrições de atividade:', error);
+        return { "descricoes_atividade_padrao": [] };
+    }
 };
 
-
-export const FAULT_TYPES_TEMPLATE = {
-    "tipos_falha_padrao": [
-        // For LAB
-        {"codigo": "FAL-LAB-001", "descricao": "Falha no Isolamento (Baixa Resistência)", "setor": "LAB", "ativo": true},
-        {"codigo": "FAL-LAB-002", "descricao": "Curto-circuito Interno", "setor": "LAB", "ativo": true},
-        {"codigo": "FAL-LAB-003", "descricao": "Valores Elétricos Fora de Tolerância", "setor": "LAB", "ativo": true},
-        // For MECANICA
-        {"codigo": "FAL-MEC-001", "descricao": "Desgaste Excessivo de Rolamento", "setor": "MECANICA", "ativo": true},
-        {"codigo": "FAL-MEC-002", "descricao": "Desalinhamento Mecânico", "setor": "MECANICA", "ativo": true},
-        {"codigo": "FAL-MEC-003", "descricao": "Componente Quebrado/Trincado", "setor": "MECANICA", "ativo": true}
-    ]
+// Função para buscar causas de retrabalho reais da API
+export const getReworkCausesTemplate = async () => {
+    try {
+        const response = await api.get('/admin/causas-retrabalho');
+        return {
+            "causas_retrabalho_padrao": response.data.map((causa: any) => ({
+                "codigo": causa.codigo,
+                "descricao": causa.descricao,
+                "ativo": causa.ativo
+            }))
+        };
+    } catch (error) {
+        console.error('Erro ao buscar causas de retrabalho:', error);
+        return { "causas_retrabalho_padrao": [] };
+    }
 };
 
-export const REWORK_CAUSES_TEMPLATE = {
-    "causas_retrabalho_padrao": [
-        // For MOTORES department
-        {"codigo": "CRM-001", "descricao": "Erro de Montagem - Eixo", "departamento": "MOTORES", "ativo": true},
-        {"codigo": "CRM-002", "descricao": "Material com Defeito - Enrolamento", "departamento": "MOTORES", "ativo": true},
-        {"codigo": "CRM-003", "descricao": "Falha de Processo - Teste Elétrico", "departamento": "MOTORES", "ativo": true},
-        // For TRANSFORMADORES department
-        {"codigo": "CRT-001", "descricao": "Erro de Fabricação - Núcleo", "departamento": "TRANSFORMADORES", "ativo": true},
-        {"codigo": "CRT-002", "descricao": "Contaminação do Óleo", "departamento": "TRANSFORMADORES", "ativo": true},
-        {"codigo": "CRT-003", "descricao": "Problema de Soldagem - Buchas", "departamento": "TRANSFORMADORES", "ativo": true}
-    ]
+// Função para buscar tipos de falha reais da API
+export const getFailureTypesTemplate = async () => {
+    try {
+        const response = await api.get('/admin/tipos-falha');
+        return {
+            "tipos_falha_padrao": response.data.map((falha: any) => ({
+                "codigo": falha.codigo,
+                "descricao": falha.descricao,
+                "ativo": falha.ativo
+            }))
+        };
+    } catch (error) {
+        console.error('Erro ao buscar tipos de falha:', error);
+        return { "tipos_falha_padrao": [] };
+    }
 };
 
-// Placeholder for TesteContexto as it's more complex, requiring specific mappings
-// This data will be created via specific logic in handleCreateFullInstance
-export const TEST_TYPES_CONTEXT_TEMPLATE = {
-    // This is a simplified representation. Actual creation logic will need to map
-    // `setor`, `tipo_maquina`, `classificacao_temporal` from IDs.
-    // The previous prompt had detailed structure, which indicates this is not a flat catalog.
-    // It should be created in the `handleCreateFullInstance` based on the previously created entities.
+// Função para buscar contextos de teste reais da API
+export const getTestTypesContextTemplate = async () => {
+    try {
+        const response = await api.get('/admin/tipos-teste');
+        return {
+            "contextos_teste": response.data.map((teste: any) => ({
+                "nome": teste.nome,
+                "tipo_teste": teste.tipo_teste,
+                "descricao": teste.descricao,
+                "ativo": teste.ativo
+            }))
+        };
+    } catch (error) {
+        console.error('Erro ao buscar contextos de teste:', error);
+        return { "contextos_teste": [] };
+    }
 };
 
-// Placeholder for Atividade (Hierarchical, linking to Sector and possibly others)
-export const ACTIVITIES_HIERARCHICAL_TEMPLATE = {
-    // Similar to Test_Types_Context_Template, this is not a flat catalog.
-    // It depends on Sector ID.
-};
+// Templates legados removidos - agora tudo vem da API
+export const DEPARTMENTS_TEMPLATE = null; // REMOVIDO - usar getDepartmentsTemplate()
+export const SECTORS_BY_DEPARTMENT_TEMPLATE = null; // REMOVIDO - usar getSectorsByDepartmentTemplate()
+export const MACHINE_TYPES_TEMPLATE = null; // REMOVIDO - usar getMachineTypesTemplate()
+export const ACTIVITY_TYPES_TEMPLATE = null; // REMOVIDO - usar getActivityTypesTemplate()
+export const ACTIVITY_DESCRIPTIONS_TEMPLATE = null; // REMOVIDO - usar getActivityDescriptionsTemplate()
+export const REWORK_CAUSES_TEMPLATE = null; // REMOVIDO - usar getReworkCausesTemplate()
+export const FAILURE_TYPES_TEMPLATE = null; // REMOVIDO - usar getFailureTypesTemplate()
+export const TEST_TYPES_CONTEXT_TEMPLATE = null; // REMOVIDO - usar getTestTypesContextTemplate()

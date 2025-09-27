@@ -76,7 +76,7 @@ async def save_apontamento(
         else:
             # Se OS existe, atualizar campos específicos se fornecidos
             if "horasOrcadas" in apontamento_data and apontamento_data.get("horasOrcadas"):
-                ordem_servico.horas_orcadas = float(apontamento_data.get("horasOrcadas", 0))
+                ordem_servico.horas_orcadas = float(apontamento_data.get("horasOrcadas", 0))  # type: ignore
 
         # Create ApontamentoDetalhado
         apontamento = ApontamentoDetalhado(
@@ -87,7 +87,7 @@ async def save_apontamento(
             data_hora_fim=dt.strptime(apontamento_data["inpDataFim"], "%Y-%m-%d") if apontamento_data.get("inpDataFim") else None,
             status_apontamento="CONCLUIDO" if apontamento_data.get("inpDataFim") else "EM_ANDAMENTO",
             foi_retrabalho=apontamento_data.get("inpRetrabalho", False),
-            causa_retrabalho=apontamento_data.get("selCausaRetrabalho"),
+            causa_retrabalho=apontamento_data.get("selTipoCausaRetrabalho"),
             observacao_os=apontamento_data.get("observacao"),
             observacoes_gerais=apontamento_data.get("observacao_geral"),
             resultado_global=apontamento_data.get("resultado_global"),
@@ -218,7 +218,7 @@ async def save_apontamento_with_pendencia(
             data_hora_fim=dt.strptime(apontamento_data["inpDataFim"], "%Y-%m-%d") if apontamento_data.get("inpDataFim") else None,
             status_apontamento="PENDENTE",
             foi_retrabalho=apontamento_data.get("inpRetrabalho", False),
-            causa_retrabalho=apontamento_data.get("selCausaRetrabalho"),
+            causa_retrabalho=apontamento_data.get("selTipoCausaRetrabalho"),
             observacao_os=apontamento_data.get("observacao"),
             observacoes_gerais=apontamento_data.get("observacao_geral"),
             resultado_global=apontamento_data.get("resultado_global"),
@@ -343,8 +343,8 @@ async def listar_pendencias(
                 "descricao_pendencia": pendencia.descricao_pendencia,
                 "status": pendencia.status,
                 "prioridade": pendencia.prioridade,
-                "data_inicio": pendencia.data_inicio.isoformat() if pendencia.data_inicio else None,
-                "data_fechamento": pendencia.data_fechamento.isoformat() if pendencia.data_fechamento else None,
+                "data_inicio": pendencia.data_inicio.isoformat() if pendencia.data_inicio is not None else None,
+                "data_fechamento": pendencia.data_fechamento.isoformat() if pendencia.data_fechamento is not None else None,
                 "responsavel_inicio_id": pendencia.id_responsavel_inicio,
                 "responsavel_fechamento_id": pendencia.id_responsavel_fechamento,
                 "apontamento_origem_id": pendencia.id_apontamento_origem,
@@ -382,7 +382,7 @@ async def atualizar_pendencia(
 
         # Se estiver fechando a pendência
         if pendencia_data.get("status") == "FECHADA":
-            pendencia.data_fechamento = dt.now()
+            pendencia.data_fechamento = dt.now()  # type: ignore
             pendencia.id_responsavel_fechamento = current_user.id
 
         db.commit()
@@ -434,8 +434,8 @@ async def get_meus_apontamentos(
             result.append({
                 "id": apt.id,
                 "numero_os": numero_os,
-                "data_inicio": apt.data_hora_inicio.isoformat() if apt.data_hora_inicio else None,
-                "data_fim": apt.data_hora_fim.isoformat() if apt.data_hora_fim else None,
+                "data_inicio": apt.data_hora_inicio.isoformat() if apt.data_hora_inicio is not None else None,
+                "data_fim": apt.data_hora_fim.isoformat() if apt.data_hora_fim is not None else None,
                 "status": apt.status_apontamento,
                 "observacoes": apt.observacao_os,
                 "setor": "N/A",  # Será atualizado via id_setor
@@ -609,7 +609,7 @@ async def consultar_os_scraping(
 
         try:
             # Importar e executar a função de scraping
-            from scrape_os_data import execute_scraping
+            from scrape_os_data import execute_scraping  # type: ignore
 
             print(f"🚀 Executando scraping para OS: {numero_os}")
             scraped_data = execute_scraping(numero_os)
@@ -869,8 +869,8 @@ async def get_relatorio_completo_apontamento(
         relatorio = {
             "apontamento": {
                 "id": apontamento.id,
-                "data_inicio": apontamento.data_hora_inicio.isoformat() if apontamento.data_hora_inicio else None,
-                "data_fim": apontamento.data_hora_fim.isoformat() if apontamento.data_hora_fim else None,
+                "data_inicio": apontamento.data_hora_inicio.isoformat() if apontamento.data_hora_inicio is not None else None,
+                "data_fim": apontamento.data_hora_fim.isoformat() if apontamento.data_hora_fim is not None else None,
                 "status": apontamento.status_apontamento,
                 "foi_retrabalho": apontamento.foi_retrabalho,
                 "causa_retrabalho": apontamento.causa_retrabalho,

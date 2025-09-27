@@ -12,13 +12,12 @@ interface AtribuicaoProgramacaoModalProps {
 }
 
 interface FormData {
-    responsavel_id: number | '';
-    setor_destino: string;
-    departamento_destino: string;
+    responsavel_id: number | '';  // Colaborador do setor
     data_inicio: string;
     data_fim: string;
     prioridade: string;
     observacoes: string;
+    // Departamento e setor automáticos do usuário logado
 }
 
 interface Usuario {
@@ -51,8 +50,6 @@ const AtribuicaoProgramacaoModal: React.FC<AtribuicaoProgramacaoModalProps> = ({
 }) => {
     const [formData, setFormData] = useState<FormData>({
         responsavel_id: '',
-        setor_destino: '',
-        departamento_destino: '',
         data_inicio: '',
         data_fim: '',
         prioridade: 'NORMAL',
@@ -88,45 +85,34 @@ const AtribuicaoProgramacaoModal: React.FC<AtribuicaoProgramacaoModalProps> = ({
         }
     }, [formData.departamento_destino, setores]);
 
-    // Filtrar usuários quando departamento/setor muda
+    // Filtrar usuários do setor do usuário logado
     useEffect(() => {
-        let usuariosFiltered = usuarios;
-
-        if (formData.departamento_destino) {
-            usuariosFiltered = usuariosFiltered.filter(
-                usuario => usuario.departamento === formData.departamento_destino
-            );
-        }
-
-        if (formData.setor_destino) {
-            usuariosFiltered = usuariosFiltered.filter(
-                usuario => usuario.setor === formData.setor_destino
-            );
-        }
-
-        // Filtrar apenas supervisores e gestores para programação
-        usuariosFiltered = usuariosFiltered.filter(
-            usuario => ['SUPERVISOR', 'GESTAO'].includes(usuario.privilege_level)
-        );
-
-        setUsuariosFiltrados(usuariosFiltered);
-    }, [formData.departamento_destino, formData.setor_destino, usuarios]);
+        // Em desenvolvimento, buscar apenas usuários do mesmo setor
+        // Será implementado via API que já filtra por setor
+        setUsuariosFiltrados(usuarios);
+    }, [usuarios]);
 
     const carregarDados = async () => {
         try {
-            const [usuariosRes, setoresRes, departamentosRes] = await Promise.all([
-                api.get('/usuarios'),
-                api.get('/setores'),
-                api.get('/departamentos')
-            ]);
+            // Em desenvolvimento, buscar apenas colaboradores do setor do usuário logado
+            const usuariosRes = await api.get('/api/desenvolvimento/colaboradores');
 
             setUsuarios(usuariosRes.data || []);
             setUsuariosFiltrados(usuariosRes.data || []);
-            setSetores(setoresRes.data || []);
-            setSetoresFiltrados(setoresRes.data || []);
-            setDepartamentos(departamentosRes.data || []);
         } catch (error) {
-            console.error('Erro ao carregar dados:', error);
+            console.error('Erro ao carregar colaboradores:', error);
+            // Fallback para endpoint geral se específico não existir
+            try {
+                const usuariosRes = await api.get('/api/usuarios');
+                // Filtrar apenas usuários do mesmo setor no frontend como fallback
+                const usuariosFiltrados = usuariosRes.data?.filter((user: any) =>
+                    user.id_setor === JSON.parse(localStorage.getItem('user') || '{}').id_setor
+                ) || [];
+                setUsuarios(usuariosFiltrados);
+                setUsuariosFiltrados(usuariosFiltrados);
+            } catch (fallbackError) {
+                console.error('Erro ao carregar usuários:', fallbackError);
+            }
         }
     };
 
@@ -134,12 +120,10 @@ const AtribuicaoProgramacaoModal: React.FC<AtribuicaoProgramacaoModalProps> = ({
         if (programacaoData) {
             setFormData({
                 responsavel_id: programacaoData.responsavel_id || '',
-                setor_destino: programacaoData.setor_destino || '',
-                departamento_destino: programacaoData.departamento_destino || '',
-                data_inicio: programacaoData.data_inicio ?
-                    new Date(programacaoData.data_inicio).toISOString().slice(0, 16) : '',
-                data_fim: programacaoData.data_fim ?
-                    new Date(programacaoData.data_fim).toISOString().slice(0, 16) : '',
+                data_inicio: programacaoData.inicio_previsto ?
+                    new Date(programacaoData.inicio_previsto).toISOString().slice(0, 16) : '',
+                data_fim: programacaoData.fim_previsto ?
+                    new Date(programacaoData.fim_previsto).toISOString().slice(0, 16) : '',
                 prioridade: programacaoData.prioridade || 'NORMAL',
                 observacoes: programacaoData.observacoes || ''
             });
@@ -232,6 +216,10 @@ const AtribuicaoProgramacaoModal: React.FC<AtribuicaoProgramacaoModalProps> = ({
             }
 
             alert(mensagem);
+
+            // 🎯 NOTIFICAR COLABORADOR ATRIBUÍDO/EDITADO
+            await notificarColaborador(Number(formData.responsavel_id), mensagem);
+
             onSuccess();
             onClose();
             resetForm();
@@ -243,11 +231,31 @@ const AtribuicaoProgramacaoModal: React.FC<AtribuicaoProgramacaoModalProps> = ({
         }
     };
 
+    // 🎯 FUNÇÃO PARA NOTIFICAR COLABORADOR ATRIBUÍDO/EDITADO
+    const notificarColaborador = async (colaboradorId: number, mensagem: string) => {
+        try {
+            const colaborador = usuarios.find(u => u.id === colaboradorId);
+            if (colaborador) {
+                // Criar notificação no sistema
+                await api.post('/api/notificacoes', {
+                    usuario_id: colaboradorId,
+                    titulo: isEdit ? 'Programação Editada' : isReatribuir ? 'Nova Atribuição' : 'Nova Programação',
+                    mensagem: `${mensagem} - Responsável: ${colaborador.nome_completo}`,
+                    tipo: 'PROGRAMACAO',
+                    prioridade: 'ALTA'
+                });
+
+                console.log(`🔔 Notificação enviada para ${colaborador.nome_completo}`);
+            }
+        } catch (error) {
+            console.error('Erro ao notificar colaborador:', error);
+            // Não bloquear o fluxo se a notificação falhar
+        }
+    };
+
     const resetForm = () => {
         setFormData({
             responsavel_id: '',
-            setor_destino: '',
-            departamento_destino: '',
             data_inicio: '',
             data_fim: '',
             prioridade: 'NORMAL',
@@ -278,63 +286,17 @@ const AtribuicaoProgramacaoModal: React.FC<AtribuicaoProgramacaoModalProps> = ({
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* Departamento e Setor */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Departamento de Destino *
-                            </label>
-                            <select
-                                value={formData.departamento_destino}
-                                onChange={(e) => {
-                                    handleInputChange('departamento_destino', e.target.value);
-                                    handleInputChange('setor_destino', ''); // Reset setor
-                                }}
-                                className={`w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                                    errors.departamento_destino ? 'border-red-300' : 'border-gray-300'
-                                }`}
-                            >
-                                <option value="">Selecione um departamento</option>
-                                {departamentos.map(dept => (
-                                    <option key={dept.id} value={dept.nome}>
-                                        {dept.nome}
-                                    </option>
-                                ))}
-                            </select>
-                            {errors.departamento_destino && (
-                                <p className="text-red-500 text-xs mt-1">{errors.departamento_destino}</p>
-                            )}
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Setor de Destino *
-                            </label>
-                            <select
-                                value={formData.setor_destino}
-                                onChange={(e) => handleInputChange('setor_destino', e.target.value)}
-                                className={`w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                                    errors.setor_destino ? 'border-red-300' : 'border-gray-300'
-                                }`}
-                                disabled={!formData.departamento_destino}
-                            >
-                                <option value="">Selecione um setor</option>
-                                {setoresFiltrados.map(setor => (
-                                    <option key={setor.id} value={setor.nome}>
-                                        {setor.nome}
-                                    </option>
-                                ))}
-                            </select>
-                            {errors.setor_destino && (
-                                <p className="text-red-500 text-xs mt-1">{errors.setor_destino}</p>
-                            )}
-                        </div>
+                    {/* Informação sobre setor automático */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                        <p className="text-sm text-blue-800">
+                            <span className="font-medium">ℹ️ Setor:</span> A programação será atribuída automaticamente ao seu setor atual.
+                        </p>
                     </div>
 
-                    {/* Responsável */}
+                    {/* Colaborador do Setor */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Responsável (Supervisor) *
+                            Colaborador do Setor *
                         </label>
                         <select
                             value={formData.responsavel_id}
@@ -342,16 +304,11 @@ const AtribuicaoProgramacaoModal: React.FC<AtribuicaoProgramacaoModalProps> = ({
                             className={`w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                                 errors.responsavel_id ? 'border-red-300' : 'border-gray-300'
                             }`}
-                            disabled={!formData.departamento_destino}
                         >
-                            <option value="">
-                                {!formData.departamento_destino
-                                    ? 'Selecione primeiro o departamento'
-                                    : 'Selecione um responsável'}
-                            </option>
-                            {usuariosFiltrados.map(supervisor => (
-                                <option key={supervisor.id} value={supervisor.id}>
-                                    {supervisor.nome_completo} - {supervisor.setor} ({supervisor.privilege_level})
+                            <option value="">Selecione um colaborador</option>
+                            {usuariosFiltrados.map(colaborador => (
+                                <option key={colaborador.id} value={colaborador.id}>
+                                    {colaborador.nome_completo} - {colaborador.privilege_level}
                                 </option>
                             ))}
                         </select>

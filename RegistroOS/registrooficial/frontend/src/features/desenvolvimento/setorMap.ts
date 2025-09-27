@@ -43,7 +43,7 @@ const createDefaultConfig = (setorNome: string, setorId: string): ConfiguracaoSe
         { etapa: 2, componente: 'select', props: { label: 'Tipo de Trabalho', opcoes: ['MANUTENCAO', 'REPARO', 'FABRICACAO', 'INSPECAO'] } }
     ],
     ConfiguracaoBackend: {
-        endPointApontamento: '/api/apontamentos',
+        endPointApontamento: '/api/desenvolvimento/apontamentos',
         endPointOrdemServico: '/api/ordens-servico'
     }
 });
@@ -84,7 +84,7 @@ const loadSetorConfig = async (setorId: string): Promise<ConfiguracaoSetor> => {
 
         // Tentar carregar configurações específicas se existirem
         try {
-            const specificConfigResponse = await api.get(`/setores/${setor.id}/configuracao`);
+            const specificConfigResponse = await api.get(`/desenvolvimento/setores/${setor.id}/configuracao`);
             if (specificConfigResponse.data) {
                 // Mesclar configuração específica com a padrão
                 Object.assign(config, specificConfigResponse.data);
