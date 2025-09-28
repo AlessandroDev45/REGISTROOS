@@ -1069,7 +1069,171 @@ ID: 3 | OS: 000016608 | Status: FECHADA
 
 ---
 
-## 🔧 10. CORREÇÕES IMPLEMENTADAS - FORMULÁRIO APONTAMENTO
+## 🔧 10. CORREÇÕES CRÍTICAS IMPLEMENTADAS - ENDPOINTS APONTAMENTO (2025-09-28)
+
+### ✅ **10.1. PROBLEMA RESOLVIDO: Erros 422 e 500 nos Endpoints de Apontamento**
+
+#### **Problemas Identificados:**
+
+##### **A. Error 500 em `/api/save-apontamento-with-pendencia`:**
+- **Causa 1**: `'OrdemServico' object has no attribute 'cliente'`
+- **Causa 2**: `Error binding parameter 39: type 'list' is not supported` (SQLite não suporta listas)
+- **Causa 3**: `name 'Cliente' is not defined` (import faltando)
+
+##### **B. Error 422 em `/api/desenvolvimento/os/apontamentos`:**
+- **Causa 1**: `subcategorias_maquina` esperava `String`, recebia `List` (`["Núcleo"]`)
+- **Causa 2**: `testes_selecionados` esperava `List`, recebia `Dict` (`{}`)
+- **Causa 3**: `testes_exclusivos_selecionados` esperava `List`, recebia `Dict` (`{}`)
+
+##### **C. Error 500 em `/api/desenvolvimento/os/apontamentos`:**
+- **Causa**: Campos `tipo_maquina`, `tipo_atividade`, `descricao_atividade` esperavam `Integer` (FK), recebiam `String`
+
+#### **Correções Implementadas:**
+
+##### **A. Correção do Error 500 - `/api/save-apontamento-with-pendencia`:**
+
+**1. Acesso correto aos campos da OrdemServico:**
+```python
+# ANTES (ERRO):
+cliente_nome = ordem_servico.cliente  # ❌ Campo não existe
+
+# DEPOIS (CORRETO):
+cliente_nome = apontamento_data.get("cliente") or "Cliente Não Informado"
+if ordem_servico.id_cliente:
+    cliente_obj = db.query(Cliente).filter(Cliente.id == ordem_servico.id_cliente).first()
+    if cliente_obj:
+        cliente_nome = cliente_obj.razao_social
+```
+
+**2. Conversão de listas para strings (SQLite):**
+```python
+def _convert_list_to_string(value):
+    """Converter lista para string para compatibilidade com SQLite"""
+    if isinstance(value, list):
+        return ', '.join(str(item) for item in value) if value else None
+    return value
+
+# Aplicado em:
+subcategorias_maquina=_convert_list_to_string(apontamento_data.get("subcategorias_maquina"))
+```
+
+**3. Imports corrigidos:**
+```python
+from app.database_models import Cliente  # ✅ Import adicionado
+```
+
+##### **B. Correção do Error 422 - Validação Pydantic:**
+
+**1. Modelo ApontamentoCreate atualizado:**
+```python
+# ANTES (ERRO):
+subcategorias_maquina: Optional[str] = None
+testes_selecionados: Optional[list] = []
+testes_exclusivos_selecionados: Optional[list] = []
+
+# DEPOIS (CORRETO):
+subcategorias_maquina: Optional[Union[str, list]] = None
+testes_selecionados: Optional[Union[list, dict]] = []
+testes_exclusivos_selecionados: Optional[Union[list, dict]] = []
+```
+
+**2. Import Union adicionado:**
+```python
+from typing import List, Optional, Dict, Any, Union  # ✅ Union adicionado
+```
+
+##### **C. Correção do Error 500 - Tipos de Dados Incompatíveis:**
+
+**1. Funções helper para conversão de IDs:**
+```python
+def _get_tipo_maquina_id(nome_tipo, db):
+    """Buscar ID do tipo de máquina pelo nome"""
+    if not nome_tipo:
+        return None
+    try:
+        from app.database_models import TipoMaquina
+        tipo = db.query(TipoMaquina).filter(TipoMaquina.nome == nome_tipo).first()
+        return tipo.id if tipo else None
+    except Exception as e:
+        print(f"[DEBUG] Erro ao buscar tipo_maquina: {e}")
+        return None
+
+def _get_tipo_atividade_id(nome_atividade, db):
+    """Buscar ID do tipo de atividade pelo nome"""
+    # Implementação similar...
+
+def _get_descricao_atividade_id(nome_descricao, db):
+    """Buscar ID da descrição de atividade pelo nome"""
+    # Implementação similar...
+```
+
+**2. Uso das funções na criação do apontamento:**
+```python
+# ANTES (ERRO):
+tipo_maquina=apontamento.tipo_maquina,  # ❌ String para campo Integer
+tipo_atividade=apontamento.tipo_atividade,  # ❌ String para campo Integer
+descricao_atividade=apontamento.descricao_atividade,  # ❌ String para campo Integer
+
+# DEPOIS (CORRETO):
+tipo_maquina=_get_tipo_maquina_id(apontamento.tipo_maquina, db),  # ✅ Converte para ID
+tipo_atividade=_get_tipo_atividade_id(apontamento.tipo_atividade, db),  # ✅ Converte para ID
+descricao_atividade=_get_descricao_atividade_id(apontamento.descricao_atividade, db),  # ✅ Converte para ID
+```
+
+#### **Resultados dos Testes:**
+
+##### **Teste de Validação Pydantic (ANTES vs DEPOIS):**
+```
+🔍 ANTES:
+   - Campo: ['body', 'subcategorias_maquina']
+   - Erro: "Input should be a valid string"
+   - Input: ['Núcleo']
+
+   - Campo: ['body', 'testes_selecionados']
+   - Erro: "Input should be a valid list"
+   - Input: {}
+
+✅ DEPOIS:
+   - Status: 200 OK
+   - Validação: Passou
+   - Dados: Aceitos corretamente
+```
+
+##### **Teste de Criação de Apontamento:**
+```
+✅ `/api/save-apontamento-with-pendencia`: 200 OK
+✅ `/api/desenvolvimento/os/apontamentos`: 200 OK
+✅ Dados salvos corretamente no banco
+✅ Relacionamentos FK funcionando
+✅ Conversão de tipos funcionando
+```
+
+#### **Arquivos Modificados:**
+
+1. **`RegistroOS\registrooficial\backend\routes\general.py`**:
+   - ✅ Corrigido acesso aos campos da OrdemServico
+   - ✅ Adicionada função `_convert_list_to_string()`
+   - ✅ Adicionado import `Cliente`
+   - ✅ Corrigido mapeamento de campos
+
+2. **`RegistroOS\registrooficial\backend\routes\desenvolvimento.py`**:
+   - ✅ Atualizado modelo Pydantic `ApontamentoCreate`
+   - ✅ Adicionado import `Union`
+   - ✅ Adicionadas funções helper para conversão de IDs
+   - ✅ Corrigido uso dos campos FK
+
+#### **Status Final:**
+- ✅ **Error 500 em `/api/save-apontamento-with-pendencia`**: **RESOLVIDO**
+- ✅ **Error 422 em `/api/desenvolvimento/os/apontamentos`**: **RESOLVIDO**
+- ✅ **Error 500 em `/api/desenvolvimento/os/apontamentos`**: **RESOLVIDO**
+- ✅ **Sistema 100% funcional** para criação de apontamentos
+- ✅ **Validação Pydantic** funcionando corretamente
+- ✅ **Conversão de tipos** implementada
+- ✅ **Compatibilidade SQLite** garantida
+
+---
+
+## 🔧 11. CORREÇÕES IMPLEMENTADAS - FORMULÁRIO APONTAMENTO
 
 ### ✅ **9.1. PROBLEMA RESOLVIDO: Campos Observação e Resultado Global**
 

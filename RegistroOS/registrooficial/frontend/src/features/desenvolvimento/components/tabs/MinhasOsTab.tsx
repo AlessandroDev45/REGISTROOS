@@ -107,15 +107,15 @@ const MinhasOsTab: React.FC = () => {
                     numero_os: apt.numero_os || `APT-${apt.id}`,
                     cliente: apt.cliente || 'Cliente não informado',
                     equipamento: apt.equipamento || 'Equipamento não informado',
-                    data_hora_inicio: apt.data_hora_inicio,
-                    data_hora_fim: apt.data_hora_fim,
+                    data_hora_inicio: apt.data_hora_inicio || apt.data_inicio,
+                    data_hora_fim: apt.data_hora_fim || apt.data_fim,
                     tempo_trabalhado: apt.tempo_trabalhado,
                     tipo_atividade: apt.tipo_atividade || 'N/A',
                     descricao_atividade: apt.descricao_atividade || 'N/A',
-                    status_apontamento: apt.status_apontamento || 'N/A',
+                    status_apontamento: apt.status_apontamento || apt.status || 'N/A',
                     setor: apt.setor || 'N/A',
                     departamento: apt.departamento || 'N/A',
-                    nome_tecnico: apt.nome_tecnico || 'N/A',
+                    nome_tecnico: apt.nome_tecnico || apt.usuario || 'N/A',
                     aprovado_supervisor: apt.aprovado_supervisor || false,
                     foi_retrabalho: apt.foi_retrabalho || false,
                     servico_de_campo: apt.servico_de_campo || false,
@@ -295,108 +295,107 @@ const MinhasOsTab: React.FC = () => {
     }
 
     return (
-        <div className="w-full p-4">
-            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-                {/* Header Compacto */}
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-4 py-3">
+        <div className="w-full p-3">
+            <div className="bg-white rounded shadow overflow-hidden">
+                {/* Header técnico */}
+                <div className="bg-slate-800 border-b border-slate-700 px-4 py-3">
                     <div className="flex justify-between items-center">
                         <div>
-                            <h2 className="text-2xl font-bold text-white mb-1 flex items-center">
-                                📊 Meu Dashboard
+                            <h2 className="text-lg font-semibold text-white tracking-wide">
+                                MEU DASHBOARD
                             </h2>
-                            <p className="text-blue-100 text-sm">
-                                Visualize seus apontamentos e programações atribuídas
+                            <p className="text-slate-300 text-xs font-mono">
+                                Apontamentos e Programações Pessoais
                             </p>
                         </div>
                         <div className="text-right">
-                            <div className="text-blue-100 text-xs font-medium">
+                            <div className="text-slate-400 text-xs uppercase">
                                 {activeInternalTab === 'apontamentos' ? 'Apontamentos' : 'Programações'}
                             </div>
-                            <div className="text-3xl font-bold text-white">
+                            <div className="text-2xl font-mono font-bold text-white">
                                 {activeInternalTab === 'apontamentos' ? apontamentos.length : programacoes.length}
                             </div>
                         </div>
                     </div>
 
-                    {/* Abas Internas */}
-                    <div className="mt-4 flex space-x-1">
+                    {/* Abas técnicas */}
+                    <div className="mt-3 flex space-x-1">
                         <button
                             onClick={() => setActiveInternalTab('apontamentos')}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
                                 activeInternalTab === 'apontamentos'
-                                    ? 'bg-white text-blue-600'
-                                    : 'bg-blue-500 text-white hover:bg-blue-400'
+                                    ? 'bg-white text-slate-800'
+                                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                             }`}
                         >
-                            📝 Meus Apontamentos
+                            APONTAMENTOS
                         </button>
                         <button
                             onClick={() => setActiveInternalTab('programacoes')}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
                                 activeInternalTab === 'programacoes'
-                                    ? 'bg-white text-blue-600'
-                                    : 'bg-blue-500 text-white hover:bg-blue-400'
+                                    ? 'bg-white text-slate-800'
+                                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                             }`}
                         >
-                            📋 Minhas Programações
+                            PROGRAMAÇÕES
                         </button>
                     </div>
                 </div>
 
-                {/* Filtros Compactos - Apenas para Apontamentos */}
+                {/* Filtros compactos */}
                 {activeInternalTab === 'apontamentos' && (
-                <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-slate-50 px-4 py-2 border-b border-gray-200">
+                    <div className="grid grid-cols-4 gap-2">
                         {/* Data */}
-                        <div className="flex flex-col space-y-2">
-                            <label className="text-sm font-semibold text-gray-700">📅 Data</label>
+                        <div>
+                            <label className="text-xs font-medium text-gray-600 mb-1 block">Data</label>
                             <input
                                 type="date"
                                 value={selectedDate}
                                 onChange={(e) => setSelectedDate(e.target.value)}
-                                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm"
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-slate-500 bg-white"
                             />
                         </div>
 
                         {/* Colaborador - SUPERVISOR */}
                         {user && user.privilege_level === 'SUPERVISOR' && (
-                            <div className="flex flex-col space-y-2">
-                                <label className="text-sm font-semibold text-gray-700">👤 Colaborador</label>
+                            <div>
+                                <label className="text-xs font-medium text-gray-600 mb-1 block">Colaborador</label>
                                 <input
                                     type="text"
                                     value={filtroUsuario}
                                     onChange={(e) => setFiltroUsuario(e.target.value)}
-                                    placeholder="ID do colaborador do setor"
-                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm"
-                                    title="Filtrar por colaborador específico do seu setor"
+                                    placeholder="ID colaborador"
+                                    className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-slate-500 bg-white"
                                 />
                             </div>
                         )}
 
                         {/* Colaborador ID - ADMIN */}
                         {user && user.privilege_level === 'ADMIN' && (
-                            <div className="flex flex-col space-y-2">
-                                <label className="text-sm font-semibold text-gray-700">👤 Colaborador ID</label>
+                            <div>
+                                <label className="text-xs font-medium text-gray-600 mb-1 block">Colaborador ID</label>
                                 <input
                                     type="text"
                                     value={filtroUsuario}
                                     onChange={(e) => setFiltroUsuario(e.target.value)}
-                                    placeholder="ID do colaborador"
-                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm"
+                                    placeholder="ID colaborador"
+                                    className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-slate-500 bg-white"
                                 />
                             </div>
                         )}
 
                         {/* Status - SUPERVISOR ou ADMIN */}
                         {user && ['SUPERVISOR', 'ADMIN'].includes(user.privilege_level) && (
-                            <div className="flex flex-col space-y-2">
-                                <label className="text-sm font-semibold text-gray-700">📊 Status</label>
+                            <div>
+                                <label className="text-xs font-medium text-gray-600 mb-1 block">Status</label>
                                 <select
                                     value={filtroStatus}
                                     onChange={(e) => setFiltroStatus(e.target.value)}
-                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm"
+                                    className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-slate-500 bg-white"
                                 >
-                                    <option value="">Todos os Status</option>
+                                    <option value="">Todos</option>
                                     <option value="EM_ANDAMENTO">Em Andamento</option>
                                     <option value="FINALIZADO">Finalizado</option>
                                     <option value="PAUSADO">Pausado</option>
@@ -405,29 +404,24 @@ const MinhasOsTab: React.FC = () => {
                         )}
                     </div>
 
-                    {/* Filtros de período para SUPERVISOR e ADMIN */}
-                    {/* Filtros de período para SUPERVISOR e ADMIN */}
+                    {/* Período compacto */}
                     {user && ['SUPERVISOR', 'ADMIN'].includes(user.privilege_level) && (
-                        <div className="mt-3 pt-3 border-t border-gray-200">
-                            <div className="flex flex-col space-y-1">
-                                <label className="text-sm font-semibold text-gray-700">📅 Período</label>
-                                <div className="flex items-center space-x-2">
-                                    <input
-                                        type="date"
-                                        value={dataInicio}
-                                        onChange={(e) => setDataInicio(e.target.value)}
-                                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm"
-                                        title="Data início"
-                                    />
-                                    <span className="text-gray-500 font-medium">até</span>
-                                    <input
-                                        type="date"
-                                        value={dataFim}
-                                        onChange={(e) => setDataFim(e.target.value)}
-                                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm"
-                                        title="Data fim"
-                                    />
-                                </div>
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                            <label className="text-xs font-medium text-gray-600 mb-1 block">Período</label>
+                            <div className="flex items-center space-x-2">
+                                <input
+                                    type="date"
+                                    value={dataInicio}
+                                    onChange={(e) => setDataInicio(e.target.value)}
+                                    className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-slate-500 bg-white"
+                                />
+                                <span className="text-xs text-gray-500">até</span>
+                                <input
+                                    type="date"
+                                    value={dataFim}
+                                    onChange={(e) => setDataFim(e.target.value)}
+                                    className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-slate-500 bg-white"
+                                />
                             </div>
                         </div>
                     )}
@@ -437,257 +431,157 @@ const MinhasOsTab: React.FC = () => {
                 {/* Conteúdo baseado na aba ativa */}
                 {activeInternalTab === 'apontamentos' && (
                 <>
-                {/* Cards de Resumo Compactos */}
-                <div className="px-4 py-3 bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
-                    <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center">
-                        📊 Resumo do Período
+                {/* Resumo técnico */}
+                <div className="px-4 py-2 bg-slate-50 border-b border-gray-200">
+                    <h3 className="text-sm font-semibold text-gray-800 mb-2 uppercase tracking-wide">
+                        Resumo do Período
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-4 text-white shadow-lg">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <div className="text-2xl font-bold">{totalHours.toFixed(1)}h</div>
-                                    <div className="text-blue-100 text-sm font-medium">Horas Trabalhadas</div>
-                                </div>
-                                <div className="text-3xl opacity-80">⏰</div>
-                            </div>
+                    <div className="grid grid-cols-4 gap-2">
+                        <div className="bg-white border-l-4 border-blue-500 px-3 py-2">
+                            <div className="text-lg font-mono font-bold text-blue-700">{totalHours.toFixed(1)}h</div>
+                            <div className="text-xs text-gray-600 uppercase">Horas</div>
                         </div>
-
-                        <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg p-4 text-white shadow-lg">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <div className="text-2xl font-bold">{apontamentos.length}</div>
-                                    <div className="text-indigo-100 text-sm font-medium">OS Trabalhadas</div>
-                                </div>
-                                <div className="text-3xl opacity-80">📋</div>
-                            </div>
+                        <div className="bg-white border-l-4 border-indigo-500 px-3 py-2">
+                            <div className="text-lg font-mono font-bold text-indigo-700">{apontamentos.length}</div>
+                            <div className="text-xs text-gray-600 uppercase">OS</div>
                         </div>
 
                         {abstinencia > 0 && (
-                            <div className="bg-gradient-to-br from-yellow-500 to-orange-500 rounded-lg p-4 text-white shadow-lg">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="text-2xl font-bold">{abstinencia.toFixed(1)}h</div>
-                                        <div className="text-yellow-100 text-sm font-medium">Abstinência</div>
-                                    </div>
-                                    <div className="text-3xl opacity-80">⚠️</div>
-                                </div>
+                            <div className="bg-white border-l-4 border-yellow-500 px-3 py-2">
+                                <div className="text-lg font-mono font-bold text-yellow-700">{abstinencia.toFixed(1)}h</div>
+                                <div className="text-xs text-gray-600 uppercase">Abstinência</div>
                             </div>
                         )}
 
                         {extraHours > 0 && (
-                            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-4 text-white shadow-lg">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="text-2xl font-bold">+{extraHours.toFixed(1)}h</div>
-                                        <div className="text-green-100 text-sm font-medium">Hora Extra</div>
-                                    </div>
-                                    <div className="text-3xl opacity-80">🚀</div>
-                                </div>
+                            <div className="bg-white border-l-4 border-green-500 px-3 py-2">
+                                <div className="text-lg font-mono font-bold text-green-700">+{extraHours.toFixed(1)}h</div>
+                                <div className="text-xs text-gray-600 uppercase">Extra</div>
                             </div>
                         )}
 
-                        {/* Card de Status Geral */}
-                        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg p-4 text-white shadow-lg">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <div className="text-base font-bold">
-                                        {totalHours >= 8 ? 'Completo' : 'Pendente'}
-                                    </div>
-                                    <div className="text-purple-100 text-sm font-medium">Status do Dia</div>
-                                </div>
-                                <div className="text-3xl opacity-80">
-                                    {totalHours >= 8 ? '✅' : '⏳'}
-                                </div>
+                        {/* Status compacto */}
+                        <div className="bg-white border-l-4 border-purple-500 px-3 py-2">
+                            <div className="text-sm font-bold text-purple-700">
+                                {totalHours >= 8 ? 'Completo' : 'Pendente'}
                             </div>
+                            <div className="text-xs text-gray-600 uppercase">Status</div>
                         </div>
                     </div>
                 </div>
 
-                {/* Botão de Ação Compacto */}
+                {/* Botão técnico */}
                 {apontamentos.length > 0 && user?.privilege_level === 'USER' && (
-                    <div className="px-4 py-3 bg-red-50 border-b border-red-200">
+                    <div className="px-4 py-2 bg-red-50 border-b border-red-200">
                         <div className="flex items-center justify-center">
                             <button
                                 onClick={handleDeleteLastOS}
-                                className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-200 shadow-lg flex items-center space-x-2"
+                                className="px-3 py-1 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 transition-colors"
                             >
-                                <span className="text-sm">🗑️</span>
-                                <span className="font-semibold text-sm">Excluir Último</span>
+                                Excluir Último
                             </button>
                         </div>
                         <p className="text-center text-red-600 text-xs mt-1">
-                            ⚠️ Só é possível excluir se o supervisor ainda não aprovou
+                            Só é possível excluir se não aprovado
                         </p>
                     </div>
                 )}
-                {/* Lista de Apontamentos Compacta */}
-                <div className="px-4 py-4">
+                {/* Lista compacta */}
+                <div className="px-4 py-3">
                     {apontamentos.length === 0 ? (
-                        <div className="text-center py-12">
-                            <div className="text-6xl mb-4 opacity-50">📋</div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-3">Nenhum apontamento encontrado</h3>
-                            <p className="text-gray-600 text-base max-w-md mx-auto">
+                        <div className="text-center py-8">
+                            <div className="text-4xl mb-3 opacity-50">📋</div>
+                            <h3 className="text-sm font-bold text-gray-900 mb-2">Nenhum apontamento</h3>
+                            <p className="text-gray-600 text-xs max-w-md mx-auto">
                                 {user?.privilege_level === 'USER'
-                                    ? 'Você ainda não possui apontamentos para a data selecionada. Comece criando um novo apontamento!'
-                                    : 'Não há apontamentos para os filtros aplicados. Tente ajustar os critérios de busca.'
+                                    ? 'Sem apontamentos para a data selecionada'
+                                    : 'Ajuste os filtros de busca'
                                 }
                             </p>
-                            <div className="mt-6">
+                            <div className="mt-4">
                                 <button
                                     onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                                    className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
                                 >
-                                    📅 Ver Hoje
+                                    Ver Hoje
                                 </button>
                             </div>
                         </div>
                     ) : (
                         <div className="space-y-2">
                             {apontamentos.map((apontamento, index) => (
-                                <div key={apontamento.id} className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
-                                    {/* Header Compacto */}
-                                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-3 py-2 border-b border-gray-100">
+                                <div key={apontamento.id} className="bg-white border border-gray-300 rounded shadow-sm hover:shadow transition-shadow overflow-hidden">
+                                    {/* Header técnico */}
+                                    <div className="bg-slate-100 px-3 py-1 border-b border-gray-200">
                                         <div className="flex justify-between items-center">
                                             <div className="flex items-center space-x-2">
-                                                <div className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-semibold">
+                                                <div className="bg-slate-700 text-white px-2 py-0.5 rounded text-xs font-mono">
                                                     OS {apontamento.numero_os}
                                                 </div>
                                                 <div className="flex items-center space-x-1">
-                                                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColorClass(apontamento.status_apontamento)}`}>
+                                                    <span className={`px-2 py-0.5 text-xs font-medium rounded ${getStatusColorClass(apontamento.status_apontamento)}`}>
                                                         {apontamento.status_apontamento ? apontamento.status_apontamento.replace('_', ' ') : 'N/A'}
                                                     </span>
-                                                    {apontamento.aprovado_supervisor && <span className="px-1 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">✅</span>}
-                                                    {apontamento.foi_retrabalho && <span className="px-1 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-700">🔄</span>}
-                                                    {apontamento.servico_de_campo && <span className="px-1 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-700">🏗️</span>}
+                                                    {apontamento.aprovado_supervisor && <span className="w-2 h-2 bg-green-500 rounded-full"></span>}
+                                                    {apontamento.foi_retrabalho && <span className="w-2 h-2 bg-orange-500 rounded-full"></span>}
+                                                    {apontamento.servico_de_campo && <span className="w-2 h-2 bg-purple-500 rounded-full"></span>}
                                                 </div>
                                             </div>
-                                            <div className="text-xs text-gray-600 font-medium">
-                                                📅 {apontamento.data_hora_inicio ? formatDate(apontamento.data_hora_inicio) : 'N/A'}
+                                            <div className="text-xs text-gray-600 font-mono">
+                                                {apontamento.data_hora_inicio ? formatDate(apontamento.data_hora_inicio) : 'N/A'}
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Conteúdo Compacto */}
-                                    <div className="p-3">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            {/* Coluna Esquerda Compacta */}
-                                            <div className="space-y-2">
-                                                {/* Cliente e Equipamento Compactos */}
-                                                <div className="grid grid-cols-1 gap-2">
-                                                    <div className="bg-blue-50 rounded p-2 border border-blue-100">
-                                                        <div className="flex items-center space-x-1 mb-1">
-                                                            <span className="text-blue-600 text-xs">🏢</span>
-                                                            <span className="text-xs font-semibold text-blue-800">Cliente</span>
-                                                        </div>
-                                                        <p className="text-gray-900 text-xs font-medium leading-tight">{apontamento.cliente}</p>
-                                                    </div>
-
-                                                    <div className="bg-green-50 rounded p-2 border border-green-100">
-                                                        <div className="flex items-center space-x-1 mb-1">
-                                                            <span className="text-green-600 text-xs">⚙️</span>
-                                                            <span className="text-xs font-semibold text-green-800">Equipamento</span>
-                                                        </div>
-                                                        <p className="text-gray-900 text-xs font-medium leading-tight">{apontamento.equipamento}</p>
-                                                    </div>
-                                                </div>
-
-                                                {/* Horários Compactos */}
-                                                <div className="bg-purple-50 rounded p-2 border border-purple-100">
-                                                    <div className="flex items-center space-x-1 mb-1">
-                                                        <span className="text-purple-600 text-xs">⏰</span>
-                                                        <span className="text-xs font-semibold text-purple-800">Horários</span>
-                                                    </div>
-                                                    <div className="flex items-center space-x-3">
-                                                        <div>
-                                                            <div className="text-xs text-purple-600 font-medium">Início</div>
-                                                            <div className="text-gray-900 text-sm font-semibold">{formatTime(apontamento.data_hora_inicio)}</div>
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-xs text-purple-600 font-medium">Fim</div>
-                                                            <div className="text-gray-900 text-sm font-semibold">{formatTime(apontamento.data_hora_fim || '')}</div>
-                                                        </div>
-                                                        {apontamento.tempo_trabalhado && (
-                                                            <div className="ml-3 pl-3 border-l border-purple-200">
-                                                                <div className="text-xs text-purple-600 font-medium">Tempo</div>
-                                                                <div className="text-sm font-bold text-purple-800">{apontamento.tempo_trabalhado.toFixed(1)}h</div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
+                                    {/* Conteúdo técnico */}
+                                    <div className="p-2">
+                                        <div className="grid grid-cols-2 gap-2 text-xs">
+                                            <div>
+                                                <div className="text-gray-500 font-medium">Cliente</div>
+                                                <div className="font-semibold text-gray-900 truncate">{apontamento.cliente}</div>
                                             </div>
 
-                                            {/* Coluna Direita Compacta */}
-                                            <div className="space-y-2">
-                                                {/* Atividades Compactas */}
-                                                <div className="bg-orange-50 rounded p-2 border border-orange-100">
-                                                    <div className="flex items-center space-x-1 mb-1">
-                                                        <span className="text-orange-600 text-xs">📋</span>
-                                                        <span className="text-xs font-semibold text-orange-800">Atividades</span>
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        <div>
-                                                            <div className="text-xs text-orange-600 font-medium">Tipo</div>
-                                                            <div className="text-gray-900 text-xs font-medium">{apontamento.tipo_atividade}</div>
-                                                        </div>
-                                                        <div>
-                                                            <div className="text-xs text-orange-600 font-medium">Descrição</div>
-                                                            <div className="text-gray-900 text-xs font-medium">{apontamento.descricao_atividade}</div>
-                                                        </div>
-                                                    </div>
+                                            <div>
+                                                <div className="text-gray-500 font-medium">Equipamento</div>
+                                                <div className="font-semibold text-gray-900 truncate">{apontamento.equipamento}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-gray-500 font-medium">Início</div>
+                                                <div className="font-mono text-gray-900">{formatTime(apontamento.data_hora_inicio)}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-gray-500 font-medium">Fim</div>
+                                                <div className="font-mono text-gray-900">{formatTime(apontamento.data_hora_fim || '')}</div>
+                                            </div>
+                                            {apontamento.tempo_trabalhado && (
+                                                <div>
+                                                    <div className="text-gray-500 font-medium">Tempo</div>
+                                                    <div className="font-mono font-bold text-blue-700">{apontamento.tempo_trabalhado.toFixed(1)}h</div>
                                                 </div>
-
-                                                {/* Técnico Compacto */}
-                                                <div className="bg-indigo-50 rounded p-2 border border-indigo-100">
-                                                    <div className="flex items-center space-x-1 mb-1">
-                                                        <span className="text-indigo-600 text-xs">👤</span>
-                                                        <span className="text-xs font-semibold text-indigo-800">Técnico</span>
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        <div>
-                                                            <div className="text-xs text-indigo-600 font-medium">Nome</div>
-                                                            <div className="text-gray-900 text-xs font-medium">{apontamento.nome_tecnico}</div>
-                                                        </div>
-                                                        <div className="flex items-center space-x-3">
-                                                            <div>
-                                                                <div className="text-xs text-indigo-600 font-medium">Setor</div>
-                                                                <div className="text-gray-900 text-xs font-medium">{apontamento.setor}</div>
-                                                            </div>
-                                                            <div>
-                                                                <div className="text-xs text-indigo-600 font-medium">Depto</div>
-                                                                <div className="text-gray-900 text-xs font-medium">{apontamento.departamento}</div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                            )}
+                                            <div>
+                                                <div className="text-gray-500 font-medium">Atividade</div>
+                                                <div className="font-semibold text-gray-900 truncate">{apontamento.tipo_atividade}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-gray-500 font-medium">Técnico</div>
+                                                <div className="font-semibold text-gray-900 truncate">{apontamento.nome_tecnico}</div>
                                             </div>
                                         </div>
 
-                                        {/* Observações Compactas */}
+                                        {/* Observações compactas */}
                                         {(apontamento.observacoes || apontamento.observacao_os || apontamento.causa_retrabalho) && (
                                             <div className="mt-2 pt-2 border-t border-gray-200">
-                                                <div className="flex items-center space-x-1 mb-2">
-                                                    <span className="text-gray-600 text-xs">📝</span>
-                                                    <span className="text-xs font-semibold text-gray-800">Observações</span>
-                                                </div>
-                                                <div className="space-y-1">
+                                                <div className="text-xs text-gray-500 font-medium mb-1">Observações</div>
+                                                <div className="space-y-1 text-xs">
                                                     {apontamento.observacoes && (
-                                                        <div className="bg-gray-50 rounded p-1">
-                                                            <div className="text-xs text-gray-600 font-medium mb-1">Gerais</div>
-                                                            <p className="text-gray-900 text-xs">{apontamento.observacoes}</p>
-                                                        </div>
+                                                        <div className="text-gray-700 line-clamp-1">{apontamento.observacoes}</div>
                                                     )}
                                                     {apontamento.observacao_os && (
-                                                        <div className="bg-blue-50 rounded p-1">
-                                                            <div className="text-xs text-blue-600 font-medium mb-1">OS</div>
-                                                            <p className="text-gray-900 text-xs">{apontamento.observacao_os}</p>
-                                                        </div>
+                                                        <div className="text-blue-700 line-clamp-1">{apontamento.observacao_os}</div>
                                                     )}
                                                     {apontamento.causa_retrabalho && (
-                                                        <div className="bg-orange-50 rounded p-1">
-                                                            <div className="text-xs text-orange-600 font-medium mb-1">Retrabalho</div>
-                                                            <p className="text-gray-900 text-xs">{apontamento.causa_retrabalho}</p>
-                                                        </div>
+                                                        <div className="text-orange-700 line-clamp-1">{apontamento.causa_retrabalho}</div>
                                                     )}
                                                 </div>
                                             </div>
@@ -703,27 +597,27 @@ const MinhasOsTab: React.FC = () => {
 
                 {/* Seção de Programações */}
                 {activeInternalTab === 'programacoes' && (
-                <div className="px-4 py-4">
+                <div className="px-4 py-3">
                     {loadingProgramacoes ? (
-                        <div className="flex justify-center items-center h-64">
-                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                        <div className="flex justify-center items-center h-32">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-600"></div>
                         </div>
                     ) : programacoes.length === 0 ? (
-                        <div className="text-center py-12">
-                            <div className="text-6xl mb-4">📋</div>
-                            <h3 className="text-lg font-medium text-gray-900 mb-2">
-                                Nenhuma programação atribuída
+                        <div className="text-center py-8">
+                            <div className="text-4xl mb-3">📋</div>
+                            <h3 className="text-sm font-medium text-gray-900 mb-2">
+                                Nenhuma programação
                             </h3>
-                            <p className="text-gray-500">
-                                Você não possui programações atribuídas no momento.
+                            <p className="text-xs text-gray-500">
+                                Sem programações atribuídas
                             </p>
                         </div>
                     ) : (
-                        <div className="grid gap-6">
+                        <div className="space-y-2">
                             {programacoes.map((programacao) => (
                                 <div
                                     key={programacao.id}
-                                    className="bg-white rounded-lg shadow-md border border-gray-200 p-6"
+                                    className="bg-white rounded border border-gray-300 p-3"
                                 >
                                     <div className="flex justify-between items-start mb-4">
                                         <div>

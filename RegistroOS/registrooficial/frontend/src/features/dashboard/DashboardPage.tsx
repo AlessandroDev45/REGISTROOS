@@ -52,42 +52,42 @@ const [dashboardData, setDashboardData] = useState<any>({
         const fetchDashboardData = async () => {
             try {
                 setLoading(true);
-                console.log('🔍 Buscando dados do dashboard...');
+                console.log('Buscando dados do dashboard...');
 
                 // Buscar dados de forma sequencial para melhor debugging
-                console.log('📊 Buscando apontamentos...');
+                console.log('Buscando apontamentos...');
                 const apontamentosResponse = await api.get('/apontamentos-detalhados');
-                console.log('✅ Apontamentos:', apontamentosResponse.data?.length || 0);
+                console.log('Apontamentos:', apontamentosResponse.data?.length || 0);
 
-                console.log('📅 Buscando programações...');
+                console.log('Buscando programações...');
                 const programacoesResponse = await api.get('/pcp/programacoes');
-                console.log('✅ Programações:', programacoesResponse.data?.length || 0);
+                console.log('Programações:', programacoesResponse.data?.length || 0);
 
-                console.log('📋 Buscando pendências...');
+                console.log('Buscando pendências...');
                 const pendenciasResponse = await api.get('/pcp/pendencias');
-                console.log('✅ Pendências:', pendenciasResponse.data?.length || 0);
+                console.log('Pendências:', pendenciasResponse.data?.length || 0);
 
-                console.log('🏢 Buscando departamentos...');
+                console.log('Buscando departamentos...');
                 const departamentosResponse = await api.get('/departamentos');
-                console.log('✅ Departamentos:', departamentosResponse.data?.length || 0);
+                console.log('Departamentos:', departamentosResponse.data?.length || 0);
 
-                console.log('🏭 Buscando setores...');
+                console.log('Buscando setores...');
                 const setoresResponse = await api.get('/setores');
-                console.log('✅ Setores:', setoresResponse.data?.length || 0);
+                console.log('Setores:', setoresResponse.data?.length || 0);
 
                 const apontamentos = Array.isArray(apontamentosResponse.data) ? apontamentosResponse.data : [];
                 const programacoes = Array.isArray(programacoesResponse.data) ? programacoesResponse.data : [];
                 const pendencias = Array.isArray(pendenciasResponse.data) ? pendenciasResponse.data : [];
 
-                console.log('📊 Total de apontamentos:', apontamentos.length);
-                console.log('📅 Total de programações:', programacoes.length);
-                console.log('⚠️ Total de pendências:', pendencias.length);
+                console.log('Total de apontamentos:', apontamentos.length);
+                console.log('Total de programações:', programacoes.length);
+                console.log('Total de pendências:', pendencias.length);
 
                 const departamentos = Array.isArray(departamentosResponse.data) ? departamentosResponse.data : [];
                 const setores = Array.isArray(setoresResponse.data) ? setoresResponse.data : [];
 
-                console.log('🏢 Departamentos brutos:', departamentos);
-                console.log('🏭 Setores brutos:', setores);
+                console.log('Departamentos brutos:', departamentos);
+                console.log('Setores brutos:', setores);
 
                 setDepartamentosDisponiveis(departamentos);
                 setSetoresDisponiveis(setores);
@@ -99,19 +99,19 @@ const [dashboardData, setDashboardData] = useState<any>({
                     pendencias
                 });
 
-                console.log('🏢 Departamentos encontrados:', departamentos.length);
-                console.log('🏭 Setores encontrados:', setores.length);
+                console.log('Departamentos encontrados:', departamentos.length);
+                console.log('Setores encontrados:', setores.length);
 
                 // Log dos primeiros apontamentos para verificar estrutura
                 if (apontamentos.length > 0) {
-                    console.log('📊 Estrutura do primeiro apontamento:', apontamentos[0]);
-                    console.log('📊 Departamentos únicos nos apontamentos:', [...new Set(apontamentos.map((a: any) => a.departamento))]);
-                    console.log('📊 Setores únicos nos apontamentos:', [...new Set(apontamentos.map((a: any) => a.setor))]);
+                    console.log('Estrutura do primeiro apontamento:', apontamentos[0]);
+                    console.log('Departamentos únicos nos apontamentos:', [...new Set(apontamentos.map((a: any) => a.departamento))]);
+                    console.log('Setores únicos nos apontamentos:', [...new Set(apontamentos.map((a: any) => a.setor))]);
                 }
 
                 // Função para processar dados de forma escalável
                 const processarDadosEscalaveis = (apontamentos: any[], programacoes: any[], pendencias: any[]) => {
-                    console.log('🔄 Processando dados de forma escalável...');
+                    console.log('Processando dados de forma escalável...');
 
                     // 1. MÉTRICAS GERAIS
                     const totalHoras = apontamentos.reduce((total, a) => total + parseFloat(a.tempo_trabalhado || 0), 0);
@@ -296,7 +296,7 @@ const [dashboardData, setDashboardData] = useState<any>({
                 // Gerar performance por departamento
                 const performanceDepartamentos = gerarPerformanceDepartamentos(apontamentosFiltrados, dadosProcessados.departamentos);
 
-                console.log('📊 Dados processados:', {
+                console.log('Dados processados:', {
                     geral: dadosProcessados.geral,
                     departamentos: dadosProcessados.departamentos.length,
                     topSetores: dadosProcessados.topSetores.length
@@ -309,18 +309,18 @@ const [dashboardData, setDashboardData] = useState<any>({
                 });
 
             } catch (err: any) {
-                console.error('❌ Erro ao carregar dados do dashboard:', err);
+                console.error('Erro ao carregar dados do dashboard:', err);
 
                 // Log detalhado do erro
                 if (err?.response) {
-                    console.error('📄 Status:', err.response.status);
-                    console.error('📄 Data:', err.response.data);
+                    console.error('Status:', err.response.status);
+                    console.error('Data:', err.response.data);
                     setError(`Erro ${err.response.status}: ${err.response.data?.detail || 'Erro no servidor'}`);
                 } else if (err?.request) {
-                    console.error('📡 Erro de rede:', err.request);
+                    console.error('Erro de rede:', err.request);
                     setError('Erro de conexão com o servidor');
                 } else {
-                    console.error('⚠️ Erro:', err?.message);
+                    console.error('Erro:', err?.message);
                     setError(err?.message || 'Erro desconhecido');
                 }
 
@@ -354,7 +354,7 @@ const [dashboardData, setDashboardData] = useState<any>({
                 });
             } finally {
                 setLoading(false);
-                console.log('🏁 Carregamento do dashboard finalizado');
+                console.log('Carregamento do dashboard finalizado');
             }
         };
 
@@ -363,51 +363,51 @@ const [dashboardData, setDashboardData] = useState<any>({
 
     // useEffect separado para reprocessar dados quando filtros mudarem
     useEffect(() => {
-        console.log('🔄 useEffect de filtros executado!');
-        console.log('📊 Dados originais disponíveis:', dadosOriginais.apontamentos.length);
-        console.log('🔍 Filtros atuais:', filtros);
+        console.log('useEffect de filtros executado!');
+        console.log('Dados originais disponíveis:', dadosOriginais.apontamentos.length);
+        console.log('Filtros atuais:', filtros);
 
         if (dadosOriginais.apontamentos.length > 0) {
-            console.log('🔄 Reprocessando dados com novos filtros...');
+            console.log('Reprocessando dados com novos filtros...');
 
             // Função para aplicar filtros
             const aplicarFiltros = (apontamentos: any[]) => {
                 let apontamentosFiltrados = [...apontamentos];
 
-                console.log('📊 Apontamentos antes do filtro:', apontamentosFiltrados.length);
+                console.log('Apontamentos antes do filtro:', apontamentosFiltrados.length);
 
                 if (filtros.departamentoSelecionado) {
-                    console.log('🏢 Filtrando por departamento:', filtros.departamentoSelecionado);
+                    console.log('Filtrando por departamento:', filtros.departamentoSelecionado);
                     apontamentosFiltrados = apontamentosFiltrados.filter(a => {
                         console.log('Comparando:', a.departamento, '===', filtros.departamentoSelecionado);
                         return a.departamento === filtros.departamentoSelecionado;
                     });
-                    console.log('📊 Após filtro departamento:', apontamentosFiltrados.length);
+                    console.log('Após filtro departamento:', apontamentosFiltrados.length);
                 }
 
                 if (filtros.setorSelecionado) {
-                    console.log('🏭 Filtrando por setor:', filtros.setorSelecionado);
+                    console.log('Filtrando por setor:', filtros.setorSelecionado);
                     apontamentosFiltrados = apontamentosFiltrados.filter(a => {
                         console.log('Comparando:', a.setor, '===', filtros.setorSelecionado);
                         return a.setor === filtros.setorSelecionado;
                     });
-                    console.log('📊 Após filtro setor:', apontamentosFiltrados.length);
+                    console.log('Após filtro setor:', apontamentosFiltrados.length);
                 }
 
-                console.log('📊 Apontamentos após todos os filtros:', apontamentosFiltrados.length);
+                console.log('Apontamentos após todos os filtros:', apontamentosFiltrados.length);
                 return apontamentosFiltrados;
             };
 
             // Aplicar filtros aos dados originais
             const apontamentosFiltrados = aplicarFiltros(dadosOriginais.apontamentos);
 
-            console.log('🔍 Filtros aplicados:', filtros);
-            console.log('📊 Apontamentos antes do filtro:', dadosOriginais.apontamentos.length);
-            console.log('📊 Apontamentos após filtro:', apontamentosFiltrados.length);
+            console.log('Filtros aplicados:', filtros);
+            console.log('Apontamentos antes do filtro:', dadosOriginais.apontamentos.length);
+            console.log('Apontamentos após filtro:', apontamentosFiltrados.length);
 
             // Reprocessar dados com filtros aplicados
             const processarDadosEscalaveis = (apontamentos: any[], programacoes: any[], pendencias: any[]) => {
-                console.log('🔄 Processando dados de forma escalável...');
+                console.log('Processando dados de forma escalável...');
 
                 // Calcular totais gerais
                 const totalHoras = apontamentos.reduce((total: number, a: any) => total + parseFloat(a.tempo_trabalhado || 0), 0);
@@ -503,13 +503,11 @@ const [dashboardData, setDashboardData] = useState<any>({
         }
     }, [filtros, dadosOriginais]); // Reprocessar quando filtros ou dados originais mudarem
 
-
-
-    // Componente de filtros - ULTRA COMPACTO
+    // Componente de filtros - COMPACTO
     const FiltrosComponent: React.FC = () => (
-        <div className="bg-white p-3 rounded-lg shadow-sm border">
+        <div className="bg-white p-3 rounded-lg border border-gray-200">
             <div className="flex items-center space-x-4">
-                <h3 className="text-sm font-semibold text-gray-800">Filtros:</h3>
+                <h3 className="text-sm font-semibold text-gray-700">Filtros:</h3>
                 <div className="flex items-center space-x-2">
                     <label className="text-xs font-medium text-gray-600">Departamento:</label>
                     <select
@@ -558,36 +556,36 @@ const [dashboardData, setDashboardData] = useState<any>({
         </div>
     );
 
-    // Componente de métricas gerais - ULTRA COMPACTO
+    // Componente de métricas gerais - COMPACTO
     const MetricasGeraisComponent: React.FC = () => (
         <div className="grid grid-cols-5 gap-3">
-            <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-3 rounded-lg border border-blue-200 text-center">
-                <p className="text-xs text-blue-700 font-medium">Apontamentos</p>
-                <p className="text-xl font-bold text-blue-900">
+            <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-center">
+                <p className="text-xs text-gray-700 font-medium">Apontamentos</p>
+                <p className="text-lg font-bold text-gray-900">
                     {loading ? '...' : dashboardData.geral.totalApontamentos.toLocaleString()}
                 </p>
             </div>
-            <div className="bg-gradient-to-br from-green-50 to-green-100 p-3 rounded-lg border border-green-200 text-center">
-                <p className="text-xs text-green-700 font-medium">Horas</p>
-                <p className="text-xl font-bold text-green-900">
+            <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-center">
+                <p className="text-xs text-gray-700 font-medium">Horas</p>
+                <p className="text-lg font-bold text-gray-900">
                     {loading ? '...' : `${dashboardData.geral.totalHoras.toLocaleString()}h`}
                 </p>
             </div>
-            <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-3 rounded-lg border border-yellow-200 text-center">
-                <p className="text-xs text-yellow-700 font-medium">H. Extras</p>
-                <p className="text-xl font-bold text-yellow-900">
+            <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-center">
+                <p className="text-xs text-gray-700 font-medium">H. Extras</p>
+                <p className="text-lg font-bold text-gray-900">
                     {loading ? '...' : `${dashboardData.geral.horasExtras.toLocaleString()}h`}
                 </p>
             </div>
-            <div className="bg-gradient-to-br from-red-50 to-red-100 p-3 rounded-lg border border-red-200 text-center">
-                <p className="text-xs text-red-700 font-medium">Retrabalhos</p>
-                <p className="text-xl font-bold text-red-900">
+            <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-center">
+                <p className="text-xs text-gray-700 font-medium">Retrabalhos</p>
+                <p className="text-lg font-bold text-gray-900">
                     {loading ? '...' : dashboardData.geral.retrabalhos.toLocaleString()}
                 </p>
             </div>
-            <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-3 rounded-lg border border-purple-200 text-center">
-                <p className="text-xs text-purple-700 font-medium">OS Únicas</p>
-                <p className="text-xl font-bold text-purple-900">
+            <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-center">
+                <p className="text-xs text-gray-700 font-medium">OS Únicas</p>
+                <p className="text-lg font-bold text-gray-900">
                     {loading ? '...' : dashboardData.geral.osUnicas.toLocaleString()}
                 </p>
             </div>
@@ -596,32 +594,30 @@ const [dashboardData, setDashboardData] = useState<any>({
 
     // Componente de métricas de programações - COMPACTO
     const ProgramacoesComponent: React.FC = () => (
-        <div className="bg-white p-3 rounded shadow">
-            <h3 className="text-sm font-semibold mb-2 flex items-center">
-                📅 Programações
-            </h3>
+        <div className="bg-white p-3 rounded border border-gray-200">
+            <h3 className="text-sm font-semibold mb-2">Programações</h3>
             <div className="grid grid-cols-4 gap-2 mb-2">
                 <div className="text-center">
                     <p className="text-xs text-gray-600">Total</p>
-                    <p className="text-sm font-bold text-blue-600">
+                    <p className="text-sm font-bold text-gray-700">
                         {loading ? '...' : dashboardData.programacoes?.total || 0}
                     </p>
                 </div>
                 <div className="text-center">
                     <p className="text-xs text-gray-600">Enviadas</p>
-                    <p className="text-sm font-bold text-yellow-600">
+                    <p className="text-sm font-bold text-gray-700">
                         {loading ? '...' : dashboardData.programacoes?.enviadas || 0}
                     </p>
                 </div>
                 <div className="text-center">
                     <p className="text-xs text-gray-600">Andamento</p>
-                    <p className="text-sm font-bold text-orange-600">
+                    <p className="text-sm font-bold text-gray-700">
                         {loading ? '...' : dashboardData.programacoes?.emAndamento || 0}
                     </p>
                 </div>
                 <div className="text-center">
                     <p className="text-xs text-gray-600">Concluídas</p>
-                    <p className="text-sm font-bold text-green-600">
+                    <p className="text-sm font-bold text-gray-700">
                         {loading ? '...' : dashboardData.programacoes?.concluidas || 0}
                     </p>
                 </div>
@@ -633,8 +629,8 @@ const [dashboardData, setDashboardData] = useState<any>({
                             <span className="font-medium">OS {prog.os_numero}</span> -
                             <span className={`ml-1 px-1 rounded text-xs ${
                                 prog.status === 'CONCLUIDA' ? 'bg-green-100 text-green-800' :
-                                prog.status === 'EM_ANDAMENTO' ? 'bg-orange-100 text-orange-800' :
-                                'bg-yellow-100 text-yellow-800'
+                                prog.status === 'EM_ANDAMENTO' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-gray-100 text-gray-800'
                             }`}>
                                 {prog.status}
                             </span>
@@ -647,26 +643,24 @@ const [dashboardData, setDashboardData] = useState<any>({
 
     // Componente de métricas de pendências - COMPACTO
     const PendenciasComponent: React.FC = () => (
-        <div className="bg-white p-3 rounded shadow">
-            <h3 className="text-sm font-semibold mb-2 flex items-center">
-                ⚠️ Pendências
-            </h3>
+        <div className="bg-white p-3 rounded border border-gray-200">
+            <h3 className="text-sm font-semibold mb-2">Pendências</h3>
             <div className="grid grid-cols-3 gap-2 mb-2">
                 <div className="text-center">
                     <p className="text-xs text-gray-600">Total</p>
-                    <p className="text-sm font-bold text-blue-600">
+                    <p className="text-sm font-bold text-gray-700">
                         {loading ? '...' : dashboardData.pendencias?.total || 0}
                     </p>
                 </div>
                 <div className="text-center">
                     <p className="text-xs text-gray-600">Abertas</p>
-                    <p className="text-sm font-bold text-red-600">
+                    <p className="text-sm font-bold text-gray-700">
                         {loading ? '...' : dashboardData.pendencias?.abertas || 0}
                     </p>
                 </div>
                 <div className="text-center">
                     <p className="text-xs text-gray-600">Fechadas</p>
-                    <p className="text-sm font-bold text-green-600">
+                    <p className="text-sm font-bold text-gray-700">
                         {loading ? '...' : dashboardData.pendencias?.fechadas || 0}
                     </p>
                 </div>
@@ -688,15 +682,13 @@ const [dashboardData, setDashboardData] = useState<any>({
         </div>
     );
 
-
-
     // Componente de gráfico de performance por departamento
     const PerformanceDepartamentosComponent: React.FC = () => {
         const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
         return (
-            <div className="bg-white p-4 rounded-lg shadow-md border border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-800 mb-3">Performance Departamentos (6m)</h3>
+            <div className="bg-white p-4 rounded-lg border border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Performance Departamentos (6m)</h3>
                 <div className="h-32">
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={dashboardData.performanceDepartamentos}>
@@ -728,7 +720,7 @@ const [dashboardData, setDashboardData] = useState<any>({
         const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
 
         return (
-            <div className="bg-white p-3 rounded shadow">
+            <div className="bg-white p-3 rounded border border-gray-200">
                 <h3 className="text-sm font-semibold mb-2">Distribuição Horas</h3>
                 <div className="h-32">
                     <ResponsiveContainer width="100%" height="100%">
@@ -756,7 +748,7 @@ const [dashboardData, setDashboardData] = useState<any>({
 
     // Componente de top setores - COMPACTO
     const TopSetoresComponent: React.FC = () => (
-        <div className="bg-white p-3 rounded shadow">
+        <div className="bg-white p-3 rounded border border-gray-200">
             <h3 className="text-sm font-semibold mb-2">Top 5 Setores</h3>
             <div className="h-32">
                 <ResponsiveContainer width="100%" height="100%">
@@ -777,7 +769,7 @@ const [dashboardData, setDashboardData] = useState<any>({
             <Layout>
                 <div className="flex items-center justify-center h-64">
                     <div className="text-center">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-600 mx-auto"></div>
                         <p className="mt-4 text-gray-600">Carregando dashboard...</p>
                     </div>
                 </div>
@@ -791,13 +783,13 @@ const [dashboardData, setDashboardData] = useState<any>({
                 <div className="flex items-center justify-center h-64">
                     <div className="text-center">
                         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-                            <h3 className="font-bold">❌ Erro ao carregar Dashboard</h3>
+                            <h3 className="font-bold">Erro ao carregar Dashboard</h3>
                             <p className="mt-2">{error}</p>
                             <button
                                 onClick={() => window.location.reload()}
                                 className="mt-4 bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
                             >
-                                🔄 Tentar Novamente
+                                Tentar Novamente
                             </button>
                         </div>
                     </div>
@@ -808,18 +800,18 @@ const [dashboardData, setDashboardData] = useState<any>({
 
     return (
         <Layout>
-            <div className="h-screen bg-gray-50 p-3 overflow-hidden">
+            <div className="h-screen bg-gray-100 p-3 overflow-hidden">
                 <div className="w-full h-full flex flex-col space-y-3">
                     {/* HEADER COMPACTO */}
-                    <div className="bg-white rounded-lg shadow-sm border p-3 flex-shrink-0">
+                    <div className="bg-white rounded-lg border border-gray-200 p-3 flex-shrink-0">
                         <div className="flex justify-between items-center">
                             <div>
-                                <h1 className="text-2xl font-bold text-gray-900">Dashboard RegistroOS</h1>
-                                <p className="text-sm text-gray-600">Visão geral completa do sistema</p>
+                                <h1 className="text-xl font-semibold text-gray-800">Dashboard RegistroOS</h1>
+                                <p className="text-sm text-gray-600">Visão geral do sistema</p>
                             </div>
                             <div className="text-right">
                                 <p className="text-xs text-gray-500">Última atualização</p>
-                                <p className="text-sm font-semibold text-gray-900">{new Date().toLocaleTimeString()}</p>
+                                <p className="text-sm font-medium text-gray-800">{new Date().toLocaleTimeString()}</p>
                             </div>
                         </div>
                     </div>
@@ -832,14 +824,14 @@ const [dashboardData, setDashboardData] = useState<any>({
                     {/* MÉTRICAS PRINCIPAIS E APONTAMENTOS RECENTES */}
                     <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 flex-shrink-0">
                         {/* MÉTRICAS PRINCIPAIS */}
-                        <div className="xl:col-span-2 bg-white rounded-lg shadow-sm border p-3">
-                            <h2 className="text-lg font-semibold text-gray-900 mb-2">📊 Métricas Principais</h2>
+                        <div className="xl:col-span-2 bg-white rounded-lg border border-gray-200 p-3">
+                            <h2 className="text-lg font-semibold text-gray-800 mb-2">Métricas Principais</h2>
                             <MetricasGeraisComponent />
                         </div>
 
                         {/* APONTAMENTOS RECENTES */}
-                        <div className="bg-white rounded-lg shadow-sm border p-3">
-                            <h2 className="text-lg font-semibold text-gray-900 mb-2">� Apontamentos Recentes</h2>
+                        <div className="bg-white rounded-lg border border-gray-200 p-3">
+                            <h2 className="text-lg font-semibold text-gray-800 mb-2">Apontamentos Recentes</h2>
                             <div className="overflow-y-auto max-h-32">
                                 <table className="w-full">
                                     <thead className="sticky top-0 bg-white">
@@ -854,7 +846,7 @@ const [dashboardData, setDashboardData] = useState<any>({
                                             <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                                                 <td className="py-1 px-1 font-medium text-blue-600 text-xs">{apt.numero_os}</td>
                                                 <td className="py-1 px-1 text-gray-600 text-xs">{apt.setor}</td>
-                                                <td className="py-1 px-1 text-right font-semibold text-green-600 text-xs">{apt.horas}h</td>
+                                                <td className="py-1 px-1 text-right font-medium text-gray-800 text-xs">{apt.horas}h</td>
                                             </tr>
                                         ))}
                                         {(!dashboardData.apontamentosRecentes || dashboardData.apontamentosRecentes.length === 0) && (
@@ -873,33 +865,31 @@ const [dashboardData, setDashboardData] = useState<any>({
                     {/* GRID PRINCIPAL - LARGURA TOTAL SEM SCROLL */}
                     <div className="flex-1 grid grid-cols-1 xl:grid-cols-4 gap-3 min-h-0">
                         {/* COLUNA 1: PROGRAMAÇÕES */}
-                        <div className="bg-white rounded-lg shadow-sm border p-4 flex flex-col">
-                            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                                📅 Programações
-                            </h2>
-                            <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border border-blue-200 flex-1">
+                        <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col">
+                            <h2 className="text-sm font-semibold text-gray-700 mb-3">Programações</h2>
+                            <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 flex-1">
                                 <div className="flex items-center justify-between mb-3">
-                                    <h3 className="font-semibold text-blue-900">Total</h3>
-                                    <span className="bg-blue-500 text-white text-sm px-2 py-1 rounded-full font-medium">
+                                    <h3 className="font-medium text-gray-700">Total</h3>
+                                    <span className="bg-gray-500 text-white text-xs px-2 py-1 rounded-full">
                                         {loading ? '...' : dashboardData.programacoes?.total || 0}
                                     </span>
                                 </div>
                                 <div className="space-y-2">
                                     <div className="flex justify-between items-center">
-                                        <span className="text-sm text-blue-700">Enviadas</span>
-                                        <span className="font-semibold text-blue-900 bg-white px-2 py-1 rounded text-xs">
+                                        <span className="text-xs text-gray-600">Enviadas</span>
+                                        <span className="font-medium text-gray-700 bg-white px-2 py-1 rounded text-xs">
                                             {loading ? '...' : dashboardData.programacoes?.enviadas || 0}
                                         </span>
                                     </div>
                                     <div className="flex justify-between items-center">
-                                        <span className="text-sm text-blue-700">Em Andamento</span>
-                                        <span className="font-semibold text-blue-900 bg-white px-2 py-1 rounded text-xs">
+                                        <span className="text-xs text-gray-600">Em Andamento</span>
+                                        <span className="font-medium text-gray-700 bg-white px-2 py-1 rounded text-xs">
                                             {loading ? '...' : dashboardData.programacoes?.emAndamento || 0}
                                         </span>
                                     </div>
                                     <div className="flex justify-between items-center">
-                                        <span className="text-sm text-blue-700">Concluídas</span>
-                                        <span className="font-semibold text-blue-900 bg-white px-2 py-1 rounded text-xs">
+                                        <span className="text-xs text-gray-600">Concluídas</span>
+                                        <span className="font-medium text-gray-700 bg-white px-2 py-1 rounded text-xs">
                                             {loading ? '...' : dashboardData.programacoes?.concluidas || 0}
                                         </span>
                                     </div>
@@ -908,27 +898,25 @@ const [dashboardData, setDashboardData] = useState<any>({
                         </div>
 
                         {/* COLUNA 2: PENDÊNCIAS */}
-                        <div className="bg-white rounded-lg shadow-sm border p-4 flex flex-col">
-                            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                                ⚠️ Pendências
-                            </h2>
-                            <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-3 border border-red-200 flex-1">
+                        <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col">
+                            <h2 className="text-sm font-semibold text-gray-700 mb-3">Pendências</h2>
+                            <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 flex-1">
                                 <div className="flex items-center justify-between mb-3">
-                                    <h3 className="font-semibold text-red-900">Total</h3>
-                                    <span className="bg-red-500 text-white text-sm px-2 py-1 rounded-full font-medium">
+                                    <h3 className="font-medium text-gray-700">Total</h3>
+                                    <span className="bg-gray-500 text-white text-xs px-2 py-1 rounded-full">
                                         {loading ? '...' : dashboardData.pendencias?.total || 0}
                                     </span>
                                 </div>
                                 <div className="space-y-2">
                                     <div className="flex justify-between items-center">
-                                        <span className="text-sm text-red-700">Abertas</span>
-                                        <span className="font-semibold text-red-900 bg-white px-2 py-1 rounded text-xs">
+                                        <span className="text-xs text-gray-600">Abertas</span>
+                                        <span className="font-medium text-gray-700 bg-white px-2 py-1 rounded text-xs">
                                             {loading ? '...' : dashboardData.pendencias?.abertas || 0}
                                         </span>
                                     </div>
                                     <div className="flex justify-between items-center">
-                                        <span className="text-sm text-red-700">Fechadas</span>
-                                        <span className="font-semibold text-red-900 bg-white px-2 py-1 rounded text-xs">
+                                        <span className="text-xs text-gray-600">Fechadas</span>
+                                        <span className="font-medium text-gray-700 bg-white px-2 py-1 rounded text-xs">
                                             {loading ? '...' : dashboardData.pendencias?.fechadas || 0}
                                         </span>
                                     </div>
@@ -937,20 +925,16 @@ const [dashboardData, setDashboardData] = useState<any>({
                         </div>
 
                         {/* COLUNA 3: PERFORMANCE DEPARTAMENTOS */}
-                        <div className="bg-white rounded-lg shadow-sm border p-4 flex flex-col">
-                            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                                🏢 Departamentos
-                            </h2>
+                        <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col">
+                            <h2 className="text-sm font-semibold text-gray-700 mb-3">Departamentos</h2>
                             <div className="flex-1 min-h-0">
                                 <PerformanceDepartamentosComponent />
                             </div>
                         </div>
 
                         {/* COLUNA 4: TOP SETORES */}
-                        <div className="bg-white rounded-lg shadow-sm border p-4 flex flex-col">
-                            <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
-                                🏭 Top Setores
-                            </h2>
+                        <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col">
+                            <h2 className="text-sm font-semibold text-gray-700 mb-3">Top Setores</h2>
                             <div className="flex-1 min-h-0">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart

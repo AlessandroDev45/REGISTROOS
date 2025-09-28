@@ -7,11 +7,17 @@ import sys
 import os
 from pathlib import Path
 from pydantic import BaseModel
-from app.database_models import Usuario, OrdemServico, ApontamentoDetalhado, ResultadoTeste, Pendencia, TipoTeste
+from app.database_models import Usuario, OrdemServico, ApontamentoDetalhado, ResultadoTeste, Pendencia, TipoTeste, Cliente
 from config.database_config import get_db
 from app.dependencies import get_current_user
 
 router = APIRouter()
+
+def _convert_list_to_string(value):
+    """Converter lista para string para compatibilidade com SQLite"""
+    if isinstance(value, list):
+        return ', '.join(str(item) for item in value) if value else None
+    return value
 
 @router.get("/health")
 async def health_check():
@@ -78,14 +84,42 @@ async def save_apontamento(
             if "horasOrcadas" in apontamento_data and apontamento_data.get("horasOrcadas"):
                 ordem_servico.horas_orcadas = float(apontamento_data.get("horasOrcadas", 0))  # type: ignore
 
+        # Processar data/hora de início
+        data_hora_inicio = dt.now()
+        if apontamento_data.get("inpData") and apontamento_data.get("inpHora"):
+            try:
+                data_str = f"{apontamento_data['inpData']} {apontamento_data['inpHora']}"
+                data_hora_inicio = dt.strptime(data_str, "%Y-%m-%d %H:%M")
+            except ValueError:
+                print(f"Erro ao converter data/hora início: {apontamento_data.get('inpData')} {apontamento_data.get('inpHora')}")
+        elif apontamento_data.get("inpData"):
+            try:
+                data_hora_inicio = dt.strptime(apontamento_data["inpData"], "%Y-%m-%d")
+            except ValueError:
+                print(f"Erro ao converter data início: {apontamento_data.get('inpData')}")
+
+        # Processar data/hora de fim
+        data_hora_fim = None
+        if apontamento_data.get("inpDataFim") and apontamento_data.get("inpHoraFim"):
+            try:
+                data_str = f"{apontamento_data['inpDataFim']} {apontamento_data['inpHoraFim']}"
+                data_hora_fim = dt.strptime(data_str, "%Y-%m-%d %H:%M")
+            except ValueError:
+                print(f"Erro ao converter data/hora fim: {apontamento_data.get('inpDataFim')} {apontamento_data.get('inpHoraFim')}")
+        elif apontamento_data.get("inpDataFim"):
+            try:
+                data_hora_fim = dt.strptime(apontamento_data["inpDataFim"], "%Y-%m-%d")
+            except ValueError:
+                print(f"Erro ao converter data fim: {apontamento_data.get('inpDataFim')}")
+
         # Create ApontamentoDetalhado
         apontamento = ApontamentoDetalhado(
             id_os=ordem_servico.id,
             id_usuario=current_user.id,
             id_setor=current_user.id_setor if hasattr(current_user, 'id_setor') else 1,
-            data_hora_inicio=dt.strptime(apontamento_data["inpData"], "%Y-%m-%d") if apontamento_data.get("inpData") else dt.now(),
-            data_hora_fim=dt.strptime(apontamento_data["inpDataFim"], "%Y-%m-%d") if apontamento_data.get("inpDataFim") else None,
-            status_apontamento="CONCLUIDO" if apontamento_data.get("inpDataFim") else "EM_ANDAMENTO",
+            data_hora_inicio=data_hora_inicio,
+            data_hora_fim=data_hora_fim,
+            status_apontamento="CONCLUIDO" if data_hora_fim else "EM_ANDAMENTO",
             foi_retrabalho=apontamento_data.get("inpRetrabalho", False),
             causa_retrabalho=apontamento_data.get("selTipoCausaRetrabalho"),
             observacao_os=apontamento_data.get("observacao"),
@@ -99,7 +133,7 @@ async def save_apontamento(
             tipo_atividade=apontamento_data.get("tipo_atividade") or apontamento_data.get("selAtiv"),
             descricao_atividade=apontamento_data.get("descricao_atividade") or apontamento_data.get("selDescAtiv"),
             categoria_maquina=apontamento_data.get("categoria_maquina") or apontamento_data.get("categoria") or apontamento_data.get("categoriaSelecionada"),
-            subcategorias_maquina=apontamento_data.get("subcategorias_maquina") or apontamento_data.get("subcategoria") or apontamento_data.get("subcategoriasSelecionadas")
+            subcategorias_maquina=_convert_list_to_string(apontamento_data.get("subcategorias_maquina") or apontamento_data.get("subcategoria") or apontamento_data.get("subcategoriasSelecionadas"))
         )
 
         db.add(apontamento)
@@ -227,13 +261,41 @@ async def save_apontamento_with_pendencia(
             db.add(ordem_servico)
             db.flush()  # Para obter o ID
 
+        # Processar data/hora de início para pendência
+        data_hora_inicio = dt.now()
+        if apontamento_data.get("data_inicio") and apontamento_data.get("hora_inicio"):
+            try:
+                data_str = f"{apontamento_data['data_inicio']} {apontamento_data['hora_inicio']}"
+                data_hora_inicio = dt.strptime(data_str, "%Y-%m-%d %H:%M")
+            except ValueError:
+                print(f"Erro ao converter data/hora início: {apontamento_data.get('data_inicio')} {apontamento_data.get('hora_inicio')}")
+        elif apontamento_data.get("data_inicio"):
+            try:
+                data_hora_inicio = dt.strptime(apontamento_data["data_inicio"], "%Y-%m-%d")
+            except ValueError:
+                print(f"Erro ao converter data início: {apontamento_data.get('data_inicio')}")
+
+        # Processar data/hora de fim para pendência
+        data_hora_fim = None
+        if apontamento_data.get("data_fim") and apontamento_data.get("hora_fim"):
+            try:
+                data_str = f"{apontamento_data['data_fim']} {apontamento_data['hora_fim']}"
+                data_hora_fim = dt.strptime(data_str, "%Y-%m-%d %H:%M")
+            except ValueError:
+                print(f"Erro ao converter data/hora fim: {apontamento_data.get('data_fim')} {apontamento_data.get('hora_fim')}")
+        elif apontamento_data.get("data_fim"):
+            try:
+                data_hora_fim = dt.strptime(apontamento_data["data_fim"], "%Y-%m-%d")
+            except ValueError:
+                print(f"Erro ao converter data fim: {apontamento_data.get('data_fim')}")
+
         # Create ApontamentoDetalhado
         apontamento = ApontamentoDetalhado(
             id_os=ordem_servico.id,
             id_usuario=current_user.id,
             id_setor=current_user.id_setor if hasattr(current_user, 'id_setor') else 1,
-            data_hora_inicio=dt.strptime(apontamento_data["inpData"], "%Y-%m-%d") if apontamento_data.get("inpData") else dt.now(),
-            data_hora_fim=dt.strptime(apontamento_data["inpDataFim"], "%Y-%m-%d") if apontamento_data.get("inpDataFim") else None,
+            data_hora_inicio=data_hora_inicio,
+            data_hora_fim=data_hora_fim,
             status_apontamento="PENDENTE",
             foi_retrabalho=apontamento_data.get("inpRetrabalho", False),
             causa_retrabalho=apontamento_data.get("selTipoCausaRetrabalho"),
@@ -248,7 +310,7 @@ async def save_apontamento_with_pendencia(
             tipo_atividade=apontamento_data.get("tipo_atividade") or apontamento_data.get("selAtiv"),
             descricao_atividade=apontamento_data.get("descricao_atividade") or apontamento_data.get("selDescAtiv"),
             categoria_maquina=apontamento_data.get("categoria_maquina") or apontamento_data.get("categoria") or apontamento_data.get("categoriaSelecionada"),
-            subcategorias_maquina=apontamento_data.get("subcategorias_maquina") or apontamento_data.get("subcategoria") or apontamento_data.get("subcategoriasSelecionadas")
+            subcategorias_maquina=_convert_list_to_string(apontamento_data.get("subcategorias_maquina") or apontamento_data.get("subcategoria") or apontamento_data.get("subcategoriasSelecionadas"))
         )
 
         db.add(apontamento)
@@ -317,9 +379,19 @@ async def save_apontamento_with_pendencia(
         pendencia_prioridade = apontamento_data.get("pendencia_prioridade", "NORMAL")
 
         # Usar dados do apontamento para preencher a pendência
-        cliente_nome = apontamento_data.get("cliente") or ordem_servico.cliente or "Cliente Não Informado"
-        tipo_maquina = apontamento_data.get("tipo_maquina") or ordem_servico.tipo_maquina or "Tipo Não Informado"
-        equipamento = apontamento_data.get("equipamento") or ordem_servico.descricao_maquina or "Equipamento Não Informado"
+        cliente_nome = apontamento_data.get("cliente") or apontamento_data.get("inpCliente") or "Cliente Não Informado"
+
+        # Buscar cliente através da relação se existir
+        if hasattr(ordem_servico, 'id_cliente') and ordem_servico.id_cliente:
+            try:
+                cliente_obj = db.query(Cliente).filter(Cliente.id == ordem_servico.id_cliente).first()
+                if cliente_obj:
+                    cliente_nome = cliente_obj.razao_social or cliente_obj.nome_fantasia or cliente_nome
+            except Exception as e:
+                print(f"Erro ao buscar cliente: {e}")
+
+        tipo_maquina = apontamento_data.get("tipo_maquina") or apontamento_data.get("selMaq") or "Tipo Não Informado"
+        equipamento = apontamento_data.get("equipamento") or apontamento_data.get("inpEquipamento") or ordem_servico.descricao_maquina or "Equipamento Não Informado"
 
         # Garantir que todos os campos obrigatórios estejam preenchidos
         agora = dt.now()

@@ -3,7 +3,7 @@ import { useSetor } from '../../../../contexts/SetorContext';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import api from '../../../../services/api';
-import ResolucaoPendenciaModal from '../../../../components/ResolucaoPendenciaModal';
+
 
 import { getStatusColorClass, getPriorityColorClass } from '../../../../utils/statusColors';
 interface Pendencia {
@@ -15,7 +15,7 @@ interface Pendencia {
     descricao_pendencia: string;
     status: 'ABERTA' | 'FECHADA';
     prioridade: 'BAIXA' | 'NORMAL' | 'ALTA' | 'URGENTE';
-    data_inicio: string;
+    data_criacao: string;
     data_fechamento?: string;
     responsavel_inicio_id: number;
     responsavel_fechamento_id?: number;
@@ -44,8 +44,7 @@ const PendenciasTab: React.FC<PendenciasTabProps> = ({ onResolverViaApontamento 
     const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
     const [sortBy, setSortBy] = useState<'data' | 'prioridade' | 'status'>('data');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-    const [modalResolucaoOpen, setModalResolucaoOpen] = useState(false);
-    const [pendenciaSelecionada, setPendenciaSelecionada] = useState<Pendencia | null>(null);
+
 
     useEffect(() => {
         const fetchPendencias = async () => {
@@ -77,24 +76,7 @@ const PendenciasTab: React.FC<PendenciasTabProps> = ({ onResolverViaApontamento 
         }
     }, [setorAtivo, user, filtroStatus, dataInicio, dataFim]);
 
-    const handleResolverPendencia = (pendencia: Pendencia) => {
-        setPendenciaSelecionada(pendencia);
-        setModalResolucaoOpen(true);
-    };
 
-    const handleResolucaoSuccess = async () => {
-        // Recarregar lista de pendências
-        try {
-            const response = await api.get('/desenvolvimento/pendencias', {
-                params: {
-                    status: filtroStatus || undefined
-                }
-            });
-            setPendencias(response.data || []);
-        } catch (error) {
-            console.error('Erro ao recarregar pendências:', error);
-        }
-    };
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -178,145 +160,125 @@ const PendenciasTab: React.FC<PendenciasTabProps> = ({ onResolverViaApontamento 
     }
 
     return (
-        <div className="w-full p-6">
-            <div className="bg-white rounded-lg shadow-sm">
-                {/* Header com gradiente */}
-                <div className="bg-gradient-to-r from-purple-600 to-indigo-700 p-6 text-white">
+        <div className="w-full p-3">
+            <div className="bg-white rounded shadow-sm">
+                {/* Header técnico compacto */}
+                <div className="bg-slate-800 border-b border-slate-700 px-4 py-3 text-white">
                     <div className="flex justify-between items-center">
                         <div>
-                            <h2 className="text-3xl font-bold">
-                                🚨 Pendências - {setorAtivo?.nome}
+                            <h2 className="text-lg font-semibold tracking-wide">
+                                PENDÊNCIAS - {setorAtivo?.nome?.toUpperCase()}
                             </h2>
-                            <p className="text-purple-100 mt-2">
-                                Gerencie e resolva pendências de apontamentos e testes
+                            <p className="text-slate-400 text-xs font-mono">
+                                Gestão de Pendências | Apontamentos e Testes
                             </p>
                         </div>
                         <div className="text-right">
-                            <div className="text-2xl font-bold">{metricas.total}</div>
-                            <div className="text-sm text-purple-200">Total de Pendências</div>
+                            <div className="text-2xl font-mono font-bold">{metricas.total}</div>
+                            <div className="text-xs text-slate-400 uppercase">Total</div>
                         </div>
                     </div>
                 </div>
 
-                {/* Cards de Métricas */}
-                <div className="p-6 border-b border-gray-200">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                        <div className="bg-gradient-to-br from-red-500 to-red-600 text-white p-4 rounded-lg">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <div className="text-2xl font-bold">{metricas.abertas}</div>
-                                    <div className="text-sm text-red-100">Pendências Abertas</div>
-                                </div>
-                                <div className="text-3xl opacity-80">🔴</div>
-                            </div>
+                {/* Métricas compactas */}
+                <div className="px-4 py-2 border-b border-slate-200 bg-slate-50">
+                    <div className="grid grid-cols-4 gap-3">
+                        <div className="bg-white border-l-4 border-red-500 px-3 py-2">
+                            <div className="text-lg font-mono font-bold text-red-700">{metricas.abertas}</div>
+                            <div className="text-xs text-slate-600 uppercase">Abertas</div>
                         </div>
-                        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-4 rounded-lg">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <div className="text-2xl font-bold">{metricas.fechadas}</div>
-                                    <div className="text-sm text-green-100">Pendências Resolvidas</div>
-                                </div>
-                                <div className="text-3xl opacity-80">✅</div>
-                            </div>
+                        <div className="bg-white border-l-4 border-green-500 px-3 py-2">
+                            <div className="text-lg font-mono font-bold text-green-700">{metricas.fechadas}</div>
+                            <div className="text-xs text-slate-600 uppercase">Resolvidas</div>
                         </div>
-                        <div className="bg-gradient-to-br from-orange-500 to-red-500 text-white p-4 rounded-lg">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <div className="text-2xl font-bold">{metricas.urgentes}</div>
-                                    <div className="text-sm text-orange-100">Urgentes Abertas</div>
-                                </div>
-                                <div className="text-3xl opacity-80">🚨</div>
-                            </div>
+                        <div className="bg-white border-l-4 border-orange-500 px-3 py-2">
+                            <div className="text-lg font-mono font-bold text-orange-700">{metricas.urgentes}</div>
+                            <div className="text-xs text-slate-600 uppercase">Críticas</div>
                         </div>
-                        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-4 rounded-lg">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <div className="text-2xl font-bold">{metricas.tempoMedioResolucao.toFixed(1)}</div>
-                                    <div className="text-sm text-blue-100">Dias Médio Resolução</div>
-                                </div>
-                                <div className="text-3xl opacity-80">⏱️</div>
-                            </div>
+                        <div className="bg-white border-l-4 border-blue-500 px-3 py-2">
+                            <div className="text-lg font-mono font-bold text-blue-700">{metricas.tempoMedioResolucao.toFixed(1)}</div>
+                            <div className="text-xs text-slate-600 uppercase">Dias Médio</div>
                         </div>
                     </div>
                 </div>
 
-                {/* Filtros Avançados */}
-                <div className="p-6 border-b border-gray-200">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-medium text-gray-900">🔍 Filtros e Visualização</h3>
-                        <div className="flex items-center space-x-3">
+                {/* Filtros compactos */}
+                <div className="px-4 py-3 border-b border-gray-200 bg-white">
+                    <div className="flex justify-between items-center mb-3">
+                        <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">Filtros</h3>
+                        <div className="flex items-center space-x-2">
                             <button
                                 onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                                className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+                                className="px-2 py-1 text-xs bg-slate-100 text-slate-700 rounded hover:bg-slate-200"
                             >
-                                {showAdvancedFilters ? '🔼 Filtros Simples' : '🔽 Filtros Avançados'}
+                                {showAdvancedFilters ? 'Simples' : 'Avançado'}
                             </button>
-                            <div className="flex bg-gray-100 rounded-md p-1">
+                            <div className="flex bg-slate-100 rounded text-xs">
                                 <button
                                     onClick={() => setViewMode('cards')}
-                                    className={`px-3 py-1 text-sm rounded ${viewMode === 'cards' ? 'bg-white shadow-sm' : ''}`}
+                                    className={`px-2 py-1 rounded ${viewMode === 'cards' ? 'bg-white shadow-sm' : ''}`}
                                 >
-                                    📋 Cards
+                                    Cards
                                 </button>
                                 <button
                                     onClick={() => setViewMode('table')}
-                                    className={`px-3 py-1 text-sm rounded ${viewMode === 'table' ? 'bg-white shadow-sm' : ''}`}
+                                    className={`px-2 py-1 rounded ${viewMode === 'table' ? 'bg-white shadow-sm' : ''}`}
                                 >
-                                    📊 Tabela
+                                    Tabela
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    {/* Filtros Básicos */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                    {/* Filtros compactos */}
+                    <div className="grid grid-cols-4 gap-2">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
                             <select
                                 value={filtroStatus}
                                 onChange={(e) => setFiltroStatus(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-500"
                             >
-                                <option value="">Todos os Status</option>
-                                <option value="ABERTA">🔴 Aberta</option>
-                                <option value="FECHADA">✅ Fechada</option>
+                                <option value="">Todos</option>
+                                <option value="ABERTA">Aberta</option>
+                                <option value="FECHADA">Fechada</option>
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Prioridade</label>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Prioridade</label>
                             <select
                                 value={filtroPrioridade}
                                 onChange={(e) => setFiltroPrioridade(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-500"
                             >
-                                <option value="">Todas as Prioridades</option>
-                                <option value="URGENTE">🚨 Urgente</option>
-                                <option value="ALTA">🔥 Alta</option>
-                                <option value="NORMAL">📋 Normal</option>
-                                <option value="BAIXA">📝 Baixa</option>
+                                <option value="">Todas</option>
+                                <option value="URGENTE">Urgente</option>
+                                <option value="ALTA">Alta</option>
+                                <option value="NORMAL">Normal</option>
+                                <option value="BAIXA">Baixa</option>
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Ordenar por</label>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Ordenar</label>
                             <select
                                 value={sortBy}
                                 onChange={(e) => setSortBy(e.target.value as any)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-500"
                             >
-                                <option value="data">📅 Data</option>
-                                <option value="prioridade">⚡ Prioridade</option>
-                                <option value="status">📊 Status</option>
+                                <option value="data">Data</option>
+                                <option value="prioridade">Prioridade</option>
+                                <option value="status">Status</option>
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Ordem</label>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Ordem</label>
                             <select
                                 value={sortOrder}
                                 onChange={(e) => setSortOrder(e.target.value as any)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-slate-500"
                             >
-                                <option value="desc">⬇️ Decrescente</option>
-                                <option value="asc">⬆️ Crescente</option>
+                                <option value="desc">Desc</option>
+                                <option value="asc">Asc</option>
                             </select>
                         </div>
                     </div>
@@ -375,34 +337,34 @@ const PendenciasTab: React.FC<PendenciasTabProps> = ({ onResolverViaApontamento 
                     </div>
                 </div>
 
-                {/* Lista de Pendências */}
-                <div className="p-6">
+                {/* Lista compacta */}
+                <div className="p-3">
                     {pendenciasFiltradas.length === 0 ? (
-                        <div className="text-center py-12">
-                            <div className="text-gray-400 text-6xl mb-4">
-                                {metricas.total === 0 ? '🎉' : '🔍'}
+                        <div className="text-center py-8">
+                            <div className="text-gray-400 text-4xl mb-3">
+                                {metricas.total === 0 ? '✓' : '?'}
                             </div>
-                            <h3 className="text-lg font-medium text-gray-900 mb-2">
-                                {metricas.total === 0 ? 'Parabéns! Nenhuma pendência!' : 'Nenhuma pendência encontrada'}
+                            <h3 className="text-sm font-medium text-gray-900 mb-1">
+                                {metricas.total === 0 ? 'Nenhuma pendência' : 'Nenhuma pendência encontrada'}
                             </h3>
-                            <p className="text-gray-500">
+                            <p className="text-xs text-gray-500">
                                 {metricas.total === 0
-                                    ? 'Todas as pendências foram resolvidas com sucesso!'
-                                    : 'Tente ajustar os filtros para encontrar as pendências desejadas'
+                                    ? 'Todas resolvidas'
+                                    : 'Ajuste os filtros'
                                 }
                             </p>
                             {metricas.total > 0 && (
                                 <button
                                     onClick={handleLimparFiltros}
-                                    className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
+                                    className="mt-3 px-3 py-1 bg-slate-600 text-white text-xs rounded hover:bg-slate-700"
                                 >
-                                    🧹 Limpar Todos os Filtros
+                                    Limpar Filtros
                                 </button>
                             )}
                         </div>
                     ) : viewMode === 'cards' ? (
-                        /* Visualização em Cards */
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        /* Cards compactos */
+                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
                             {pendenciasFiltradas.map((pendencia) => {
                                 const diasAberta = pendencia.data_inicio ? Math.floor((new Date().getTime() - new Date(pendencia.data_inicio).getTime()) / (1000 * 60 * 60 * 24)) : 0;
                                 const isUrgente = pendencia.prioridade === 'URGENTE';
@@ -411,104 +373,84 @@ const PendenciasTab: React.FC<PendenciasTabProps> = ({ onResolverViaApontamento 
                                 return (
                                     <div
                                         key={pendencia.id}
-                                        className={`border-2 rounded-xl p-6 hover:shadow-lg transition-all duration-300 ${
-                                            isUrgente ? 'border-red-300 bg-red-50' :
-                                            isVencida ? 'border-orange-300 bg-orange-50' :
-                                            'border-gray-200 bg-white hover:border-purple-300'
+                                        className={`border rounded p-3 hover:shadow-md transition-shadow ${
+                                            isUrgente ? 'border-red-400 bg-red-50' :
+                                            isVencida ? 'border-orange-400 bg-orange-50' :
+                                            'border-gray-300 bg-white hover:border-slate-400'
                                         }`}
                                     >
-                                        {/* Header do Card */}
-                                        <div className="flex justify-between items-start mb-4">
+                                        {/* Header compacto */}
+                                        <div className="flex justify-between items-start mb-2">
                                             <div className="flex-1">
-                                                <div className="flex items-center space-x-3 mb-2">
-                                                    <h3 className="text-xl font-bold text-gray-900">
-                                                        📋 OS {pendencia.numero_os}
+                                                <div className="flex items-center space-x-2 mb-1">
+                                                    <h3 className="text-sm font-bold text-gray-900 font-mono">
+                                                        OS {pendencia.numero_os}
                                                     </h3>
-                                                    <span className={`inline-flex px-3 py-1 text-xs font-bold rounded-full ${
+                                                    <span className={`px-2 py-0.5 text-xs font-medium rounded ${
                                                         pendencia.status === 'ABERTA' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
                                                     }`}>
-                                                        {pendencia.status === 'ABERTA' ? '🔴 ABERTA' : '✅ FECHADA'}
+                                                        {pendencia.status}
                                                     </span>
-                                                    <span className={`inline-flex px-3 py-1 text-xs font-bold rounded-full ${getPriorityColor(pendencia.prioridade)}`}>
-                                                        {pendencia.prioridade === 'URGENTE' ? '🚨' :
-                                                         pendencia.prioridade === 'ALTA' ? '🔥' :
-                                                         pendencia.prioridade === 'NORMAL' ? '📋' : '📝'} {pendencia.prioridade}
+                                                    <span className={`px-2 py-0.5 text-xs font-medium rounded ${getPriorityColor(pendencia.prioridade)}`}>
+                                                        {pendencia.prioridade}
                                                     </span>
                                                 </div>
 
-                                                {/* Indicadores de Tempo */}
-                                                <div className="flex items-center space-x-4 mb-3">
-                                                    <span className={`text-sm font-medium ${
+                                                {/* Indicadores compactos */}
+                                                <div className="flex items-center space-x-3 text-xs">
+                                                    <span className={`font-medium ${
                                                         isVencida ? 'text-red-600' : 'text-gray-600'
                                                     }`}>
-                                                        ⏱️ {diasAberta} dia(s) em aberto
+                                                        {diasAberta}d aberto
                                                     </span>
                                                     {isVencida && (
-                                                        <span className="bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-bold">
-                                                            ⚠️ VENCIDA
+                                                        <span className="bg-red-100 text-red-800 px-1 py-0.5 rounded text-xs font-medium">
+                                                            VENCIDA
                                                         </span>
                                                     )}
                                                 </div>
                                             </div>
 
-                                            {/* Botões de Ação */}
-                                            <div className="ml-4">
+                                            {/* Botões compactos */}
+                                            <div className="ml-2">
                                                 {pendencia.status === 'ABERTA' ? (
-                                                    <div className="flex flex-col space-y-2">
-                                                        <button
-                                                            onClick={() => onResolverViaApontamento && onResolverViaApontamento(pendencia)}
-                                                            className={`px-4 py-2 text-white text-sm font-medium rounded-lg transition-all duration-200 ${
-                                                                isUrgente ? 'bg-blue-600 hover:bg-blue-700 shadow-lg' :
-                                                                'bg-blue-600 hover:bg-blue-700'
-                                                            }`}
-                                                            title="Resolver criando um apontamento"
-                                                        >
-                                                            📝 Resolver via Apontamento
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleResolverPendencia(pendencia)}
-                                                            className={`px-4 py-2 text-white text-sm font-medium rounded-lg transition-all duration-200 ${
-                                                                isUrgente ? 'bg-purple-600 hover:bg-purple-700 shadow-lg' :
-                                                                'bg-purple-600 hover:bg-purple-700'
-                                                            }`}
-                                                            title="Resolver diretamente (modal)"
-                                                        >
-                                                            🔧 Resolver Diretamente
-                                                        </button>
-                                                    </div>
+                                                    <button
+                                                        onClick={() => onResolverViaApontamento && onResolverViaApontamento(pendencia)}
+                                                        className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded"
+                                                        title="Resolver via apontamento"
+                                                    >
+                                                        Resolver
+                                                    </button>
                                                 ) : (
-                                                    <div className="bg-green-100 text-green-800 px-6 py-3 rounded-lg font-medium">
-                                                        ✅ Resolvida
+                                                    <div className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium">
+                                                        Resolvida
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
 
-                                        {/* Informações Principais */}
-                                        <div className="grid grid-cols-2 gap-4 mb-4">
-                                            <div className="bg-gray-50 p-3 rounded-lg">
-                                                <div className="text-xs text-gray-500 font-medium">CLIENTE</div>
-                                                <div className="text-sm font-semibold text-gray-900">{pendencia.cliente}</div>
+                                        {/* Informações compactas */}
+                                        <div className="grid grid-cols-3 gap-2 mb-2 text-xs">
+                                            <div>
+                                                <div className="text-gray-500 font-medium">Cliente</div>
+                                                <div className="font-semibold text-gray-900 truncate">{pendencia.cliente}</div>
                                             </div>
-                                            <div className="bg-gray-50 p-3 rounded-lg">
-                                                <div className="text-xs text-gray-500 font-medium">DATA ABERTURA</div>
-                                                <div className="text-sm font-semibold text-gray-900">
-                                                    {pendencia.data_inicio ? new Date(pendencia.data_inicio).toLocaleDateString('pt-BR') : 'Data não informada'}
+                                            <div>
+                                                <div className="text-gray-500 font-medium">Equipamento</div>
+                                                <div className="font-semibold text-gray-900 truncate">{pendencia.equipamento}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-gray-500 font-medium">Data</div>
+                                                <div className="font-semibold text-gray-900">
+                                                    {pendencia.data_criacao ? new Date(pendencia.data_criacao).toLocaleDateString('pt-BR') : 'N/A'}
                                                 </div>
                                             </div>
                                         </div>
 
-                                        {/* Equipamento */}
-                                        <div className="bg-blue-50 p-3 rounded-lg mb-4">
-                                            <div className="text-xs text-blue-600 font-medium">EQUIPAMENTO</div>
-                                            <div className="text-sm font-semibold text-blue-900">{pendencia.descricao_maquina}</div>
-                                            <div className="text-xs text-blue-700">{pendencia.tipo_maquina}</div>
-                                        </div>
-
-                                        {/* Descrição da Pendência */}
-                                        <div className="border-t border-gray-200 pt-4">
-                                            <div className="text-xs text-gray-500 font-medium mb-2">DESCRIÇÃO DA PENDÊNCIA</div>
-                                            <p className="text-sm text-gray-700 mb-3 leading-relaxed">
+                                        {/* Descrição compacta */}
+                                        <div className="border-t border-gray-200 pt-2">
+                                            <div className="text-xs text-gray-500 font-medium mb-1">Descrição</div>
+                                            <p className="text-xs text-gray-700 line-clamp-2">
                                                 {pendencia.descricao_pendencia}
                                             </p>
 
@@ -547,7 +489,7 @@ const PendenciasTab: React.FC<PendenciasTabProps> = ({ onResolverViaApontamento 
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                     {pendenciasFiltradas.map((pendencia) => {
-                                        const diasAberta = pendencia.data_inicio ? Math.floor((new Date().getTime() - new Date(pendencia.data_inicio).getTime()) / (1000 * 60 * 60 * 24)) : 0;
+                                        const diasAberta = pendencia.data_criacao ? Math.floor((new Date().getTime() - new Date(pendencia.data_criacao).getTime()) / (1000 * 60 * 60 * 24)) : 0;
                                         const isVencida = diasAberta > 7 && pendencia.status === 'ABERTA';
 
                                         return (
@@ -558,8 +500,8 @@ const PendenciasTab: React.FC<PendenciasTabProps> = ({ onResolverViaApontamento 
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                                     {pendencia.cliente}
                                                 </td>
-                                                <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" title={pendencia.descricao_maquina}>
-                                                    {pendencia.descricao_maquina}
+                                                <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" title={pendencia.equipamento}>
+                                                    {pendencia.equipamento}
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -581,22 +523,13 @@ const PendenciasTab: React.FC<PendenciasTabProps> = ({ onResolverViaApontamento 
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                     {pendencia.status === 'ABERTA' ? (
-                                                        <div className="flex space-x-2">
-                                                            <button
-                                                                onClick={() => onResolverViaApontamento && onResolverViaApontamento(pendencia)}
-                                                                className="text-blue-600 hover:text-blue-900 font-medium text-xs"
-                                                                title="Resolver via apontamento"
-                                                            >
-                                                                📝 Apontamento
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleResolverPendencia(pendencia)}
-                                                                className="text-purple-600 hover:text-purple-900 font-medium text-xs"
-                                                                title="Resolver diretamente"
-                                                            >
-                                                                🔧 Direto
-                                                            </button>
-                                                        </div>
+                                                        <button
+                                                            onClick={() => onResolverViaApontamento && onResolverViaApontamento(pendencia)}
+                                                            className="text-blue-600 hover:text-blue-900 font-medium text-xs"
+                                                            title="Resolver via apontamento"
+                                                        >
+                                                            📝 Resolver via Apontamento
+                                                        </button>
                                                     ) : (
                                                         <span className="text-green-600">✅ Resolvida</span>
                                                     )}
@@ -611,16 +544,7 @@ const PendenciasTab: React.FC<PendenciasTabProps> = ({ onResolverViaApontamento 
                 </div>
             </div>
 
-            {/* Modal de Resolução de Pendência */}
-            <ResolucaoPendenciaModal
-                isOpen={modalResolucaoOpen}
-                onClose={() => {
-                    setModalResolucaoOpen(false);
-                    setPendenciaSelecionada(null);
-                }}
-                pendencia={pendenciaSelecionada}
-                onSuccess={handleResolucaoSuccess}
-            />
+
         </div>
     );
 };

@@ -260,7 +260,13 @@ async def get_apontamentos_detalhados_global(
                     if apt.data_hora_fim is not None:
                         data_fim = str(apt.data_hora_fim)
                         hora_fim = apt.data_hora_fim.strftime("%H:%M")
-                except:
+                        print(f"🕐 Apontamento {apt.id}: data_hora_fim = {apt.data_hora_fim}, hora_fim = {hora_fim}")
+                    else:
+                        data_fim = None
+                        hora_fim = None
+                        print(f"🕐 Apontamento {apt.id}: data_hora_fim é NULL")
+                except Exception as e:
+                    print(f"⚠️ Erro ao converter data_hora_fim para apontamento {apt.id}: {e}")
                     data_fim = None
                     hora_fim = None
 

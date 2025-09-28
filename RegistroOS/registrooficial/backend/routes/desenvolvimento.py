@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, desc, text, distinct # Importado 'distinct'
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, date, timedelta
 from pydantic import BaseModel
 import json
@@ -48,6 +48,51 @@ if logger.handlers is None:
 
 
 # =============================================================================
+# FUNÇÕES HELPER
+# =============================================================================
+def _convert_list_to_string(value):
+    """Converter lista para string para compatibilidade com SQLite"""
+    if isinstance(value, list):
+        return ', '.join(str(item) for item in value) if value else None
+    return value
+
+def _get_tipo_maquina_id(nome_tipo, db):
+    """Buscar ID do tipo de máquina pelo nome"""
+    if not nome_tipo:
+        return None
+    try:
+        from app.database_models import TipoMaquina
+        tipo = db.query(TipoMaquina).filter(TipoMaquina.nome == nome_tipo).first()
+        return tipo.id if tipo else None
+    except Exception as e:
+        print(f"[DEBUG] Erro ao buscar tipo_maquina: {e}")
+        return None
+
+def _get_tipo_atividade_id(nome_atividade, db):
+    """Buscar ID do tipo de atividade pelo nome"""
+    if not nome_atividade:
+        return None
+    try:
+        from app.database_models import TipoAtividade
+        atividade = db.query(TipoAtividade).filter(TipoAtividade.nome == nome_atividade).first()
+        return atividade.id if atividade else None
+    except Exception as e:
+        print(f"[DEBUG] Erro ao buscar tipo_atividade: {e}")
+        return None
+
+def _get_descricao_atividade_id(nome_descricao, db):
+    """Buscar ID da descrição de atividade pelo nome"""
+    if not nome_descricao:
+        return None
+    try:
+        from app.database_models import TipoDescricaoAtividade
+        descricao = db.query(TipoDescricaoAtividade).filter(TipoDescricaoAtividade.nome == nome_descricao).first()
+        return descricao.id if descricao else None
+    except Exception as e:
+        print(f"[DEBUG] Erro ao buscar descricao_atividade: {e}")
+        return None
+
+# =============================================================================
 # MODELOS PYDANTIC
 # =============================================================================
 # Modelos para validação de dados nas requisições
@@ -60,7 +105,7 @@ class ApontamentoCreate(BaseModel):
     tipo_atividade: Optional[str] = None
     descricao_atividade: Optional[str] = None
     categoria_maquina: Optional[str] = None
-    subcategorias_maquina: Optional[str] = None
+    subcategorias_maquina: Optional[Union[str, list]] = None
     data_inicio: Optional[str] = None  # Aceitar como string
     hora_inicio: Optional[str] = None
     data_fim: Optional[str] = None  # Aceitar como string
@@ -76,8 +121,8 @@ class ApontamentoCreate(BaseModel):
     usuario_id: Optional[int] = None
     departamento: Optional[str] = None
     setor: Optional[str] = None
-    testes_selecionados: Optional[list] = []
-    testes_exclusivos_selecionados: Optional[list] = []
+    testes_selecionados: Optional[Union[list, dict]] = []
+    testes_exclusivos_selecionados: Optional[Union[list, dict]] = []
     tipo_salvamento: Optional[str] = None
     supervisor_config: Optional[dict] = None
     pendencia_origem_id: Optional[int] = None
@@ -507,15 +552,21 @@ async def criar_apontamento(
     current_user: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    print(f"[DEBUG] FUNÇÃO criar_apontamento CHAMADA!")
     """
     Endpoint para criar novo apontamento.
     Associa o apontamento ao usuário atual.
     Verifica se existe programação ativa e a finaliza automaticamente.
     """
     try:
+        print(f"[DEBUG] criar_apontamento - Dados recebidos: {apontamento.dict()}")
+        print(f"[DEBUG] criar_apontamento - Usuário: {current_user.nome_completo} (ID: {current_user.id})")
         # Buscar OS pelo número
+        print(f"[DEBUG] Buscando OS: {apontamento.numero_os}")
         ordem_servico = db.query(OrdemServico).filter(OrdemServico.os_numero == apontamento.numero_os).first()
+        print(f"[DEBUG] OS encontrada: {ordem_servico is not None}")
         if not ordem_servico:
+            print(f"[DEBUG] OS não encontrada: {apontamento.numero_os}")
             raise HTTPException(status_code=404, detail="Ordem de serviço não encontrada")
 
         # Verificar se existe programação ativa para esta OS e usuário
@@ -570,12 +621,12 @@ async def criar_apontamento(
             criado_por=current_user.id,
             criado_por_email=current_user.email,
             setor=current_user.setor or "MECANICA DIA",
-            # Campos essenciais do apontamento
-            tipo_maquina=apontamento.tipo_maquina,
-            tipo_atividade=apontamento.tipo_atividade,
-            descricao_atividade=apontamento.descricao_atividade,
+            # Campos essenciais do apontamento - convertidos para IDs
+            tipo_maquina=_get_tipo_maquina_id(apontamento.tipo_maquina, db),
+            tipo_atividade=_get_tipo_atividade_id(apontamento.tipo_atividade, db),
+            descricao_atividade=_get_descricao_atividade_id(apontamento.descricao_atividade, db),
             categoria_maquina=apontamento.categoria_maquina,
-            subcategorias_maquina=apontamento.subcategorias_maquina
+            subcategorias_maquina=_convert_list_to_string(apontamento.subcategorias_maquina)
         )
 
         db.add(novo_apontamento)
@@ -626,7 +677,10 @@ async def criar_apontamento(
 
     except Exception as e:
         db.rollback()
-        print(f"Erro ao criar apontamento: {e}")
+        print(f"[ERROR] Erro ao criar apontamento: {e}")
+        print(f"[ERROR] Tipo do erro: {type(e)}")
+        import traceback
+        print(f"[ERROR] Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail="Erro ao criar apontamento")
 
 @router.delete("/minhas-os", operation_id="dev_delete_minhas_os")
@@ -2059,9 +2113,11 @@ async def get_pendencias(
         # Buscar informações do setor através do apontamento origem
         resultado = []
         for pend in pendencias:
-            # Buscar apontamento origem para obter setor
+            # Buscar apontamento origem para obter setor e observação geral
             apontamento = None
             setor_nome = None
+            descricao_pendencia = pend.descricao_pendencia  # Fallback para descrição original
+
             if pend.id_apontamento_origem is not None:
                 apontamento = db.query(ApontamentoDetalhado).filter(
                     ApontamentoDetalhado.id == pend.id_apontamento_origem
@@ -2071,16 +2127,32 @@ async def get_pendencias(
                     setor_obj = db.query(Setor).filter(Setor.id == apontamento.id_setor).first()
                     setor_nome = setor_obj.nome if setor_obj else None
 
+                    # Usar observação geral do apontamento como descrição da pendência
+                    if apontamento.observacoes_gerais:
+                        descricao_pendencia = apontamento.observacoes_gerais
+
+            # Buscar equipamento através do relacionamento OS → Equipamento
+            equipamento_descricao = pend.descricao_maquina  # Fallback para descricao_maquina
+            try:
+                os = db.query(OrdemServico).filter(OrdemServico.os_numero == pend.numero_os).first()
+                if os and os.id_equipamento:
+                    equipamento = db.query(Equipamento).filter(Equipamento.id == os.id_equipamento).first()
+                    if equipamento and equipamento.descricao:
+                        equipamento_descricao = equipamento.descricao
+            except Exception as e:
+                print(f"⚠️ Erro ao buscar equipamento para pendência {pend.id}: {e}")
+
             resultado.append({
                 "id": pend.id,
                 "numero_os": pend.numero_os,
                 "cliente": pend.cliente,
-                "equipamento": pend.descricao_maquina,
+                "equipamento": equipamento_descricao,  # Retorna como 'equipamento' para o frontend
+                "descricao_maquina": equipamento_descricao,  # Alias para compatibilidade
                 "tipo_pendencia": pend.tipo_maquina,
-                "descricao": pend.descricao_pendencia,
+                "descricao": descricao_pendencia,
                 "status": pend.status,
                 "prioridade": pend.prioridade or "NORMAL",
-                "data_criacao": pend.data_inicio.isoformat() if pend.data_inicio is not None else None,
+                "data_criacao": pend.data_criacao.isoformat() if pend.data_criacao is not None else None,
                 "data_resolucao": pend.data_fechamento.isoformat() if pend.data_fechamento is not None else None,
                 "responsavel": f"Usuário {pend.id_responsavel_inicio}",
                 "setor": setor_nome,
