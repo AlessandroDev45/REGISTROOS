@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useSetor } from '../../../../contexts/SetorContext';
 import { useAuth } from '../../../../contexts/AuthContext';
 import api from '../../../../services/api';
@@ -40,8 +41,20 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
     pendenciaParaResolver,
     onPendenciaResolvida
 }) => {
+    const [searchParams] = useSearchParams();
     const { configuracaoAtual, setorAtivo } = useSetor();
     const { user } = useAuth();
+
+    // Detectar se vem de uma programação
+    const osFromUrl = searchParams.get('os');
+    const programacaoId = searchParams.get('programacao_id');
+
+    // Debug dos parâmetros da URL
+    console.log('🔍 Parâmetros da URL detectados:', {
+        osFromUrl,
+        programacaoId,
+        allParams: Object.fromEntries(searchParams.entries())
+    });
 
     // Estados para dropdowns
     const [tiposMaquina, setTiposMaquina] = useState<any[]>([]);
@@ -632,6 +645,23 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
         loadInitialData();
     }, []);
 
+    // Pré-preenchimento da OS agora é feito no DevelopmentTemplate
+
+    // Detectar programação automaticamente quando vem da URL
+    useEffect(() => {
+        if (programacaoId && osFromUrl) {
+            console.log('🎯 Detectando programação da URL:', { programacaoId, osFromUrl });
+            // Simular a detecção de programação com os dados da URL
+            setProgramacaoDetectada({
+                programacao_id: parseInt(programacaoId),
+                os_numero: osFromUrl,
+                status_programacao: 'EM_ANDAMENTO',
+                tem_programacao: true
+            });
+            setMostraOpcoesFinalizacao(true);
+        }
+    }, [programacaoId, osFromUrl]);
+
     // Recarregar tipos de atividade quando tipo de máquina mudar
     useEffect(() => {
         if (formData.selMaq) {
@@ -1060,10 +1090,36 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                 }
             }
 
+            // Se vem de uma programação via URL, finalizar a programação
+            if (programacaoId && !response.data.programacao_finalizada) {
+                try {
+                    await api.patch(`/pcp/programacoes/${programacaoId}/status`, {
+                        status: 'CONCLUIDA',
+                        observacoes_finais: formData.observacao || 'Programação finalizada via apontamento'
+                    });
+                    console.log('✅ Programação finalizada via URL com observações do apontamento');
+                } catch (errorProgramacao) {
+                    console.error('❌ Erro ao finalizar programação via URL:', errorProgramacao);
+                }
+            }
+
+            // Se há programação detectada (não via URL), também finalizar
+            if (programacaoDetectada && !response.data.programacao_finalizada && !programacaoId) {
+                try {
+                    await api.patch(`/pcp/programacoes/${programacaoDetectada.programacao_id}/status`, {
+                        status: 'CONCLUIDA',
+                        observacoes_finais: formData.observacao || 'Programação finalizada via apontamento'
+                    });
+                    console.log('✅ Programação detectada finalizada com observações do apontamento');
+                } catch (errorProgramacao) {
+                    console.error('❌ Erro ao finalizar programação detectada:', errorProgramacao);
+                }
+            }
+
             // Verificar se programação foi finalizada automaticamente
             let mensagem = `✅ Apontamento salvo com sucesso! OS: ${response.data.numero_os || response.data.os_numero}`;
 
-            if (response.data.programacao_finalizada) {
+            if (response.data.programacao_finalizada || programacaoId) {
                 mensagem += '\n🎯 Programação finalizada automaticamente!';
                 // Limpar detecção de programação
                 setProgramacaoDetectada(null);

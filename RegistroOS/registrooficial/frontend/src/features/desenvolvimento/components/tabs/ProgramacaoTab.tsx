@@ -79,18 +79,32 @@ const ProgramacaoTab: React.FC = () => {
                 console.log('🔧 Após deduplicação:', programacoesDeduplicadas.length);
 
                 // Converter para formato de OrdemServico para compatibilidade
-                const ordensFormatadas: OrdemServico[] = programacoesDeduplicadas.map((prog: any) => ({
-                    id: prog.id,
-                    numero: prog.os_numero || prog.numero || String(prog.id),
-                    status: prog.status || 'PROGRAMADA',
-                    responsavel_atual: prog.responsavel_nome || prog.responsavel_atual,
-                    data_prevista: prog.inicio_previsto?.split('T')[0] || prog.data_prevista,
-                    descricao: prog.observacoes || prog.descricao || `Programação ${prog.id}`,
-                    prioridade: prog.prioridade || 'MEDIA',
-                    tempo_estimado: prog.tempo_estimado || 8,
-                    cliente: prog.cliente_nome || '', // Dados reais do cliente
-                    equipamento: prog.equipamento_descricao || '' // Dados reais do equipamento
-                }));
+                const ordensFormatadas: OrdemServico[] = programacoesDeduplicadas.map((prog: any) => {
+                    // Calcular tempo estimado baseado na diferença entre início e fim previsto
+                    let tempoEstimado = 8; // Valor padrão
+                    if (prog.inicio_previsto && prog.fim_previsto) {
+                        const inicio = new Date(prog.inicio_previsto);
+                        const fim = new Date(prog.fim_previsto);
+                        const diffMs = fim.getTime() - inicio.getTime();
+                        const diffHours = diffMs / (1000 * 60 * 60);
+                        if (diffHours > 0) {
+                            tempoEstimado = Math.round(diffHours * 10) / 10; // Arredondar para 1 casa decimal
+                        }
+                    }
+
+                    return {
+                        id: prog.id,
+                        numero: prog.os_numero || prog.numero || String(prog.id),
+                        status: prog.status || 'PROGRAMADA',
+                        responsavel_atual: prog.responsavel_nome || prog.responsavel_atual,
+                        data_prevista: prog.inicio_previsto?.split('T')[0] || prog.data_prevista,
+                        descricao: prog.observacoes || prog.descricao || `Programação ${prog.id}`,
+                        prioridade: prog.prioridade || 'MEDIA',
+                        tempo_estimado: tempoEstimado,
+                        cliente: prog.cliente_nome || '', // Dados reais do cliente
+                        equipamento: prog.equipamento_descricao || '' // Dados reais do equipamento
+                    };
+                });
                 setOrdensServico(ordensFormatadas);
 
                 // Usando apenas ordensServico - sem conversão desnecessária

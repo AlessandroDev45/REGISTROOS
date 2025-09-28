@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSetor } from '../../../../contexts/SetorContext';
 import { useAuth } from '../../../../contexts/AuthContext';
 import api from '../../../../services/api';
@@ -43,6 +44,7 @@ interface Programacao {
 }
 
 const MinhasOsTab: React.FC = () => {
+    const navigate = useNavigate();
     const { setorAtivo } = useSetor();
     const { user } = useAuth();
 
@@ -159,37 +161,49 @@ const MinhasOsTab: React.FC = () => {
     useEffect(() => {
         if (activeInternalTab === 'programacoes') {
             fetchProgramacoes();
+
+            // Atualizar automaticamente a cada 30 segundos quando na aba de programações
+            const interval = setInterval(() => {
+                fetchProgramacoes();
+            }, 30000);
+
+            return () => clearInterval(interval);
         }
     }, [activeInternalTab, user]);
 
     // Funções para gerenciar programações
     const iniciarExecucao = async (programacao: Programacao) => {
         try {
+            console.log('🚀 [MinhasOsTab] Iniciando execução:', {
+                programacao: programacao.id,
+                os_numero: programacao.os_numero,
+                setorAtivo: setorAtivo
+            });
+
+            // Atualizar status da programação para EM_ANDAMENTO
             await api.patch(`/pcp/programacoes/${programacao.id}/status`, {
                 status: 'EM_ANDAMENTO'
             });
 
-            alert('✅ Execução iniciada com sucesso!');
-            fetchProgramacoes();
+            console.log('✅ Status da programação atualizado');
+
+            // Redirecionar para página de apontamento com OS pré-preenchida
+            // Usar o setor ativo atual
+            const setorSlug = setorAtivo?.chave || 'laboratorio-eletrico';
+            const targetUrl = `/desenvolvimento/${setorSlug}?tab=apontamento&os=${programacao.os_numero}&programacao_id=${programacao.id}`;
+
+            console.log('🔗 Redirecionando para:', targetUrl);
+
+            // Navegar para apontamento com parâmetros da programação
+            navigate(targetUrl);
+
         } catch (error) {
             console.error('Erro ao iniciar execução:', error);
             alert('❌ Erro ao iniciar execução');
         }
     };
 
-    const finalizarExecucao = async (programacao: Programacao) => {
-        try {
-            await api.patch(`/pcp/programacoes/${programacao.id}/status`, {
-                status: 'AGUARDANDO_APROVACAO'
-            });
 
-            alert('✅ Execução finalizada! Aguardando aprovação do supervisor.');
-            fetchProgramacoes();
-        } catch (error) {
-            console.error('Erro ao finalizar execução:', error);
-            alert('❌ Erro ao finalizar execução');
-        }
-    };
 
     // Funções utilitárias para programações
     const getStatusColor = (status: string) => {
@@ -666,12 +680,9 @@ const MinhasOsTab: React.FC = () => {
                                         )}
 
                                         {programacao.status === 'EM_ANDAMENTO' && (
-                                            <button
-                                                onClick={() => finalizarExecucao(programacao)}
-                                                className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
-                                            >
-                                                ✅ Finalizar
-                                            </button>
+                                            <div className="text-sm text-blue-600 font-medium">
+                                                🔄 Em andamento - Finalize via apontamento
+                                            </div>
                                         )}
                                     </div>
                                 </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSetor } from '../../contexts/SetorContext';
 import { ConfiguracaoSetor } from '../../pages/common/TiposApi';
@@ -19,6 +20,7 @@ import RelatorioCompletoModal from '../../components/RelatorioCompletoModal';
 interface DevelopmentTemplateProps {
   sectorConfig: ConfiguracaoSetor;
   sectorKey: string;
+  initialTab?: string;
 }
 
 interface TabItem {
@@ -28,9 +30,20 @@ interface TabItem {
   badge?: number;
 }
 
-const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig, sectorKey }) => {
+const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig, sectorKey, initialTab }) => {
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { setorAtivo } = useSetor();
+
+  // Detectar parâmetros da URL para programação
+  const osFromUrl = searchParams.get('os');
+  const programacaoId = searchParams.get('programacao_id');
+
+  // Debug dos parâmetros da URL
+  console.log('🔍 [DevelopmentTemplate] Parâmetros da URL:', {
+    osFromUrl,
+    programacaoId
+  });
 
   // Buscar contagem de programações para o setor
   useEffect(() => {
@@ -54,9 +67,18 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
     const interval = setInterval(fetchProgramacoesCount, 30000);
     return () => clearInterval(interval);
   }, [setorAtivo]);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(initialTab || 'dashboard');
   const [loading, setLoading] = useState(false);
   const [programacoesCount, setProgramacoesCount] = useState(0);
+
+  // Atualizar aba quando initialTab mudar
+  useEffect(() => {
+    if (initialTab && initialTab !== activeTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
+
 
   // Estados para o formulário de apontamento
   interface FormData {
@@ -83,6 +105,51 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
   // Estados para comunicação entre abas (resolução de pendências)
   const [pendenciaParaResolver, setPendenciaParaResolver] = useState<any>(null);
   const [dadosPreenchidosApontamento, setDadosPreenchidosApontamento] = useState<any>(null);
+
+  // Pré-preencher formData quando vem de uma programação
+  useEffect(() => {
+    console.log('🔍 [DevelopmentTemplate] useEffect preenchimento executado:', {
+      osFromUrl,
+      currentInpNumOS: formData.inpNumOS,
+      shouldFill: osFromUrl && (!formData.inpNumOS || formData.inpNumOS === ''),
+      formDataKeys: Object.keys(formData)
+    });
+
+    if (osFromUrl) {
+      console.log('🎯 [DevelopmentTemplate] Forçando preenchimento da OS:', osFromUrl);
+
+      // Remover zeros à esquerda e garantir máximo 5 dígitos
+      const osFormatted = osFromUrl.replace(/^0+/, '').slice(0, 5);
+
+      setFormData(prev => ({
+        ...prev,
+        inpNumOS: osFormatted
+      }));
+
+      // Buscar dados da OS automaticamente após preencher
+      const buscarDadosOS = async () => {
+        try {
+          console.log('🔍 [DevelopmentTemplate] Buscando dados da OS:', osFormatted);
+          const response = await api.get(`/desenvolvimento/os/${osFormatted}`);
+
+          if (response.data) {
+            console.log('✅ [DevelopmentTemplate] OS encontrada, preenchendo status:', response.data.status);
+            setFormData(prev => ({
+              ...prev,
+              statusOS: response.data.status || '',
+              inpCliente: response.data.cliente || '',
+              inpEquipamento: response.data.equipamento || ''
+            }));
+          }
+        } catch (error) {
+          console.log('⚠️ [DevelopmentTemplate] Erro ao buscar OS:', error);
+        }
+      };
+
+      // Buscar dados da OS com delay para evitar múltiplas chamadas
+      setTimeout(buscarDadosOS, 1000);
+    }
+  }, [osFromUrl]);
 
   // Definir abas baseadas no nível de privilégio do usuário
   const getAvailableTabs = (): TabItem[] => {

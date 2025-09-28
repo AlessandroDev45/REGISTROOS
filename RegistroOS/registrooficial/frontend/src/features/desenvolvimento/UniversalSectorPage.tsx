@@ -1,14 +1,18 @@
 import React, { Suspense, useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useSetor } from '../../contexts/SetorContext';
 import { setorMap, initializeSetorMap, initializeAvailableSectors, getAvailableSectors } from './setorMap';
 import DevelopmentTemplate from './DevelopmentTemplate';
 
 const UniversalSectorPage: React.FC = () => {
     const { setor: setorChave } = useParams<{ setor: string }>();
+    const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { alterarSetor, setCarregando } = useSetor();
-    const [activeTab, setActiveTab] = useState('apontamento');
+
+    // Detectar aba da URL ou usar padrão
+    const tabFromUrl = searchParams.get('tab');
+    const [activeTab, setActiveTab] = useState(tabFromUrl || 'apontamento');
     const [setorNome, setSetorNome] = useState<string>('');
     const [sectorConfig, setSectorConfig] = useState<any>(null);
 
@@ -70,6 +74,14 @@ const UniversalSectorPage: React.FC = () => {
         loadSector();
     }, [setorChave, alterarSetor, setCarregando, navigate]);
 
+    // Atualizar aba quando parâmetros da URL mudarem
+    useEffect(() => {
+        const tabFromUrl = searchParams.get('tab');
+        if (tabFromUrl && tabFromUrl !== activeTab) {
+            setActiveTab(tabFromUrl);
+        }
+    }, [searchParams, activeTab]);
+
     if (!setorChave || !sectorConfig) {
         return (
             <div className="flex justify-center items-center h-64">
@@ -85,6 +97,7 @@ const UniversalSectorPage: React.FC = () => {
         <DevelopmentTemplate
             sectorConfig={sectorConfig}
             sectorKey={setorChave}
+            initialTab={activeTab}
         />
     );
 };

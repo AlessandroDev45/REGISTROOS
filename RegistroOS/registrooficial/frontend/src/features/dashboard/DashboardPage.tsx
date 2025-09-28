@@ -592,110 +592,208 @@ const [dashboardData, setDashboardData] = useState<any>({
         </div>
     );
 
-    // Componente de métricas de programações - COMPACTO
-    const ProgramacoesComponent: React.FC = () => (
-        <div className="bg-white p-3 rounded border border-gray-200">
-            <h3 className="text-sm font-semibold mb-2">Programações</h3>
-            <div className="grid grid-cols-4 gap-2 mb-2">
-                <div className="text-center">
-                    <p className="text-xs text-gray-600">Total</p>
-                    <p className="text-sm font-bold text-gray-700">
-                        {loading ? '...' : dashboardData.programacoes?.total || 0}
-                    </p>
+    // Componente combinado de Programações e Pendências - MESMA ALTURA DOS GRÁFICOS
+    const ProgramacoesPendenciasComponent: React.FC = () => (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col h-full">
+            <h2 className="text-sm font-semibold text-gray-700 mb-3">📋 Programações & Pendências</h2>
+
+            <div className="flex-1 flex flex-col">
+                {/* Seção Programações */}
+                <div className="mb-4">
+                    <h4 className="text-xs font-medium text-gray-700 mb-3 flex items-center">
+                        <span className="w-3 h-3 bg-blue-500 rounded-full mr-2"></span>
+                        🏭 Programações
+                    </h4>
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div className="bg-blue-50 p-2 rounded-lg text-center">
+                            <p className="text-xs text-blue-600 font-medium">Total</p>
+                            <p className="text-lg font-bold text-blue-700">
+                                {loading ? '...' : dashboardData.programacoes?.total || 0}
+                            </p>
+                        </div>
+                        <div className="bg-purple-50 p-2 rounded-lg text-center">
+                            <p className="text-xs text-purple-600 font-medium">Enviadas</p>
+                            <p className="text-lg font-bold text-purple-700">
+                                {loading ? '...' : dashboardData.programacoes?.enviadas || 0}
+                            </p>
+                        </div>
+                        <div className="bg-yellow-50 p-2 rounded-lg text-center">
+                            <p className="text-xs text-yellow-600 font-medium">Andamento</p>
+                            <p className="text-lg font-bold text-yellow-700">
+                                {loading ? '...' : dashboardData.programacoes?.emAndamento || 0}
+                            </p>
+                        </div>
+                        <div className="bg-green-50 p-2 rounded-lg text-center">
+                            <p className="text-xs text-green-600 font-medium">Concluídas</p>
+                            <p className="text-lg font-bold text-green-700">
+                                {loading ? '...' : dashboardData.programacoes?.concluidas || 0}
+                            </p>
+                        </div>
+                    </div>
                 </div>
-                <div className="text-center">
-                    <p className="text-xs text-gray-600">Enviadas</p>
-                    <p className="text-sm font-bold text-gray-700">
-                        {loading ? '...' : dashboardData.programacoes?.enviadas || 0}
-                    </p>
+
+                {/* Seção Pendências */}
+                <div className="mb-4">
+                    <h4 className="text-xs font-medium text-gray-700 mb-3 flex items-center">
+                        <span className="w-3 h-3 bg-red-500 rounded-full mr-2"></span>
+                        ⚠️ Pendências
+                    </h4>
+                    <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-gray-50 p-2 rounded-lg text-center">
+                            <p className="text-xs text-gray-600 font-medium">Total</p>
+                            <p className="text-lg font-bold text-gray-700">
+                                {loading ? '...' : dashboardData.pendencias?.total || 0}
+                            </p>
+                        </div>
+                        <div className="bg-red-50 p-2 rounded-lg text-center">
+                            <p className="text-xs text-red-600 font-medium">Abertas</p>
+                            <p className="text-lg font-bold text-red-700">
+                                {loading ? '...' : dashboardData.pendencias?.abertas || 0}
+                            </p>
+                        </div>
+                        <div className="bg-green-50 p-2 rounded-lg text-center">
+                            <p className="text-xs text-green-600 font-medium">Fechadas</p>
+                            <p className="text-lg font-bold text-green-700">
+                                {loading ? '...' : dashboardData.pendencias?.fechadas || 0}
+                            </p>
+                        </div>
+                    </div>
                 </div>
-                <div className="text-center">
-                    <p className="text-xs text-gray-600">Andamento</p>
-                    <p className="text-sm font-bold text-gray-700">
-                        {loading ? '...' : dashboardData.programacoes?.emAndamento || 0}
-                    </p>
-                </div>
-                <div className="text-center">
-                    <p className="text-xs text-gray-600">Concluídas</p>
-                    <p className="text-sm font-bold text-gray-700">
-                        {loading ? '...' : dashboardData.programacoes?.concluidas || 0}
-                    </p>
+
+                {/* Itens Recentes - Flex-grow para ocupar espaço restante */}
+                <div className="flex-1 min-h-0">
+                    <h4 className="text-xs font-medium text-gray-700 mb-2">📋 Recentes</h4>
+                    <div className="h-full overflow-y-auto space-y-2">
+                        {dashboardData.programacoes?.recentes && dashboardData.programacoes.recentes.length > 0 && (
+                            <div>
+                                <p className="text-xs font-medium text-blue-600 mb-1">Programações:</p>
+                                {dashboardData.programacoes.recentes.slice(0, 2).map((prog: any, index: number) => (
+                                    <div key={index} className="text-xs bg-blue-50 p-2 rounded mb-1 border-l-2 border-blue-300">
+                                        <div className="flex justify-between items-center">
+                                            <span className="font-medium text-blue-800">OS {prog.os_numero}</span>
+                                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                                prog.status === 'CONCLUIDA' ? 'bg-green-100 text-green-800' :
+                                                prog.status === 'EM_ANDAMENTO' ? 'bg-yellow-100 text-yellow-800' :
+                                                'bg-gray-100 text-gray-800'
+                                            }`}>
+                                                {prog.status}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {dashboardData.pendencias?.recentes && dashboardData.pendencias.recentes.length > 0 && (
+                            <div>
+                                <p className="text-xs font-medium text-red-600 mb-1">Pendências:</p>
+                                {dashboardData.pendencias.recentes.slice(0, 2).map((pend: any, index: number) => (
+                                    <div key={index} className="text-xs bg-red-50 p-2 rounded mb-1 border-l-2 border-red-300">
+                                        <div className="flex justify-between items-center">
+                                            <span className="font-medium text-red-800">OS {pend.numero_os}</span>
+                                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                                pend.status === 'FECHADA' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                            }`}>
+                                                {pend.status}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {(!dashboardData.programacoes?.recentes || dashboardData.programacoes.recentes.length === 0) &&
+                         (!dashboardData.pendencias?.recentes || dashboardData.pendencias.recentes.length === 0) && (
+                            <div className="flex items-center justify-center h-full text-gray-400">
+                                <div className="text-center">
+                                    <p className="text-xs">📭</p>
+                                    <p className="text-xs">Nenhum item recente</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
-            {dashboardData.programacoes?.recentes && dashboardData.programacoes.recentes.length > 0 && (
-                <div className="max-h-16 overflow-y-auto">
-                    {dashboardData.programacoes.recentes.slice(0, 2).map((prog: any, index: number) => (
-                        <div key={index} className="text-xs bg-gray-50 p-1 rounded mb-1">
-                            <span className="font-medium">OS {prog.os_numero}</span> -
-                            <span className={`ml-1 px-1 rounded text-xs ${
-                                prog.status === 'CONCLUIDA' ? 'bg-green-100 text-green-800' :
-                                prog.status === 'EM_ANDAMENTO' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-gray-100 text-gray-800'
-                            }`}>
-                                {prog.status}
-                            </span>
-                        </div>
-                    ))}
-                </div>
-            )}
         </div>
     );
 
-    // Componente de métricas de pendências - COMPACTO
-    const PendenciasComponent: React.FC = () => (
-        <div className="bg-white p-3 rounded border border-gray-200">
-            <h3 className="text-sm font-semibold mb-2">Pendências</h3>
-            <div className="grid grid-cols-3 gap-2 mb-2">
-                <div className="text-center">
-                    <p className="text-xs text-gray-600">Total</p>
-                    <p className="text-sm font-bold text-gray-700">
-                        {loading ? '...' : dashboardData.pendencias?.total || 0}
-                    </p>
-                </div>
-                <div className="text-center">
-                    <p className="text-xs text-gray-600">Abertas</p>
-                    <p className="text-sm font-bold text-gray-700">
-                        {loading ? '...' : dashboardData.pendencias?.abertas || 0}
-                    </p>
-                </div>
-                <div className="text-center">
-                    <p className="text-xs text-gray-600">Fechadas</p>
-                    <p className="text-sm font-bold text-gray-700">
-                        {loading ? '...' : dashboardData.pendencias?.fechadas || 0}
-                    </p>
-                </div>
-            </div>
-            {dashboardData.pendencias?.recentes && dashboardData.pendencias.recentes.length > 0 && (
-                <div className="max-h-16 overflow-y-auto">
-                    {dashboardData.pendencias.recentes.slice(0, 2).map((pend: any, index: number) => (
-                        <div key={index} className="text-xs bg-gray-50 p-1 rounded mb-1">
-                            <span className="font-medium">OS {pend.numero_os}</span> -
-                            <span className={`ml-1 px-1 rounded text-xs ${
-                                pend.status === 'FECHADA' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                            }`}>
-                                {pend.status}
-                            </span>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-
-    // Componente de gráfico de performance por departamento
+    // Componente de gráfico de horas trabalhadas por departamento (últimos 6 meses)
     const PerformanceDepartamentosComponent: React.FC = () => {
         const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
+        // Se não há dados de performance, mostrar gráfico de barras simples com totais
+        if (!dashboardData.performanceDepartamentos || dashboardData.performanceDepartamentos.length === 0) {
+            return (
+                <div className="bg-white p-4 rounded-lg border border-gray-200">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">📊 Horas por Departamento</h3>
+                    <div className="h-32">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={dashboardData.departamentos || []}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                <XAxis
+                                    dataKey="nome"
+                                    tick={{ fontSize: 9 }}
+                                    angle={-45}
+                                    textAnchor="end"
+                                    height={40}
+                                />
+                                <YAxis tick={{ fontSize: 10 }} />
+                                <Tooltip
+                                    formatter={(value: any) => [`${value}h`, 'Total de Horas']}
+                                    labelFormatter={(label: any) => `Departamento: ${label}`}
+                                    contentStyle={{
+                                        backgroundColor: '#f8fafc',
+                                        border: '1px solid #e2e8f0',
+                                        borderRadius: '8px',
+                                        fontSize: '12px'
+                                    }}
+                                />
+                                <Bar
+                                    dataKey="totalHoras"
+                                    fill="#3B82F6"
+                                    radius={[2, 2, 0, 0]}
+                                />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            );
+        }
+
+        // Se há dados de performance mensal, mostrar gráfico de linha
         return (
             <div className="bg-white p-4 rounded-lg border border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Performance Departamentos (6m)</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">📈 Evolução Mensal - Departamentos</h3>
+                <p className="text-xs text-gray-500 mb-2">Horas trabalhadas nos últimos 6 meses</p>
                 <div className="h-32">
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={dashboardData.performanceDepartamentos}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                            <XAxis
+                                dataKey="mes"
+                                tick={{ fontSize: 10 }}
+                                tickFormatter={(value) => {
+                                    // Formatar mês para exibição mais clara
+                                    if (typeof value === 'string' && value.includes('-')) {
+                                        const [, month] = value.split('-');
+                                        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+                                                          'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                                        return monthNames[parseInt(month) - 1] || value;
+                                    }
+                                    return value;
+                                }}
+                            />
                             <YAxis tick={{ fontSize: 10 }} />
-                            <Tooltip formatter={(value, name) => [`${value}h`, name]} />
+                            <Tooltip
+                                formatter={(value: any, name: any) => [`${value}h`, name]}
+                                labelFormatter={(label: any) => `Mês: ${label}`}
+                                contentStyle={{
+                                    backgroundColor: '#f8fafc',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '8px',
+                                    fontSize: '12px'
+                                }}
+                            />
                             <Legend wrapperStyle={{ fontSize: 9 }} />
                             {(dashboardData.departamentos || []).slice(0, 3).map((dept: any, index: number) => (
                                 <Line
@@ -863,68 +961,13 @@ const [dashboardData, setDashboardData] = useState<any>({
                     </div>
 
                     {/* GRID PRINCIPAL - LARGURA TOTAL SEM SCROLL */}
-                    <div className="flex-1 grid grid-cols-1 xl:grid-cols-4 gap-3 min-h-0">
-                        {/* COLUNA 1: PROGRAMAÇÕES */}
-                        <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col">
-                            <h2 className="text-sm font-semibold text-gray-700 mb-3">Programações</h2>
-                            <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 flex-1">
-                                <div className="flex items-center justify-between mb-3">
-                                    <h3 className="font-medium text-gray-700">Total</h3>
-                                    <span className="bg-gray-500 text-white text-xs px-2 py-1 rounded-full">
-                                        {loading ? '...' : dashboardData.programacoes?.total || 0}
-                                    </span>
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-xs text-gray-600">Enviadas</span>
-                                        <span className="font-medium text-gray-700 bg-white px-2 py-1 rounded text-xs">
-                                            {loading ? '...' : dashboardData.programacoes?.enviadas || 0}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-xs text-gray-600">Em Andamento</span>
-                                        <span className="font-medium text-gray-700 bg-white px-2 py-1 rounded text-xs">
-                                            {loading ? '...' : dashboardData.programacoes?.emAndamento || 0}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-xs text-gray-600">Concluídas</span>
-                                        <span className="font-medium text-gray-700 bg-white px-2 py-1 rounded text-xs">
-                                            {loading ? '...' : dashboardData.programacoes?.concluidas || 0}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
+                    <div className="flex-1 grid grid-cols-1 xl:grid-cols-3 gap-3 min-h-0">
+                        {/* COLUNA 1: PROGRAMAÇÕES & PENDÊNCIAS COMBINADAS */}
+                        <div className="flex flex-col h-full">
+                            <ProgramacoesPendenciasComponent />
                         </div>
 
-                        {/* COLUNA 2: PENDÊNCIAS */}
-                        <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col">
-                            <h2 className="text-sm font-semibold text-gray-700 mb-3">Pendências</h2>
-                            <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 flex-1">
-                                <div className="flex items-center justify-between mb-3">
-                                    <h3 className="font-medium text-gray-700">Total</h3>
-                                    <span className="bg-gray-500 text-white text-xs px-2 py-1 rounded-full">
-                                        {loading ? '...' : dashboardData.pendencias?.total || 0}
-                                    </span>
-                                </div>
-                                <div className="space-y-2">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-xs text-gray-600">Abertas</span>
-                                        <span className="font-medium text-gray-700 bg-white px-2 py-1 rounded text-xs">
-                                            {loading ? '...' : dashboardData.pendencias?.abertas || 0}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-xs text-gray-600">Fechadas</span>
-                                        <span className="font-medium text-gray-700 bg-white px-2 py-1 rounded text-xs">
-                                            {loading ? '...' : dashboardData.pendencias?.fechadas || 0}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* COLUNA 3: PERFORMANCE DEPARTAMENTOS */}
+                        {/* COLUNA 2: PERFORMANCE DEPARTAMENTOS */}
                         <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col">
                             <h2 className="text-sm font-semibold text-gray-700 mb-3">Departamentos</h2>
                             <div className="flex-1 min-h-0">
@@ -932,36 +975,82 @@ const [dashboardData, setDashboardData] = useState<any>({
                             </div>
                         </div>
 
-                        {/* COLUNA 4: TOP SETORES */}
+                        {/* COLUNA 3: TOP SETORES (PIZZA) */}
                         <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col">
-                            <h2 className="text-sm font-semibold text-gray-700 mb-3">Top Setores</h2>
-                            <div className="flex-1 min-h-0">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart
-                                        data={(dashboardData.topSetores || []).slice(0, 6)}
-                                        margin={{ top: 10, right: 10, left: 10, bottom: 40 }}
-                                    >
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                        <XAxis
-                                            dataKey="nome"
-                                            fontSize={10}
-                                            angle={-45}
-                                            textAnchor="end"
-                                            height={40}
-                                            interval={0}
-                                        />
-                                        <YAxis fontSize={10} />
-                                        <Tooltip
-                                            contentStyle={{
-                                                backgroundColor: '#f8fafc',
-                                                border: '1px solid #e2e8f0',
-                                                borderRadius: '8px',
-                                                fontSize: '12px'
-                                            }}
-                                        />
-                                        <Bar dataKey="totalHoras" fill="#3B82F6" radius={[2, 2, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
+                            <h2 className="text-sm font-semibold text-gray-700 mb-3">🏭 Top 5 Setores (Horas)</h2>
+                            <div className="flex-1 min-h-0 flex flex-col">
+                                {/* Gráfico de Pizza */}
+                                <div className="flex-1" style={{ minHeight: '200px' }}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie
+                                                data={(dashboardData.topSetores || []).slice(0, 5).map((setor: any, index: number) => ({
+                                                    ...setor,
+                                                    nomeAbrev: setor.nome.length > 20 ? setor.nome.substring(0, 20) + '...' : setor.nome,
+                                                    fill: [
+                                                        '#3B82F6', // Azul
+                                                        '#10B981', // Verde
+                                                        '#F59E0B', // Amarelo
+                                                        '#EF4444', // Vermelho
+                                                        '#8B5CF6'  // Roxo
+                                                    ][index % 5]
+                                                }))}
+                                                dataKey="totalHoras"
+                                                nameKey="nomeAbrev"
+                                                cx="50%"
+                                                cy="45%"
+                                                outerRadius={70}
+                                                innerRadius={25}
+                                                paddingAngle={3}
+                                                label={({ percent }: any) =>
+                                                    percent > 5 ? `${(percent * 100).toFixed(0)}%` : ''
+                                                }
+                                                labelLine={false}
+                                            />
+                                            <Tooltip
+                                                formatter={(value: any) => [`${value}h`, 'Horas Trabalhadas']}
+                                                labelFormatter={(label: any) => {
+                                                    // Encontrar o setor original pelo nome abreviado
+                                                    const setorOriginal = (dashboardData.topSetores || []).find((s: any) =>
+                                                        s.nome.startsWith(label.replace('...', ''))
+                                                    );
+                                                    return `Setor: ${setorOriginal?.nome || label}`;
+                                                }}
+                                                contentStyle={{
+                                                    backgroundColor: '#f8fafc',
+                                                    border: '1px solid #e2e8f0',
+                                                    borderRadius: '8px',
+                                                    fontSize: '11px',
+                                                    maxWidth: '250px'
+                                                }}
+                                            />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+
+                                {/* Lista dos setores com nomes completos */}
+                                <div className="mt-2 max-h-20 overflow-y-auto">
+                                    <div className="grid grid-cols-1 gap-1">
+                                        {(dashboardData.topSetores || []).slice(0, 5).map((setor: any, index: number) => (
+                                            <div key={index} className="flex items-center text-xs">
+                                                <div
+                                                    className="w-3 h-3 rounded-full mr-2 flex-shrink-0"
+                                                    style={{
+                                                        backgroundColor: [
+                                                            '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'
+                                                        ][index % 5]
+                                                    }}
+                                                ></div>
+                                                <span className="text-gray-700 truncate" title={setor.nome}>
+                                                    {setor.nome.length > 25 ? setor.nome.substring(0, 25) + '...' : setor.nome}
+                                                </span>
+                                                <span className="ml-auto text-gray-600 font-medium">
+                                                    {setor.totalHoras}h
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

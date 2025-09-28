@@ -759,12 +759,77 @@ async def aprovar_apontamento(
         db.commit()
         db.refresh(apontamento)
 
-        return {
+        # Verificar se há programação associada a este apontamento e aprová-la automaticamente
+        programacao_aprovada = None
+        try:
+            # Buscar programação pela OS do apontamento
+            from app.database_models import Programacao, OrdemServico
+
+            print(f"🔍 Buscando programação para OS: {apontamento.numero_os}")
+
+            # Buscar programação diretamente usando JOIN para garantir que encontramos
+            programacao = db.query(Programacao).join(
+                OrdemServico, Programacao.id_ordem_servico == OrdemServico.id
+            ).filter(
+                OrdemServico.os_numero == apontamento.numero_os,
+                Programacao.status == 'CONCLUIDA'
+            ).first()
+
+            if programacao:
+                print(f"✅ Programação encontrada: ID {programacao.id}, Status: {programacao.status}")
+
+                # Aprovar a programação automaticamente
+                programacao.status = 'APROVADA'
+                # Adicionar campos de aprovação se existirem na tabela
+                try:
+                    programacao.data_aprovacao = datetime.now()
+                    programacao.supervisor_aprovacao = current_user.nome_completo
+                except AttributeError:
+                    # Campos podem não existir na tabela
+                    pass
+
+                # Adicionar observação sobre aprovação automática
+                obs_aprovacao = f"Programação aprovada automaticamente via aprovação do apontamento #{apontamento_id} em {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+                if programacao.observacoes:
+                    programacao.observacoes += f"\n{obs_aprovacao}"
+                else:
+                    programacao.observacoes = obs_aprovacao
+
+                db.commit()
+
+                # Buscar o os_numero através da relação
+                os_numero = db.query(OrdemServico.os_numero).filter(
+                    OrdemServico.id == programacao.id_ordem_servico
+                ).scalar()
+
+                programacao_aprovada = {
+                    "id": programacao.id,
+                    "os_numero": os_numero,
+                    "status": programacao.status
+                }
+
+                print(f"✅ Programação {programacao.id} aprovada automaticamente!")
+            else:
+                print(f"⚠️ Nenhuma programação CONCLUIDA encontrada para OS {apontamento.numero_os}")
+
+        except Exception as e:
+            print(f"❌ Erro ao aprovar programação automaticamente: {e}")
+            import traceback
+            traceback.print_exc()
+            # Não falhar a aprovação do apontamento se houver erro na programação
+
+        response_data = {
             "message": "Apontamento aprovado com sucesso",
             "apontamento_id": apontamento_id,
             "aprovado_por": current_user.nome_completo,
             "data_aprovacao": apontamento.data_aprovacao_supervisor
         }
+
+        if programacao_aprovada:
+            response_data["programacao_aprovada"] = programacao_aprovada
+            response_data["message"] += " e programação associada aprovada automaticamente"
+
+        return response_data
 
     except HTTPException:
         raise

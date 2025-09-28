@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../../../../services/api';
 
 interface Programacao {
@@ -28,6 +29,7 @@ interface Apontamento {
 }
 
 const MinhasProgramacoesTab: React.FC = () => {
+    const navigate = useNavigate();
     const [programacoes, setProgramacoes] = useState<Programacao[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedProgramacao, setSelectedProgramacao] = useState<Programacao | null>(null);
@@ -36,6 +38,13 @@ const MinhasProgramacoesTab: React.FC = () => {
 
     useEffect(() => {
         carregarMinhasProgramacoes();
+
+        // Atualizar automaticamente a cada 30 segundos
+        const interval = setInterval(() => {
+            carregarMinhasProgramacoes();
+        }, 30000);
+
+        return () => clearInterval(interval);
     }, []);
 
     const carregarMinhasProgramacoes = async () => {
@@ -54,25 +63,18 @@ const MinhasProgramacoesTab: React.FC = () => {
 
     const iniciarExecucao = async (programacao: Programacao) => {
         try {
-            // Criar apontamento inicial
-            const novoApontamento: Apontamento = {
-                programacao_id: programacao.id,
-                data_inicio: new Date().toISOString().split('T')[0],
-                hora_inicio: new Date().toTimeString().split(' ')[0].substring(0, 5),
-                observacoes: 'Execução iniciada',
-                status: 'EM_ANDAMENTO'
-            };
-
-            await api.post('/desenvolvimento/apontamentos', novoApontamento);
-            
-            // Atualizar status da programação
+            // Atualizar status da programação para EM_ANDAMENTO
             await api.patch(`/pcp/programacoes/${programacao.id}/status`, {
                 status: 'EM_ANDAMENTO'
             });
 
-            setApontamentoAtivo(novoApontamento);
-            alert('✅ Execução iniciada com sucesso!');
-            carregarMinhasProgramacoes();
+            // Redirecionar para página de apontamento com OS pré-preenchida
+            // Assumindo que o setor está disponível no contexto ou pode ser obtido
+            const setorSlug = 'laboratorio-eletrico'; // Você pode ajustar isso baseado no setor da programação
+
+            // Navegar para apontamento com parâmetros da programação
+            navigate(`/desenvolvimento/${setorSlug}?tab=apontamento&os=${programacao.os_numero}&programacao_id=${programacao.id}`);
+
         } catch (error) {
             console.error('Erro ao iniciar execução:', error);
             alert('❌ Erro ao iniciar execução');

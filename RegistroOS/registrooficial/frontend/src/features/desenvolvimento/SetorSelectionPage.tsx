@@ -169,6 +169,13 @@ const SetorSelectionPage: React.FC = () => {
         <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-4">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="flex items-center px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors mr-2"
+                title="Voltar ao Dashboard"
+              >
+                ← Dashboard
+              </button>
               <img src={logo} alt="RegistroOS Logo" className="h-8 w-auto" />
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">

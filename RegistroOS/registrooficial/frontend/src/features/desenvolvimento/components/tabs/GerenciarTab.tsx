@@ -160,7 +160,7 @@ const GerenciarTab: React.FC = () => {
             console.log('🔍 Aprovando registro:', recordId);
 
             // Fazer chamada real para a API de aprovação
-            await api.put(`/desenvolvimento/apontamentos/${recordId}/aprovar`, {
+            const response = await api.put(`/desenvolvimento/apontamentos/${recordId}/aprovar`, {
                 aprovado_supervisor: true,
                 data_aprovacao_supervisor: new Date().toISOString(),
                 supervisor_aprovacao: user?.nome_completo || user?.primeiro_nome
@@ -176,7 +176,14 @@ const GerenciarTab: React.FC = () => {
             );
 
             console.log('✅ Registro aprovado com sucesso');
-            alert('Registro aprovado com sucesso!');
+
+            // Verificar se houve aprovação automática de programação
+            let mensagem = 'Apontamento aprovado com sucesso!';
+            if (response.data.programacao_aprovada) {
+                mensagem += `\n🎯 Programação OS ${response.data.programacao_aprovada.os_numero} aprovada automaticamente!`;
+            }
+
+            alert(mensagem);
         } catch (error) {
             console.error('❌ Erro ao aprovar registro:', error);
             alert('Erro ao aprovar registro. Verifique suas permissões.');
