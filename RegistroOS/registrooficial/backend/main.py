@@ -38,7 +38,7 @@ try:
     # Importar os routers dos arquivos de rota
     from routes.auth import router as auth_router
     from routes.os_routes_simple import router as os_router
-    from routes.catalogs_validated import router as catalogs_router
+    from routes.catalogs_validated_clean import router as catalogs_router
     from routes.desenvolvimento import router as desenvolvimento_router
     from routes.users import router as users_router
     from routes.admin_routes_simple import router as admin_router
@@ -63,6 +63,7 @@ try:
     app.include_router(general_router, prefix="/api", tags=["general"])
 
     print("✅ Todas as rotas carregadas com sucesso")
+    print("🧹 Rotas de catálogos otimizadas - Campos duplicados removidos")
     
 except ImportError as e:
     print(f"❌ Erro ao importar rotas: {e}")

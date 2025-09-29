@@ -27,6 +27,7 @@ const CentroCustoForm: React.FC<CentroCustoFormProps> = ({
         ...initialData,
     });
     const [errors, setErrors] = useState<CentroCustoFormErrors>({});
+    const [hasSubmitted, setHasSubmitted] = useState(false); // ADICIONADO: Controla se já tentou submeter
 
     useEffect(() => {
         setFormData({
@@ -63,6 +64,7 @@ const CentroCustoForm: React.FC<CentroCustoFormProps> = ({
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        setHasSubmitted(true); // ADICIONADO: Marca que tentou submeter
         if (validateForm()) {
             onSubmit(formData, isEdit);
         }

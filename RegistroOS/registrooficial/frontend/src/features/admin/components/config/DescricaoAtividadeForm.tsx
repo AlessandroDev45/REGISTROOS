@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyledInput, SelectField } from '../../../../components/UIComponents';
-import { AtividadeDescricaoData, departamentoService, setorService, categoriaService } from '../../../../services/adminApi';
+import { DescricaoAtividadeData, departamentoService, setorService, categoriaService } from '../../../../services/adminApi';
 import api from '../../../../services/api';
 
 // Interface para os dados da Descrição de Atividade (matches backend `CatalogoAtividadeDescricao`)

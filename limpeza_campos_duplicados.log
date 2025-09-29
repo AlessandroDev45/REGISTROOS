@@ -1,0 +1,43 @@
+2025-09-28 14:49:52,015 - INFO - ============================================================
+2025-09-28 14:49:52,015 - INFO - INICIANDO LIMPEZA DE CAMPOS DUPLICADOS
+2025-09-28 14:49:52,015 - INFO - ============================================================
+2025-09-28 14:49:52,017 - INFO - Backup criado: C:\Users\Alessandro\OneDrive\Desktop\RegistroOS\SCRATCK HERE\backups\registroos_backup_limpeza_campos_20250928_144952.db
+2025-09-28 14:49:52,017 - INFO - Verificando inconsistências nos campos duplicados...
+2025-09-28 14:49:52,018 - INFO - ordens_servico - Total: 2, status_geral preenchidos: 1, diferentes: 1
+2025-09-28 14:49:52,018 - INFO - apontamentos_detalhados - Total com setor: 4, diferentes: 2, sem FK: 0
+2025-09-28 14:49:52,019 - INFO - tipo_usuarios - Total: 15, setor diferente: 3, dept diferente: 0
+2025-09-28 14:49:52,019 - INFO - Iniciando limpeza de campos duplicados...
+2025-09-28 14:49:52,019 - INFO - Executando 1/7: Removendo status_geral de ordens_servico
+2025-09-28 14:49:52,022 - INFO - Sucesso: Removendo status_geral de ordens_servico
+2025-09-28 14:49:52,022 - INFO - Executando 2/7: Removendo setor de apontamentos_detalhados
+2025-09-28 14:49:52,025 - INFO - Sucesso: Removendo setor de apontamentos_detalhados
+2025-09-28 14:49:52,025 - INFO - Executando 3/7: Removendo setor de tipo_usuarios
+2025-09-28 14:49:52,028 - INFO - Sucesso: Removendo setor de tipo_usuarios
+2025-09-28 14:49:52,028 - INFO - Executando 4/7: Removendo departamento de tipo_usuarios
+2025-09-28 14:49:52,031 - INFO - Sucesso: Removendo departamento de tipo_usuarios
+2025-09-28 14:49:52,031 - INFO - Executando 5/7: Removendo departamento de tipo_setores
+2025-09-28 14:49:52,034 - INFO - Sucesso: Removendo departamento de tipo_setores
+2025-09-28 14:49:52,034 - INFO - Executando 6/7: Removendo setor de tipos_maquina
+2025-09-28 14:49:52,038 - INFO - Sucesso: Removendo setor de tipos_maquina
+2025-09-28 14:49:52,038 - INFO - Executando 7/7: Removendo departamento de tipos_maquina
+2025-09-28 14:49:52,041 - INFO - Sucesso: Removendo departamento de tipos_maquina
+2025-09-28 14:49:52,041 - INFO - Limpeza de campos duplicados concluída!
+2025-09-28 14:49:52,041 - INFO - Verificando resultado da limpeza...
+2025-09-28 14:49:52,042 - INFO - ordens_servico: 38 campos restantes
+2025-09-28 14:49:52,043 - INFO -   Campos removidos: status_geral
+2025-09-28 14:49:52,043 - INFO - apontamentos_detalhados: 45 campos restantes
+2025-09-28 14:49:52,043 - INFO -   Campos removidos: setor
+2025-09-28 14:49:52,043 - INFO - tipo_usuarios: 16 campos restantes
+2025-09-28 14:49:52,043 - INFO -   Campos removidos: setor, departamento
+2025-09-28 14:49:52,043 - INFO - tipo_setores: 10 campos restantes
+2025-09-28 14:49:52,043 - INFO -   Campos removidos: departamento
+2025-09-28 14:49:52,044 - INFO - tipos_maquina: 11 campos restantes
+2025-09-28 14:49:52,044 - INFO -   Campos removidos: setor, departamento
+2025-09-28 14:49:52,044 - INFO - Dados preservados - OS: 2, Apontamentos: 4
+2025-09-28 14:49:52,044 - INFO - ============================================================
+2025-09-28 14:49:52,044 - INFO - LIMPEZA DE CAMPOS DUPLICADOS CONCLUÍDA COM SUCESSO!
+2025-09-28 14:49:52,044 - INFO - ============================================================
+2025-09-28 14:49:52,044 - INFO - Backup salvo em: C:\Users\Alessandro\OneDrive\Desktop\RegistroOS\SCRATCK HERE\backups\registroos_backup_limpeza_campos_20250928_144952.db
+2025-09-28 14:49:52,044 - INFO - Campos duplicados removidos com sucesso
+2025-09-28 14:49:52,045 - INFO - Estrutura do banco otimizada
+2025-09-28 14:49:52,045 - INFO - Limpeza concluída - Banco otimizado
