@@ -40,7 +40,8 @@ async def get_departamentos(
         return [
             {
                 "id": dept.id,
-                "nome_tipo": dept.nome_tipo,
+                "nome": dept.nome_tipo,  # Alias para compatibilidade frontend
+                "nome_tipo": dept.nome_tipo,  # Manter campo original
                 "descricao": dept.descricao,
                 "ativo": dept.ativo,
                 "data_criacao": dept.data_criacao
@@ -56,27 +57,24 @@ async def get_setores(
     current_user: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get available sectors from Setor model"""
+    """Get available sectors from Setor model (otimizado com JOIN)"""
     try:
-        query = db.query(Setor).filter(Setor.ativo.is_(True))
+        # Query otimizada com JOIN para evitar múltiplas consultas
+        query = db.query(
+            Setor,
+            Departamento.nome_tipo.label('departamento_nome')
+        ).outerjoin(
+            Departamento, Setor.id_departamento == Departamento.id
+        ).filter(Setor.ativo.is_(True))
 
         if departamento:
-            # Filtra por nome do departamento usando FK id_departamento
-            dept_obj = db.query(Departamento).filter(Departamento.nome_tipo == departamento).first()
-            if dept_obj:
-                query = query.filter(Setor.id_departamento == dept_obj.id)
+            # Filtra por nome do departamento diretamente no JOIN
+            query = query.filter(Departamento.nome_tipo == departamento)
 
-        setores = query.all()
+        setores_result = query.all()
 
         result = []
-        for setor in setores:
-            # Buscar nome do departamento
-            departamento_nome = None
-            if setor.id_departamento is not None:
-                dept_obj = db.query(Departamento).filter(Departamento.id == setor.id_departamento).first()
-                if dept_obj:
-                    departamento_nome = dept_obj.nome_tipo
-
+        for setor, departamento_nome in setores_result:
             result.append({
                 "id": setor.id,
                 "nome": setor.nome,
@@ -394,21 +392,26 @@ async def get_colaboradores(
     current_user: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get available collaborators/users"""
+    """Get available collaborators/users (otimizado com JOINs)"""
     try:
-        query = db.query(Usuario).filter(Usuario.is_approved.is_(True))
+        # Query otimizada com JOINs para evitar múltiplas consultas
+        query = db.query(
+            Usuario,
+            Setor.nome.label('setor_nome'),
+            Departamento.nome_tipo.label('departamento_nome')
+        ).outerjoin(
+            Setor, Usuario.id_setor == Setor.id
+        ).outerjoin(
+            Departamento, Usuario.id_departamento == Departamento.id
+        ).filter(Usuario.is_approved.is_(True))
 
         if setor:
-            # Buscar setor por nome para obter ID
-            setor_obj = db.query(Setor).filter(Setor.nome == setor).first()
-            if setor_obj:
-                query = query.filter(Usuario.id_setor == setor_obj.id)
+            # Filtra por nome do setor diretamente no JOIN
+            query = query.filter(Setor.nome == setor)
 
         if departamento:
-            # Buscar departamento por nome para obter ID
-            dept_obj = db.query(Departamento).filter(Departamento.nome_tipo == departamento).first()
-            if dept_obj:
-                query = query.filter(Usuario.id_departamento == dept_obj.id)
+            # Filtra por nome do departamento diretamente no JOIN
+            query = query.filter(Departamento.nome_tipo == departamento)
 
         colaboradores = query.all()
 

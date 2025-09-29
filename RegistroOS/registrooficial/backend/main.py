@@ -3,8 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import Optional
+from datetime import datetime
 from config.database_config import engine, get_db
-from app.database_models import Base, Usuario, ApontamentoDetalhado, OrdemServico, Cliente, Equipamento
+from app.database_models import Base, Usuario, ApontamentoDetalhado, OrdemServico, Cliente, Equipamento, Setor, Departamento
+from middleware.text_validation_middleware import add_text_validation_middleware
 from routes.auth import get_current_user
 
 # Criar aplicação FastAPI
@@ -23,6 +25,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Ativar middleware de validação de texto
+add_text_validation_middleware(app, enabled=True)
+
 # Criar tabelas no banco de dados (COMENTADO - tabelas já existem)
 # Base.metadata.create_all(bind=engine)
 
@@ -35,35 +40,36 @@ try:
     if current_dir not in sys.path:
         sys.path.append(current_dir)
 
-    # Importar os routers dos arquivos de rota
+    # Importar os routers dos arquivos de rota (CONSOLIDADOS)
     from routes.auth import router as auth_router
     from routes.os_routes_simple import router as os_router
     from routes.catalogs_validated_clean import router as catalogs_router
     from routes.desenvolvimento import router as desenvolvimento_router
     from routes.users import router as users_router
-    from routes.admin_routes_simple import router as admin_router
     from routes.admin_config_routes import router as admin_config_router
     from routes.pcp_routes import router as pcp_router
     from routes.gestao_routes import router as gestao_router
     from routes.relatorio_completo import router as relatorio_router
     from routes.general import router as general_router
 
-    # Incluir os routers na aplicação FastAPI
+    # Incluir os routers na aplicação FastAPI (ESTRUTURA CONSOLIDADA)
+    # Auth routes diretamente em /api/ para compatibilidade com frontend
     app.include_router(auth_router, prefix="/api", tags=["auth"])
-    app.include_router(desenvolvimento_router, prefix="/api/desenvolvimento", tags=["desenvolvimento"])
-    app.include_router(os_router, prefix="/api", tags=["os"])
+    # Catalog routes diretamente em /api/ para compatibilidade com frontend
     app.include_router(catalogs_router, prefix="/api", tags=["catalogs"])
-    app.include_router(users_router, prefix="/api/users", tags=["users"])
-    app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
-    app.include_router(admin_config_router, prefix="/api/admin/config", tags=["admin-config"])
-
+    app.include_router(os_router, prefix="/api/os", tags=["os"])
+    app.include_router(desenvolvimento_router, prefix="/api/desenvolvimento", tags=["desenvolvimento"])
     app.include_router(pcp_router, prefix="/api/pcp", tags=["pcp"])
     app.include_router(gestao_router, prefix="/api/gestao", tags=["gestao"])
-    app.include_router(relatorio_router, tags=["relatorio-completo"])
+    app.include_router(admin_config_router, prefix="/api/admin", tags=["admin"])
+    app.include_router(users_router, prefix="/api/users", tags=["users"])
+    app.include_router(relatorio_router, prefix="/api/reports", tags=["reports"])
     app.include_router(general_router, prefix="/api", tags=["general"])
 
     print("✅ Todas as rotas carregadas com sucesso")
-    print("🧹 Rotas de catálogos otimizadas - Campos duplicados removidos")
+    print("🧹 Estrutura de rotas consolidada - Arquivos obsoletos removidos")
+    print("📋 Rotas organizadas por contexto: auth, catalogs, os, desenvolvimento, pcp, gestao, admin, users, reports")
+    print("🚫 Removidos: admin_routes_simple.py, catalogs_simple.py, catalogs_validated.py, pcp_routes_backup.py")
     
 except ImportError as e:
     print(f"❌ Erro ao importar rotas: {e}")
@@ -243,6 +249,24 @@ async def get_apontamentos_detalhados_global(
                 nome_usuario = usuario.nome_completo if usuario else "N/A"
                 departamento_usuario = usuario.departamento if usuario else "N/A"
 
+                # Buscar setor pelo id_setor do apontamento
+                setor_nome = "N/A"
+                departamento_setor = "N/A"
+                try:
+                    if apt.id_setor is not None:
+                        setor = db.query(Setor).filter(Setor.id == apt.id_setor).first()
+                        if setor:
+                            setor_nome = setor.nome
+                            # Buscar departamento do setor
+                            if setor.id_departamento is not None:
+                                departamento = db.query(Departamento).filter(Departamento.id == setor.id_departamento).first()
+                                if departamento:
+                                    departamento_setor = departamento.nome_tipo
+                except Exception as e:
+                    print(f"⚠️ Erro ao buscar setor {apt.id_setor}: {e}")
+                    setor_nome = "N/A"
+                    departamento_setor = "N/A"
+
                 # Converter datas de forma segura
                 data_inicio = None
                 data_fim = None
@@ -305,8 +329,8 @@ async def get_apontamentos_detalhados_global(
                     "data_hora_inicio": data_inicio,  # Alias para compatibilidade
                     "status": getattr(apt, 'status_apontamento', 'N/A') or "N/A",
                     "observacoes": getattr(apt, 'observacao_os', '') or "",
-                    "setor": getattr(apt, 'setor', 'N/A') or "N/A",
-                    "departamento": departamento_usuario,
+                    "setor": setor_nome,
+                    "departamento": departamento_setor,
                     "foi_retrabalho": getattr(apt, 'foi_retrabalho', False) or False,
                     "usuario": nome_usuario,
                     "nome_tecnico": nome_usuario,  # Alias para compatibilidade
@@ -335,6 +359,58 @@ async def get_apontamentos_detalhados_global(
 
 # ENDPOINT REMOVIDO - CONFLITAVA COM /api/pcp/programacao-form-data
 # O endpoint correto está em routes/pcp_routes.py
+
+@app.get("/api/estrutura-hierarquica")
+async def get_estrutura_hierarquica(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    """Endpoint para estrutura hierárquica (compatibilidade)"""
+    try:
+        # Buscar todos os departamentos
+        departamentos = db.query(Departamento).filter(Departamento.ativo == True).all()
+
+        estrutura = []
+        for dept in departamentos:
+            # Buscar setores do departamento
+            setores = db.query(Setor).filter(
+                Setor.id_departamento == dept.id,
+                Setor.ativo == True
+            ).all()
+
+            dept_data = {
+                "id": dept.id,
+                "nome": dept.nome_tipo,
+                "tipo": "departamento",
+                "descricao": dept.descricao,
+                "ativo": dept.ativo,
+                "setores": [
+                    {
+                        "id": setor.id,
+                        "nome": setor.nome,
+                        "tipo": "setor",
+                        "descricao": setor.descricao,
+                        "ativo": setor.ativo,
+                        "departamento_id": setor.id_departamento
+                    }
+                    for setor in setores
+                ]
+            }
+            estrutura.append(dept_data)
+
+        return {
+            "estrutura": estrutura,
+            "total_departamentos": len(estrutura),
+            "total_setores": sum(len(dept["setores"]) for dept in estrutura),
+            "data_consulta": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        print(f"❌ Erro ao obter estrutura hierárquica: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao obter estrutura hierárquica: {str(e)}"
+        )
 
 if __name__ == "__main__":
     import uvicorn

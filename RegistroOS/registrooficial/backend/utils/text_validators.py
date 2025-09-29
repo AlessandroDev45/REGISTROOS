@@ -267,13 +267,13 @@ def validar_campos_texto(*campos):
             for i, arg in enumerate(args):
                 if isinstance(arg, dict):
                     args = list(args)
-                    args[i] = aplicar_validacao_automatica(arg, campos)
+                    args[i] = aplicar_validacao_automatica(arg, list(campos))
                     args = tuple(args)
             
             # Procurar por dicionários nos kwargs
             for key, value in kwargs.items():
                 if isinstance(value, dict):
-                    kwargs[key] = aplicar_validacao_automatica(value, campos)
+                    kwargs[key] = aplicar_validacao_automatica(value, list(campos))
             
             return func(*args, **kwargs)
         return wrapper

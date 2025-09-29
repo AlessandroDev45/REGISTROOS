@@ -3,33 +3,36 @@ import { Atividade } from '../pages/common/TiposApi'; // Import the consolidated
 
 export interface SetorData {
     id?: number;
-    nome: string;
-    departamento: string;
+    nome: string; // Frontend usa 'nome', backend recebe como 'nome' via alias
+    departamento: string; // Nome do departamento (para exibição)
+    id_departamento?: number; // ID do departamento (para envio ao backend)
     descricao: string;
     ativo: boolean;
-    area_tipo?: string; // Added area_tipo
-    permite_apontamento?: boolean; // Added permite_apontamento
+    area_tipo?: string;
+    supervisor_responsavel?: string;
+    permite_apontamento?: boolean;
 }
 
 export interface TipoMaquinaData {
     id?: number;
-    nome_tipo: string; // Campo correto da DB
+    nome: string; // Frontend usa 'nome', backend recebe como 'nome' via alias (nome_tipo na DB)
     categoria: string;
-    subcategoria?: string; // Ex: ESTATOR, ROTOR, NÚCLEO
+    subcategoria?: string[]; // Lista de strings (JSON no backend)
     descricao: string;
-    departamento: string;
-    setor: string;
-    campos_teste_resultado?: string; // Campo opcional
+    departamento: string; // Nome do departamento (para exibição)
+    id_departamento?: number; // ID do departamento (para envio ao backend)
     ativo: boolean;
 }
 
 export interface AtividadeTipoData { // Renamed from TipoAtividadeData to avoid confusion with Atividade interface
     id?: number;
-    nome_tipo: string; // This maps to 'nome' in Atividade interface
+    nome: string; // Frontend usa 'nome', backend recebe como 'nome' via alias (nome_tipo na DB)
     descricao: string;
-    departamento: string;
-    setor: string;
-    categoria: string; // Campo categoria adicionado
+    departamento: string; // Nome do departamento (para exibição)
+    id_departamento?: number; // ID do departamento (para envio ao backend)
+    setor: string; // Nome do setor (para exibição)
+    id_setor?: number; // ID do setor (para envio ao backend)
+    categoria: string;
     ativo: boolean;
 }
 
@@ -37,7 +40,11 @@ export interface DescricaoAtividadeData {
     id?: number;
     codigo: string;
     descricao: string;
-    setor: string;
+    departamento: string; // Nome do departamento (para exibição)
+    id_departamento?: number; // ID do departamento (para envio ao backend)
+    setor: string; // Nome do setor (para exibição)
+    id_setor?: number; // ID do setor (para envio ao backend)
+    categoria?: string; // Categoria da descrição
     ativo: boolean;
 }
 
@@ -45,8 +52,11 @@ export interface FalhaTipoData {
     id?: number;
     codigo: string;
     descricao: string;
-    departamento: string;
-    setor: string;
+    departamento: string; // Nome do departamento (para exibição)
+    id_departamento?: number; // ID do departamento (para envio ao backend)
+    setor: string; // Nome do setor (para exibição)
+    id_setor?: number; // ID do setor (para envio ao backend)
+    categoria?: string; // Categoria da falha
     ativo: boolean;
 }
 
@@ -54,26 +64,32 @@ export interface CausaRetrabalhoData {
     id?: number;
     codigo: string;
     descricao: string;
-    departamento: string; // id_departamento no backend, mas o frontend pode passar o nome
+    departamento: string; // Nome do departamento (para exibição)
+    id_departamento?: number; // ID do departamento (para envio ao backend)
+    setor: string; // Nome do setor (para exibição)
+    id_setor?: number; // ID do setor (para envio ao backend)
+    categoria?: string; // Categoria da causa
     ativo: boolean;
 }
 
 export interface TipoTesteData {
     id?: number;
     nome: string;
-    departamento: string;
-    setor?: string;  // Adicionado campo setor
-    tipo_teste: string;  // Campo tipo_teste conforme database
+    departamento: string; // Nome do departamento (para exibição)
+    id_departamento?: number; // ID do departamento (para envio ao backend)
+    setor: string; // Nome do setor (para exibição) - OBRIGATÓRIO
+    id_setor?: number; // ID do setor (para envio ao backend)
+    tipo_teste: string; // Campo tipo_teste conforme database
     descricao: string;
     ativo: boolean;
-    tipo_maquina?: string;  // Adicionado campo tipo_maquina para compatibilidade
-    categoria?: string;  // Novo campo categoria: Visual, Elétricos, Mecânicos
-    subcategoria?: number;  // Novo campo subcategoria: 0 = Padrão, 1 = Especiais
+    tipo_maquina?: string; // Adicionado campo tipo_maquina para compatibilidade
+    categoria?: string; // Novo campo categoria: Visual, Elétricos, Mecânicos
+    subcategoria?: number; // Novo campo subcategoria: 0 = Padrão, 1 = Especiais
 }
 
 export interface DepartamentoData {
-    id: number;
-    nome_tipo: string;
+    id?: number;
+    nome: string; // Frontend usa 'nome', backend recebe como 'nome' via alias (nome_tipo na DB)
     descricao: string;
     ativo: boolean;
 }
@@ -89,20 +105,19 @@ export interface CentroCustoData {
 }
 
 
-// Exemplo de como seus services deveriam estar estruturados
+// Services atualizados para usar as rotas corretas do backend
 export const setorService = {
-    getSetores: () => api.get<SetorData[]>('/setores').then(res => res.data),  // ROTA PÚBLICA PARA TODOS OS USUÁRIOS
-    getSetorById: (id: number) => api.get<SetorData>(`/admin/config/setores/${id}`).then(res => res.data),
-    createSetor: (data: SetorData) => api.post<SetorData>('/admin/config/setores/', data).then(res => res.data),  // BARRA FINAL ADICIONADA
-    updateSetor: (id: number, data: SetorData) => api.put<SetorData>(`/admin/config/setores/${id}`, data).then(res => res.data),
-    deleteSetor: (id: number) => api.delete(`/admin/config/setores/${id}`).then(res => res.data),
-    getDepartamentos: () => api.get<DepartamentoData[]>('/admin/config/departamentos/').then(res => res.data), // ROTA CORRIGIDA COM BARRA FINAL
+    getSetores: () => api.get<SetorData[]>('/admin/setores').then(res => res.data),  // CORRIGIDO: usar rota admin
+    getSetorById: (id: number) => api.get<SetorData>(`/admin/setores/${id}`).then(res => res.data),
+    createSetor: (data: SetorData) => api.post<SetorData>('/admin/setores', data).then(res => res.data),
+    updateSetor: (id: number, data: SetorData) => api.put<SetorData>(`/admin/setores/${id}`, data).then(res => res.data),
+    deleteSetor: (id: number) => api.delete(`/admin/setores/${id}`).then(res => res.data),
 };
 
 export const tipoMaquinaService = {
-    getTiposMaquina: () => api.get<TipoMaquinaData[]>('/admin/tipos-maquina/').then(res => res.data),  // ROTA CORRIGIDA COM BARRA FINAL
+    getTiposMaquina: () => api.get<TipoMaquinaData[]>('/admin/tipos-maquina').then(res => res.data),
     getTipoMaquinaById: (id: number) => api.get<TipoMaquinaData>(`/admin/tipos-maquina/${id}`).then(res => res.data),
-    createTipoMaquina: (data: TipoMaquinaData) => api.post<TipoMaquinaData>('/admin/tipos-maquina/', data).then(res => res.data),  // BARRA FINAL ADICIONADA
+    createTipoMaquina: (data: TipoMaquinaData) => api.post<TipoMaquinaData>('/admin/tipos-maquina', data).then(res => res.data),
     updateTipoMaquina: (id: number, data: TipoMaquinaData) => api.put<TipoMaquinaData>(`/admin/tipos-maquina/${id}`, data).then(res => res.data),
     deleteTipoMaquina: (id: number) => api.delete(`/admin/tipos-maquina/${id}`).then(res => res.data),
 };
@@ -115,20 +130,20 @@ export const categoriaService = {
 // ... Adicione outros serviços conforme necessário
 
 export const atividadeTipoService = {
-    getAtividadesTipo: () => api.get<AtividadeTipoData[]>('/admin/tipos-atividade/').then(res => res.data),  // ROTA CORRIGIDA COM BARRA FINAL
-    getAtividadesPorTipoMaquina: (tipoMaquina: string) => api.get<AtividadeTipoData[]>(`/admin/tipos-atividade/?tipo_maquina=${encodeURIComponent(tipoMaquina)}`).then(res => res.data),
+    getAtividadesTipo: () => api.get<AtividadeTipoData[]>('/admin/tipos-atividade').then(res => res.data),
+    getAtividadesPorTipoMaquina: (tipoMaquina: string) => api.get<AtividadeTipoData[]>(`/admin/tipos-atividade?tipo_maquina=${encodeURIComponent(tipoMaquina)}`).then(res => res.data),
     getAtividadeTipoById: (id: number) => api.get<AtividadeTipoData>(`/admin/tipos-atividade/${id}`).then(res => res.data),
-    createAtividadeTipo: (data: AtividadeTipoData) => api.post<AtividadeTipoData>('/admin/tipos-atividade/', data).then(res => res.data),  // BARRA FINAL ADICIONADA
+    createAtividadeTipo: (data: AtividadeTipoData) => api.post<AtividadeTipoData>('/admin/tipos-atividade', data).then(res => res.data),
     updateAtividadeTipo: (id: number, data: AtividadeTipoData) => api.put<AtividadeTipoData>(`/admin/tipos-atividade/${id}`, data).then(res => res.data),
     deleteAtividadeTipo: (id: number) => api.delete(`/admin/tipos-atividade/${id}`).then(res => res.data),
 };
 
 // ... Adicione outros serviços conforme necessário
 
-export const descricaoAtividadeService = { // Novo serviço para Descrição de Atividade
-    getDescricoesAtividade: () => api.get<DescricaoAtividadeData[]>('/admin/descricoes-atividade/').then(res => res.data),  // ROTA CORRIGIDA COM BARRA FINAL
+export const descricaoAtividadeService = {
+    getDescricoesAtividade: () => api.get<DescricaoAtividadeData[]>('/admin/descricoes-atividade').then(res => res.data),
     getDescricaoAtividadeById: (id: number) => api.get<DescricaoAtividadeData>(`/admin/descricoes-atividade/${id}`).then(res => res.data),
-    createDescricaoAtividade: (data: DescricaoAtividadeData) => api.post<DescricaoAtividadeData>('/admin/descricoes-atividade/', data).then(res => res.data),  // BARRA FINAL ADICIONADA
+    createDescricaoAtividade: (data: DescricaoAtividadeData) => api.post<DescricaoAtividadeData>('/admin/descricoes-atividade', data).then(res => res.data),
     updateDescricaoAtividade: (id: number, data: DescricaoAtividadeData) => api.put<DescricaoAtividadeData>(`/admin/descricoes-atividade/${id}`, data).then(res => res.data),
     deleteDescricaoAtividade: (id: number) => api.delete(`/admin/descricoes-atividade/${id}`).then(res => res.data),
 };
@@ -136,45 +151,35 @@ export const descricaoAtividadeService = { // Novo serviço para Descrição de 
 // ... Adicione outros serviços conforme necessário
 
 export const falhaTipoService = {
-    getFalhasTipo: () => api.get<FalhaTipoData[]>('/admin/tipos-falha/').then(res => res.data),  // ROTA CORRIGIDA COM BARRA FINAL
+    getFalhasTipo: () => api.get<FalhaTipoData[]>('/admin/tipos-falha').then(res => res.data),
     getFalhaTipoById: (id: number) => api.get<FalhaTipoData>(`/admin/tipos-falha/${id}`).then(res => res.data),
-    createFalhaTipo: (data: FalhaTipoData) => api.post<FalhaTipoData>('/admin/tipos-falha/', data).then(res => res.data),  // BARRA FINAL ADICIONADA
+    createFalhaTipo: (data: FalhaTipoData) => api.post<FalhaTipoData>('/admin/tipos-falha', data).then(res => res.data),
     updateFalhaTipo: (id: number, data: FalhaTipoData) => api.put<FalhaTipoData>(`/admin/tipos-falha/${id}`, data).then(res => res.data),
     deleteFalhaTipo: (id: number) => api.delete(`/admin/tipos-falha/${id}`).then(res => res.data),
 };
 
-// ... Adicione outros serviços conforme necessário
+export const tipoTesteService = {
+    getTiposTeste: () => api.get<TipoTesteData[]>('/admin/tipos-teste').then(res => res.data),
+    getTipoTesteById: (id: number) => api.get<TipoTesteData>(`/admin/tipos-teste/${id}`).then(res => res.data),
+    createTipoTeste: (data: TipoTesteData) => api.post<TipoTesteData>('/admin/tipos-teste', data).then(res => res.data),
+    updateTipoTeste: (id: number, data: TipoTesteData) => api.put<TipoTesteData>(`/admin/tipos-teste/${id}`, data).then(res => res.data),
+    deleteTipoTeste: (id: number) => api.delete(`/admin/tipos-teste/${id}`).then(res => res.data),
+};
 
 export const causaRetrabalhoService = {
-    getCausasRetrabalho: () => api.get<CausaRetrabalhoData[]>('/admin/causas-retrabalho/').then(res => res.data),  // ROTA CORRIGIDA COM BARRA FINAL
+    getCausasRetrabalho: () => api.get<CausaRetrabalhoData[]>('/admin/causas-retrabalho').then(res => res.data),
     getCausaRetrabalhoById: (id: number) => api.get<CausaRetrabalhoData>(`/admin/causas-retrabalho/${id}`).then(res => res.data),
-    createCausaRetrabalho: (data: CausaRetrabalhoData) => api.post<CausaRetrabalhoData>('/admin/causas-retrabalho/', data).then(res => res.data),  // BARRA FINAL ADICIONADA
+    createCausaRetrabalho: (data: CausaRetrabalhoData) => api.post<CausaRetrabalhoData>('/admin/causas-retrabalho', data).then(res => res.data),
     updateCausaRetrabalho: (id: number, data: CausaRetrabalhoData) => api.put<CausaRetrabalhoData>(`/admin/causas-retrabalho/${id}`, data).then(res => res.data),
     deleteCausaRetrabalho: (id: number) => api.delete(`/admin/causas-retrabalho/${id}`).then(res => res.data),
 };
 
 // ... Adicione outros serviços conforme necessário
 
-export const tipoTesteService = { // Novo serviço para TipoTeste (catálogo)
-    getTiposTeste: (machineType?: string, departamento?: string, setor?: string) => {
-        const params: any = {};
-        if (machineType) params.machine_type = machineType;
-        if (departamento) params.departamento = departamento;
-        if (setor) params.setor = setor;
-        return api.get<TipoTesteData[]>('/admin/tipos-teste/', { params }).then(res => res.data);  // ROTA CORRIGIDA COM BARRA FINAL
-    },
-    getTipoTesteById: (id: number) => api.get<TipoTesteData>(`/admin/tipos-teste/${id}`).then(res => res.data),
-    createTipoTeste: (data: TipoTesteData) => api.post<TipoTesteData>('/admin/tipos-teste/', data).then(res => res.data),  // BARRA FINAL ADICIONADA
-    updateTipoTeste: (id: number, data: TipoTesteData) => api.put<TipoTesteData>(`/admin/tipos-teste/${id}`, data).then(res => res.data),
-    deleteTipoTeste: (id: number) => api.delete(`/admin/tipos-teste/${id}`).then(res => res.data),
-};
-
-// ... Adicione outros serviços conforme necessário
-
 export const departamentoService = { // Serviço para Departamentos
-    getDepartamentos: () => api.get<DepartamentoData[]>('/admin/departamentos/').then(res => res.data),  // ROTA CORRIGIDA COM BARRA FINAL
+    getDepartamentos: () => api.get<DepartamentoData[]>('/admin/departamentos').then(res => res.data),
     getDepartamentoById: (id: number) => api.get<DepartamentoData>(`/admin/departamentos/${id}`).then(res => res.data),
-    createDepartamento: (data: DepartamentoData) => api.post<DepartamentoData>('/admin/departamentos/', data).then(res => res.data),  // BARRA FINAL ADICIONADA
+    createDepartamento: (data: DepartamentoData) => api.post<DepartamentoData>('/admin/departamentos', data).then(res => res.data),
     updateDepartamento: (id: number, data: DepartamentoData) => api.put<DepartamentoData>(`/admin/departamentos/${id}`, data).then(res => res.data),
     deleteDepartamento: (id: number) => api.delete(`/admin/departamentos/${id}`).then(res => res.data),
 };
@@ -182,7 +187,7 @@ export const departamentoService = { // Serviço para Departamentos
 // CentroCustoService usa a mesma API de departamentos mas mapeia os dados
 export const centroCustoService = {
     getCentrosCusto: async (): Promise<CentroCustoData[]> => {
-        const departamentos = await api.get<DepartamentoData[]>('/admin/config/departamentos').then(res => res.data);
+        const departamentos = await api.get<DepartamentoData[]>('/admin/departamentos').then(res => res.data);
         return departamentos.map(dept => ({
             id: dept.id,
             nome: dept.nome_tipo,  // Mapear nome_tipo para nome
@@ -193,7 +198,7 @@ export const centroCustoService = {
         }));
     },
     getCentroCustoById: async (id: number): Promise<CentroCustoData> => {
-        const dept = await api.get<DepartamentoData>(`/admin/config/departamentos/${id}`).then(res => res.data);
+        const dept = await api.get<DepartamentoData>(`/admin/departamentos/${id}`).then(res => res.data);
         return {
             id: dept.id,
             nome: dept.nome_tipo,
@@ -209,7 +214,7 @@ export const centroCustoService = {
             descricao: data.descricao,
             ativo: data.ativo
         };
-        const result = await api.post<DepartamentoData>('/admin/config/departamentos', deptData).then(res => res.data);
+        const result = await api.post<DepartamentoData>('/admin/departamentos', deptData).then(res => res.data);
         return {
             id: result.id,
             nome: result.nome_tipo,
@@ -226,7 +231,7 @@ export const centroCustoService = {
             descricao: data.descricao,
             ativo: data.ativo
         };
-        const result = await api.put<DepartamentoData>(`/admin/config/departamentos/${id}`, deptData).then(res => res.data);
+        const result = await api.put<DepartamentoData>(`/admin/departamentos/${id}`, deptData).then(res => res.data);
         return {
             id: result.id,
             nome: result.nome_tipo,
@@ -236,7 +241,7 @@ export const centroCustoService = {
             ativo: result.ativo
         };
     },
-    deleteCentroCusto: (id: number) => api.delete(`/admin/config/departamentos/${id}`).then(res => res.data),
+    deleteCentroCusto: (id: number) => api.delete(`/admin/departamentos/${id}`).then(res => res.data),
 };
 
 // ... Adicione outros serviços conforme necessário</search>
@@ -248,5 +253,4 @@ export const centroCustoService = {
 // If you need a generic `getAll` that fetches *all* types of entities, it would be a separate, more complex function.
 
 // Note: The previous `setorService.getDepartamentos()` was a quick fix in SetorForm.tsx.
-// Now `departamentoService` is properly imported and used.
-// ... Adicione outros serviços conforme necessário
+// Services properly exported above

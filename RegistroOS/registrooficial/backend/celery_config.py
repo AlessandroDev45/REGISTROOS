@@ -3,17 +3,53 @@ CONFIGURAÇÃO DO CELERY PARA SCRAPING ASSÍNCRONO
 ===============================================
 
 Sistema de filas para scraping escalável em produção
+NOTA: Celery é opcional - sistema funciona sem ele
 """
 
 import os
-import sys
 import logging
-from celery import Celery
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Importação condicional do Celery
+try:
+    from celery import Celery
+    CELERY_AVAILABLE = True
+    logger.info("✅ Celery disponível - modo assíncrono ativado")
+except ImportError:
+    CELERY_AVAILABLE = False
+    logger.warning("⚠️ Celery não instalado - modo síncrono ativado")
+
+    # Mock Celery class para quando não estiver instalado
+    class MockCelery:
+        def __init__(self, name):
+            self.name = name
+            self.conf = MockConf()
+
+        def config_from_object(self, obj):
+            _ = obj  # Silenciar warning
+            pass
+
+        def autodiscover_tasks(self, packages=None):
+            _ = packages  # Silenciar warning
+            pass
+
+        def start(self):
+            logger.info("Mock Celery - não executando")
+
+    class MockConf:
+        def update(self, **kwargs):
+            _ = kwargs  # Silenciar warning
+            pass
+
+        def __setattr__(self, name, value):
+            _ = name, value  # Silenciar warning
+            pass
+
+    Celery = MockCelery
 
 # Configuração do Celery
 app = Celery('scraping_tasks')

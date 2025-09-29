@@ -14,13 +14,47 @@ import importlib.util
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 
-from celery import current_task
-from celery import Celery
 import os
 
-# Configurar Celery diretamente aqui para evitar importação circular
-redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-app = Celery('scraping_tasks', broker=redis_url, backend=redis_url)
+# Importação condicional do Celery
+try:
+    from celery import current_task, Celery
+    CELERY_AVAILABLE = True
+    # Configurar Celery diretamente aqui para evitar importação circular
+    redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+    app = Celery('scraping_tasks', broker=redis_url, backend=redis_url)
+except ImportError:
+    CELERY_AVAILABLE = False
+    # Mock para quando Celery não estiver disponível
+    current_task = None
+
+    # Mock app com decoradores que não fazem nada
+    class MockApp:
+        def task(self, *args, **kwargs):
+            _ = args, kwargs  # Silenciar warning
+            def decorator(func):
+                return func
+            return decorator
+
+        @property
+        def control(self):
+            return MockControl()
+
+    class MockControl:
+        def inspect(self):
+            return MockInspect()
+
+    class MockInspect:
+        def active(self):
+            return {}
+
+        def scheduled(self):
+            return {}
+
+        def stats(self):
+            return {}
+
+    app = MockApp()
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
@@ -54,7 +88,13 @@ def import_scraping_module():
         raise FileNotFoundError(f"Script de scraping não encontrado: {script_path}")
     
     spec = importlib.util.spec_from_file_location("scrape_os_data", script_path)
+    if spec is None:
+        raise ImportError(f"Could not load spec from {script_path}")
+
     scrape_module = importlib.util.module_from_spec(spec)
+    if spec.loader is None:
+        raise ImportError(f"No loader found for spec from {script_path}")
+
     spec.loader.exec_module(scrape_module)
     
     return scrape_module
@@ -304,7 +344,7 @@ def scrape_os_task(self, numero_os: str, user_id: int) -> Dict[str, Any]:
             return {
                 "status": "success",
                 "message": f"OS {numero_os} coletada e salva com sucesso",
-                "data": dict(final_result._mapping) if hasattr(final_result, '_mapping') else dict(final_result),
+                "data": dict(final_result._mapping) if final_result and hasattr(final_result, '_mapping') else {},
                 "fonte": "scraping",
                 "cliente_id": cliente_id,
                 "equipamento_id": equipamento_id,

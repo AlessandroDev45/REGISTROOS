@@ -11,7 +11,7 @@ from typing import Callable, Dict, Any
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from RegistroOS.registrooficial.backend.utils.text_validators import limpar_texto, validar_texto
+from utils.text_validators import limpar_texto, validar_texto
 
 class TextValidationMiddleware(BaseHTTPMiddleware):
     """
@@ -86,7 +86,7 @@ class TextValidationMiddleware(BaseHTTPMiddleware):
                     if k.lower() != 'content-length'
                 ]
                 request.headers.__dict__['_list'].append(
-                    (b'content-length', str(len(novo_body)).encode())
+                    ('content-length', str(len(novo_body)))
                 )
             
         except Exception as e:

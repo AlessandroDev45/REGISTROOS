@@ -1,61 +1,113 @@
-# 📋 MAPEAMENTO COMPLETO DE ROTAS E ENDPOINTS - REGISTROOS
+# ✅ ANÁLISE DETALHADA DE ROTAS - CONTEXTOS ESPECÍFICOS
 
-## 🎯 ESTRUTURA GERAL DO SISTEMA
+## ANÁLISE CORRIGIDA: Rotas com Propósitos Diferentes
 
-### Frontend (React/TypeScript) - Páginas Principais:
-1. **Dashboard** (`/dashboard`) - Página inicial com métricas gerais
-2. **PCP** (`/pcp`) - Planejamento e Controle de Produção
-3. **Consulta OS** (`/consulta-os`) - Consulta de Ordens de Serviço
-4. **Administrador** (`/administrador`) - Administração do sistema
-5. **Admin Config** (`/admin`) - Configurações administrativas
-6. **Gestão** (`/gestao`) - Gestão de recursos e relatórios
-7. **Desenvolvimento** (`/desenvolvimento`) - Apontamentos e desenvolvimento
+### 1. ROTAS QUE **NÃO SÃO CONFLITOS** - Contextos Específicos
 
----
+#### 1.1 Programações - Contextos Diferentes
 
-## 🔗 BACKEND - MAPEAMENTO DE ROTAS E ENDPOINTS
+**✅ CORRETO - Não há conflito real:**
 
-### 1. **AUTH ROUTES** (`/api/auth`)
-**Arquivo:** `routes/auth.py`
-**Responsabilidade:** Autenticação e autorização
-- `POST /api/token` - Login do usuário
-- `POST /api/logout` - Logout do usuário
-- `GET /api/me` - Dados do usuário atual
-- `POST /api/register` - Registro de novo usuário
+1. **PCP Routes** (`/api/pcp/programacoes`):
+   - **Propósito:** Planejamento e Controle de Produção
+   - **Usuários:** Supervisores/Admin para criar programações
+   - **Funcionalidade:** Criar, editar, atribuir programações
+   - **Contexto:** Visão gerencial do PCP
 
-### 2. **PCP ROUTES** (`/api/pcp`)
-**Arquivo:** `routes/pcp_routes.py`
-**Responsabilidade:** Planejamento e Controle de Produção
-- `GET /api/pcp/ordens-servico` - Ordens de serviço para PCP
-- `GET /api/pcp/programacao-form-data` - **DADOS PARA FORMULÁRIO DE PROGRAMAÇÃO** ⚠️
-- `POST /api/pcp/programacoes` - Criar nova programação
-- `GET /api/pcp/programacoes` - Listar programações
-- `GET /api/pcp/pendencias` - Listar pendências
-- `GET /api/pcp/pendencias/dashboard` - Dashboard de pendências
+2. **Desenvolvimento Routes** (`/api/desenvolvimento/programacao`):
+   - **Propósito:** Consulta de programações para desenvolvimento
+   - **Usuários:** Técnicos para ver suas programações
+   - **Funcionalidade:** Visualizar programações atribuídas
+   - **Contexto:** Visão operacional do técnico
 
-### 3. **DESENVOLVIMENTO ROUTES** (`/api/desenvolvimento`)
-**Arquivo:** `routes/desenvolvimento.py`
-**Responsabilidade:** Apontamentos e desenvolvimento de OS
-- `GET /api/desenvolvimento/ordens-servico` - OS para desenvolvimento
-- `POST /api/desenvolvimento/apontamentos` - Criar apontamento
-- `GET /api/desenvolvimento/apontamentos/{os_id}` - Apontamentos de uma OS
-- `POST /api/desenvolvimento/programacoes` - Criar programação de desenvolvimento
+**CONCLUSÃO:** Manter ambas - servem propósitos diferentes
 
-### 4. **OS ROUTES** (`/api/os`)
-**Arquivo:** `routes/os_routes_simple.py`
-**Responsabilidade:** Ordens de Serviço
-- `GET /api/os/` - Listar ordens de serviço
-- `POST /api/os/` - Criar nova OS
-- `GET /api/os/{os_id}` - Detalhes de uma OS
-- `PUT /api/os/{os_id}` - Atualizar OS
+#### 1.2 Apontamentos - Contextos Diferentes
 
-### 5. **CATALOGS ROUTES** (`/api/catalogs`)
-**Arquivo:** `routes/catalogs_validated.py`
-**Responsabilidade:** Catálogos e estruturas hierárquicas
-- `GET /api/catalogs/departamentos` - Listar departamentos
-- `GET /api/catalogs/setores` - Listar setores
-- `GET /api/catalogs/tipos-maquina` - Tipos de máquina
-- `GET /api/catalogs/usuarios` - Usuários do sistema
+**✅ CORRETO - Não há conflito real:**
+
+1. **Desenvolvimento Routes** (`/api/desenvolvimento/os/apontamentos`):
+   - **Propósito:** Criação de apontamentos detalhados
+   - **Funcionalidade:** Apontamentos com testes, validações, programações
+   - **Contexto:** Interface principal de desenvolvimento
+
+2. **General Routes** (`/api/save-apontamento`):
+   - **Propósito:** Salvamento rápido/alternativo
+   - **Funcionalidade:** Apontamentos simples com pendências
+   - **Contexto:** Interface simplificada
+
+3. **Main.py** (`/api/apontamentos-detalhados`):
+   - **Propósito:** Consulta de apontamentos para dashboard
+   - **Funcionalidade:** Listagem com filtros avançados
+   - **Contexto:** Relatórios e dashboards
+
+**CONCLUSÃO:** Manter todas - servem propósitos diferentes
+
+#### 1.4 Catálogos - Níveis de Acesso Diferentes
+
+**⚠️ CONFLITO PARCIAL - Precisa ajuste:**
+
+1. **Catalogs Validated Clean** (`/api/catalogs/departamentos`):
+   - **Propósito:** Listagem geral para formulários
+   - **Acesso:** Usuários autenticados
+   - **Funcionalidade:** GET apenas (somente leitura)
+   - **Filtros:** Apenas ativos
+
+2. **Admin Config Routes** (`/api/admin/departamentos`):
+   - **Propósito:** CRUD completo para administração
+   - **Acesso:** Apenas ADMIN
+   - **Funcionalidade:** GET, POST, PUT, DELETE
+   - **Filtros:** Todos os registros
+
+**CONCLUSÃO:** Manter ambas - níveis de acesso diferentes
+
+### 2. CONFLITOS REAIS IDENTIFICADOS E RESOLVIDOS
+
+#### 2.1 ✅ Arquivos Removidos (Duplicatas Reais)
+
+**Removidos com sucesso:**
+- `admin_routes_simple.py` - Duplicava admin_config_routes.py
+- `catalogs_simple.py` - Versão antiga dos catálogos
+- `catalogs_validated.py` - Versão intermediária dos catálogos
+- `pcp_routes_backup.py` - Backup desnecessário
+
+#### 2.2 ✅ Main.py Atualizado
+
+**Estrutura consolidada:**
+- `/api/auth` - Autenticação
+- `/api/catalogs` - Catálogos gerais
+- `/api/os` - Ordens de serviço
+- `/api/desenvolvimento` - Apontamentos e desenvolvimento
+- `/api/pcp` - Planejamento e controle
+- `/api/gestao` - Gestão e relatórios
+- `/api/admin` - Administração
+- `/api/users` - Usuários
+- `/api/reports` - Relatórios
+- `/api` - Endpoints gerais
+
+### 3. MAPEAMENTO DE CAMPOS DO DATABASE_MODELS.PY
+
+#### 3.1 Inconsistências de Nomenclatura Identificadas
+
+**Departamento (tipo_departamentos):**
+- DB: `nome_tipo` (String)
+- Frontend esperado: `nome`
+- **Ação:** Usar alias no Pydantic
+
+**Setor (tipo_setores):**
+- DB: `nome` (String)
+- DB: `departamento` (String) + `id_departamento` (FK)
+- **Ação:** Padronizar uso de FK
+
+**TipoMaquina (tipos_maquina):**
+- DB: `nome_tipo` (String)
+- DB: `subcategoria` (JSON)
+- **Ação:** Tratar JSON corretamente
+
+**Usuario (tipo_usuarios):**
+- DB: `setor` (String) + `id_setor` (FK)
+- DB: `departamento` (String) + `id_departamento` (FK)
+- **Ação:** Migrar para uso exclusivo de FKs
 - `GET /api/catalogs/estrutura-hierarquica` - Estrutura hierárquica completa
 
 ### 6. **ADMIN ROUTES** (`/api/admin`)

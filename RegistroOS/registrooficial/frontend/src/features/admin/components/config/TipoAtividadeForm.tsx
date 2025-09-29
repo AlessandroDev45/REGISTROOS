@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyledInput, SelectField } from '../../../../components/UIComponents';
-import { AtividadeTipoData, departamentoService, setorService, categoriaService } from '../../../../services/adminApi'; // Import AtividadeTipoData
+import { AtividadeTipoData, departamentoService, setorService } from '../../../../services/adminApi'; // Import AtividadeTipoData
 
 // Update interface to match backend API payload and form fields
 interface TipoAtividadeFormData {
@@ -65,17 +65,17 @@ const TipoAtividadeForm: React.FC<TipoAtividadeFormProps> = ({
         const loadFilterData = async () => {
             try {
                 console.log("TipoAtividadeForm: Carregando dados dos filtros...");
-                const [deptData, setorData, categoriasData] = await Promise.all([
+                const [deptData, setorData] = await Promise.all([
                     departamentoService.getDepartamentos(),
-                    setorService.getSetores(),
-                    categoriaService.getCategoriasMaquina()
+                    setorService.getSetores()
                 ]);
                 console.log("TipoAtividadeForm: Departamentos:", deptData);
                 console.log("TipoAtividadeForm: Setores:", setorData);
-                console.log("TipoAtividadeForm: Categorias:", categoriasData);
                 setDepartamentos(deptData);
                 setSetores(setorData);
-                setCategorias(categoriasData);
+                // Usar categorias fixas
+                setCategorias(['MOTOR', 'TRANSFORMADOR', 'GERADOR', 'OUTROS']);
+                console.log("TipoAtividadeForm: Categorias definidas:", ['MOTOR', 'TRANSFORMADOR', 'GERADOR', 'OUTROS']);
             } catch (error) {
                 console.error('TipoAtividadeForm: Erro ao carregar dados dos filtros:', error);
                 // Fallback para categorias padrão em caso de erro

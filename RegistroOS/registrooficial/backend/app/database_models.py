@@ -342,7 +342,7 @@ class TipoMaquina(Base):
     id = Column(Integer, primary_key=True)
     nome_tipo = Column(String, nullable=False)
     categoria = Column(String)
-    subcategoria = Column(JSON)  # MODIFICADO: agora aceita array JSON
+    subcategoria = Column(Text)  # CORRIGIDO: usar Text em vez de JSON (dados são strings separadas por vírgula)
     descricao = Column(Text)
     ativo = Column(Boolean)
     data_criacao = Column(DateTime)

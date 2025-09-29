@@ -25,11 +25,14 @@ from utils.validators import generate_next_os # Certifique-se de que este import
 # Importar Celery para scraping assíncrono
 try:
     from tasks.scraping_tasks import scrape_os_task, get_queue_status
-    from celery.result import AsyncResult
+    # from celery.result import AsyncResult
     CELERY_AVAILABLE = True
     print("✅ Celery disponível - Scraping assíncrono habilitado")
 except ImportError as e:
     CELERY_AVAILABLE = False
+    AsyncResult = None
+    scrape_os_task = None
+    get_queue_status = None
     print(f"⚠️ Celery não disponível - Scraping síncrono será usado: {e}")
 
 print("🔧 Módulo desenvolvimento.py carregado")
@@ -590,6 +593,10 @@ async def criar_apontamento(
         # Combinar data e hora para datetime
         from datetime import datetime, date
 
+        # Validar campos obrigatórios
+        if not apontamento.data_inicio or not apontamento.hora_inicio:
+            raise HTTPException(status_code=400, detail="data_inicio e hora_inicio são obrigatórios")
+
         # Converter string para date se necessário
         if isinstance(apontamento.data_inicio, str):
             data_inicio = datetime.strptime(apontamento.data_inicio, "%Y-%m-%d").date()
@@ -740,21 +747,22 @@ async def aprovar_apontamento(
             raise HTTPException(status_code=404, detail="Apontamento não encontrado")
 
         # Verificar se o supervisor pode aprovar este apontamento (mesmo setor)
-        if current_user.privilege_level == "SUPERVISOR":
-            if apontamento.id_setor != current_user.id_setor:
+        if getattr(current_user, 'privilege_level', None) == "SUPERVISOR":
+            if getattr(apontamento, 'id_setor', None) != getattr(current_user, 'id_setor', None):
                 raise HTTPException(status_code=403, detail="Supervisores só podem aprovar apontamentos do seu setor")
 
         # Atualizar campos de aprovação
-        apontamento.aprovado_supervisor = True
-        apontamento.data_aprovacao_supervisor = datetime.now()
-        apontamento.supervisor_aprovacao = current_user.nome_completo
+        setattr(apontamento, 'aprovado_supervisor', True)
+        setattr(apontamento, 'data_aprovacao_supervisor', datetime.now())
+        setattr(apontamento, 'supervisor_aprovacao', current_user.id)  # Use ID instead of nome_completo
 
         # Se havia observações de aprovação, adicionar
         if dados.get('observacoes_aprovacao'):
-            if apontamento.observacoes_gerais:
-                apontamento.observacoes_gerais += f"\n[APROVAÇÃO] {dados['observacoes_aprovacao']}"
+            observacoes_atuais = getattr(apontamento, 'observacoes_gerais', None) or ""
+            if observacoes_atuais:
+                setattr(apontamento, 'observacoes_gerais', str(observacoes_atuais) + f"\n[APROVAÇÃO] {dados['observacoes_aprovacao']}")
             else:
-                apontamento.observacoes_gerais = f"[APROVAÇÃO] {dados['observacoes_aprovacao']}"
+                setattr(apontamento, 'observacoes_gerais', f"[APROVAÇÃO] {dados['observacoes_aprovacao']}")
 
         db.commit()
         db.refresh(apontamento)
@@ -779,7 +787,7 @@ async def aprovar_apontamento(
                 print(f"✅ Programação encontrada: ID {programacao.id}, Status: {programacao.status}")
 
                 # Aprovar a programação automaticamente
-                programacao.status = 'APROVADA'
+                setattr(programacao, 'status', 'APROVADA')
                 # Adicionar campos de aprovação se existirem na tabela
                 try:
                     programacao.data_aprovacao = datetime.now()
@@ -790,10 +798,11 @@ async def aprovar_apontamento(
 
                 # Adicionar observação sobre aprovação automática
                 obs_aprovacao = f"Programação aprovada automaticamente via aprovação do apontamento #{apontamento_id} em {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-                if programacao.observacoes:
-                    programacao.observacoes += f"\n{obs_aprovacao}"
+                observacoes_atuais = getattr(programacao, 'observacoes', None) or ""
+                if observacoes_atuais:
+                    setattr(programacao, 'observacoes', str(observacoes_atuais) + f"\n{obs_aprovacao}")
                 else:
-                    programacao.observacoes = obs_aprovacao
+                    setattr(programacao, 'observacoes', obs_aprovacao)
 
                 db.commit()
 
@@ -863,22 +872,23 @@ async def rejeitar_apontamento(
             raise HTTPException(status_code=404, detail="Apontamento não encontrado")
 
         # Verificar se o supervisor pode rejeitar este apontamento (mesmo setor)
-        if current_user.privilege_level == "SUPERVISOR":
-            if apontamento.id_setor != current_user.id_setor:
+        if getattr(current_user, 'privilege_level', None) == "SUPERVISOR":
+            if getattr(apontamento, 'id_setor', None) != getattr(current_user, 'id_setor', None):
                 raise HTTPException(status_code=403, detail="Supervisores só podem rejeitar apontamentos do seu setor")
 
         # Atualizar campos de rejeição
-        apontamento.aprovado_supervisor = False
-        apontamento.data_aprovacao_supervisor = datetime.now()
-        apontamento.supervisor_aprovacao = current_user.nome_completo
-        apontamento.status_apontamento = "REJEITADO"
+        setattr(apontamento, 'aprovado_supervisor', False)
+        setattr(apontamento, 'data_aprovacao_supervisor', datetime.now())
+        setattr(apontamento, 'supervisor_aprovacao', current_user.id)  # Use ID instead of nome_completo
+        setattr(apontamento, 'status_apontamento', "REJEITADO")
 
         # Adicionar motivo da rejeição às observações
         motivo = dados.get('motivo_rejeicao', 'Rejeitado pelo supervisor')
-        if apontamento.observacoes_gerais:
-            apontamento.observacoes_gerais += f"\n[REJEIÇÃO] {motivo}"
+        observacoes_atuais = getattr(apontamento, 'observacoes_gerais', None) or ""
+        if observacoes_atuais:
+            setattr(apontamento, 'observacoes_gerais', str(observacoes_atuais) + f"\n[REJEIÇÃO] {motivo}")
         else:
-            apontamento.observacoes_gerais = f"[REJEIÇÃO] {motivo}"
+            setattr(apontamento, 'observacoes_gerais', f"[REJEIÇÃO] {motivo}")
 
         db.commit()
         db.refresh(apontamento)
@@ -920,7 +930,7 @@ async def finalizar_apontamento(
         if not apontamento:
             raise HTTPException(status_code=404, detail="Apontamento não encontrado ou sem permissão")
 
-        if apontamento.status_apontamento == "CONCLUIDO":
+        if getattr(apontamento, 'status_apontamento', None) == "CONCLUIDO":
             raise HTTPException(status_code=400, detail="Apontamento já está finalizado")
 
         # Combinar data e hora fim
@@ -939,7 +949,7 @@ async def finalizar_apontamento(
             raise HTTPException(status_code=400, detail=f"Formato de data/hora inválido: {e}")
 
         # Validar que data_fim >= data_inicio
-        if data_hora_fim < apontamento.data_hora_inicio:
+        if data_hora_fim < getattr(apontamento, 'data_hora_inicio', datetime.now()):
             raise HTTPException(status_code=400, detail="Data/hora fim não pode ser anterior ao início")
 
         # Calcular tempo_trabalhado (delta em horas)
@@ -947,9 +957,9 @@ async def finalizar_apontamento(
         tempo_trabalhado = round(delta.total_seconds() / 3600, 2)
 
         # Atualizar apontamento
-        apontamento.data_hora_fim = data_hora_fim
-        apontamento.tempo_trabalhado = tempo_trabalhado
-        apontamento.status_apontamento = "CONCLUIDO"
+        setattr(apontamento, 'data_hora_fim', data_hora_fim)
+        # Note: tempo_trabalhado is calculated dynamically, not stored in DB
+        setattr(apontamento, 'status_apontamento', "CONCLUIDO")
 
         # Verificar se existe programação ativa para esta OS e usuário (integração automática)
         programacao_atualizada = None
@@ -967,9 +977,9 @@ async def finalizar_apontamento(
                 historico_atual = programacao_ativa.historico or ""
                 novo_historico = f"{historico_atual}\n[ATIVIDADE FINALIZADA] Apontamento ID {apontamento.id} finalizado por {current_user.nome_completo} em {timestamp}"
 
-                programacao_ativa.historico = novo_historico
-                programacao_ativa.status = "EM_ANDAMENTO"  # Manter em andamento até finalização completa
-                programacao_ativa.updated_at = datetime.now()
+                setattr(programacao_ativa, 'historico', novo_historico)
+                setattr(programacao_ativa, 'status', "EM_ANDAMENTO")  # Manter em andamento até finalização completa
+                setattr(programacao_ativa, 'updated_at', datetime.now())
 
                 programacao_atualizada = {
                     "id": programacao_ativa.id,
@@ -1012,7 +1022,7 @@ async def finalizar_apontamento(
             "status": "CONCLUIDO"
         }
 
-        if pendencia_id:
+        if pendencia_id is not None:
             resultado["pendencia_criada"] = {
                 "id": pendencia_id,
                 "message": "Pendência criada com sucesso"
@@ -1054,17 +1064,17 @@ async def editar_apontamento(
             raise HTTPException(status_code=404, detail="Apontamento não encontrado")
 
         # Verificar se o apontamento já foi aprovado
-        if apontamento.aprovado_supervisor:
+        if getattr(apontamento, 'aprovado_supervisor', False):
             raise HTTPException(status_code=403, detail="Apontamentos aprovados não podem ser editados")
 
         # Verificar privilégios de edição
         pode_editar = False
 
         # Próprio usuário pode editar
-        if apontamento.id_usuario == current_user.id:
+        if getattr(apontamento, 'id_usuario', None) == getattr(current_user, 'id', None):
             pode_editar = True
         # Supervisor do mesmo setor pode editar
-        elif current_user.privilege_level == "SUPERVISOR" and apontamento.id_setor == current_user.id_setor:
+        elif getattr(current_user, 'privilege_level', None) == "SUPERVISOR" and getattr(apontamento, 'id_setor', None) == getattr(current_user, 'id_setor', None):
             pode_editar = True
         # Gestão e Admin podem editar qualquer apontamento
         elif current_user.privilege_level in ["GESTAO", "ADMIN"]:
@@ -1096,19 +1106,18 @@ async def editar_apontamento(
                 else:
                     setattr(apontamento, campo, dados[campo])
 
-        # Recalcular tempo trabalhado se as datas foram alteradas
-        if apontamento.data_hora_inicio and apontamento.data_hora_fim:
-            delta = apontamento.data_hora_fim - apontamento.data_hora_inicio
-            apontamento.tempo_trabalhado = delta.total_seconds() / 3600
+        # Note: tempo_trabalhado is calculated dynamically, not stored in DB
+        # No need to recalculate here
 
         # Adicionar log de edição
         timestamp = datetime.now().strftime('%d/%m/%Y %H:%M')
         log_edicao = f"\n[EDITADO] Por {current_user.nome_completo} em {timestamp}"
 
-        if apontamento.observacoes_gerais:
-            apontamento.observacoes_gerais += log_edicao
+        observacoes_atuais = getattr(apontamento, 'observacoes_gerais', None) or ""
+        if observacoes_atuais:
+            setattr(apontamento, 'observacoes_gerais', str(observacoes_atuais) + log_edicao)
         else:
-            apontamento.observacoes_gerais = log_edicao
+            setattr(apontamento, 'observacoes_gerais', log_edicao)
 
         db.commit()
         db.refresh(apontamento)
@@ -1476,13 +1485,15 @@ async def buscar_os_async(numero_os: str, db: Session = Depends(get_db), current
             cliente_nome = None
             equipamento_nome = ""
 
-            if existing_os.id_cliente:
-                cliente_obj = db.query(Cliente).filter(Cliente.id == existing_os.id_cliente).first()
+            cliente_id = getattr(existing_os, 'id_cliente', None)
+            if cliente_id:
+                cliente_obj = db.query(Cliente).filter(Cliente.id == cliente_id).first()
                 if cliente_obj:
                     cliente_nome = cliente_obj.razao_social
 
-            if existing_os.id_equipamento:
-                equipamento_obj = db.query(Equipamento).filter(Equipamento.id == existing_os.id_equipamento).first()
+            equipamento_id = getattr(existing_os, 'id_equipamento', None)
+            if equipamento_id:
+                equipamento_obj = db.query(Equipamento).filter(Equipamento.id == equipamento_id).first()
                 if equipamento_obj:
                     equipamento_nome = equipamento_obj.descricao
 
@@ -1495,7 +1506,7 @@ async def buscar_os_async(numero_os: str, db: Session = Depends(get_db), current
                     "descricao": existing_os.descricao_maquina,
                     "cliente": cliente_nome,
                     "equipamento": equipamento_nome,
-                    "data_criacao": existing_os.data_criacao.isoformat() if existing_os.data_criacao else None
+                    "data_criacao": (lambda x: x.isoformat() if x and hasattr(x, 'isoformat') else None)(getattr(existing_os, 'data_criacao', None))
                 },
                 "fonte": "banco_local"
             }
@@ -1508,28 +1519,32 @@ async def buscar_os_async(numero_os: str, db: Session = Depends(get_db), current
 
         # 3. Verificar se já existe task em andamento para esta OS
         task_id = f"scraping_{numero_os}"
-        try:
-            existing_task = AsyncResult(task_id)
-            if existing_task.state in ['PENDING', 'PROGRESS']:
-                logger.info(f"📋 OS {numero_os} já está sendo processada (Task: {task_id})")
+        if CELERY_AVAILABLE and AsyncResult:
+            try:
+                existing_task = AsyncResult(task_id)
+                if existing_task.state in ['PENDING', 'PROGRESS']:
+                    logger.info(f"📋 OS {numero_os} já está sendo processada (Task: {task_id})")
 
-                return {
-                    "status": "queued",
-                    "message": f"OS {numero_os} já está sendo processada",
-                    "task_id": task_id,
-                    "estimated_time": "2-5 minutos"
-                }
-        except Exception as e:
-            logger.debug(f"Erro ao verificar task existente: {e}")
+                    return {
+                        "status": "queued",
+                        "message": f"OS {numero_os} já está sendo processada",
+                        "task_id": task_id,
+                        "estimated_time": "2-5 minutos"
+                    }
+            except Exception as e:
+                logger.debug(f"Erro ao verificar task existente: {e}")
 
         # 4. Iniciar nova task de scraping
         logger.info(f"🎯 Iniciando nova task de scraping para OS {numero_os}")
 
-        task = scrape_os_task.apply_async(
-            args=[numero_os, current_user.id],
-            task_id=task_id,
-            priority=5  # Prioridade normal
-        )
+        if CELERY_AVAILABLE and scrape_os_task and hasattr(scrape_os_task, 'apply_async'):
+            task = scrape_os_task.apply_async(  # type: ignore
+                args=[numero_os, current_user.id],
+                task_id=task_id,
+                priority=5  # Prioridade normal
+            )
+        else:
+            return {"error": "Celery não disponível para scraping assíncrono"}
 
         logger.info(f"✅ Task criada para OS {numero_os}: {task.id}")
 
@@ -1561,7 +1576,7 @@ async def get_scraping_status(task_id: str, current_user: Usuario = Depends(get_
     Retorna o progresso e resultado do scraping
     """
     try:
-        if not CELERY_AVAILABLE:
+        if not CELERY_AVAILABLE or not AsyncResult:
             return {"error": "Celery não disponível"}
 
         task = AsyncResult(task_id)
@@ -1620,10 +1635,16 @@ async def get_queue_status_endpoint(current_user: Usuario = Depends(get_current_
     Retorna informações sobre a fila de processamento
     """
     try:
-        if not CELERY_AVAILABLE:
+        if not CELERY_AVAILABLE or not get_queue_status:
             return {"error": "Celery não disponível", "queue_size": 0}
 
-        queue_info = get_queue_status.delay().get(timeout=10)
+        try:
+            if hasattr(get_queue_status, 'delay'):
+                queue_info = get_queue_status.delay().get(timeout=10)  # type: ignore
+            else:
+                return {"error": "Método delay não disponível", "queue_size": 0}
+        except Exception as e:
+            return {"error": f"Erro ao obter status da fila: {e}", "queue_size": 0}
 
         return {
             "status": "success",
@@ -2145,13 +2166,13 @@ async def get_pendencias(
         user_departamento = None
         if hasattr(current_user, 'departamento'):
             user_departamento = current_user.departamento
-        elif hasattr(current_user, 'id_setor') and current_user.id_setor:
+        elif hasattr(current_user, 'id_setor') and getattr(current_user, 'id_setor', None):
             setor_user = db.query(Setor).filter(Setor.id == current_user.id_setor).first()
             if setor_user:
-                user_departamento = setor_user.departamento
+                user_departamento = getattr(setor_user, 'departamento', None)
 
         # PCP e GESTÃO têm acesso a todas as pendências
-        if user_departamento not in ['PCP', 'GESTAO'] and current_user.privilege_level != 'ADMIN':
+        if user_departamento not in ['PCP', 'GESTAO'] and getattr(current_user, 'privilege_level', None) != 'ADMIN':
             # Usuários normais só veem pendências do seu setor
             apontamento_ids = db.query(ApontamentoDetalhado.id).filter(
                 ApontamentoDetalhado.id_setor == current_user.id_setor
@@ -2193,17 +2214,20 @@ async def get_pendencias(
                     setor_nome = setor_obj.nome if setor_obj else None
 
                     # Usar observação geral do apontamento como descrição da pendência
-                    if apontamento.observacoes_gerais:
-                        descricao_pendencia = apontamento.observacoes_gerais
+                    observacoes = getattr(apontamento, 'observacoes_gerais', None)
+                    if observacoes:
+                        descricao_pendencia = observacoes
 
             # Buscar equipamento através do relacionamento OS → Equipamento
             equipamento_descricao = pend.descricao_maquina  # Fallback para descricao_maquina
             try:
                 os = db.query(OrdemServico).filter(OrdemServico.os_numero == pend.numero_os).first()
-                if os and os.id_equipamento:
-                    equipamento = db.query(Equipamento).filter(Equipamento.id == os.id_equipamento).first()
-                    if equipamento and equipamento.descricao:
-                        equipamento_descricao = equipamento.descricao
+                equipamento_id = getattr(os, 'id_equipamento', None) if os else None
+                if os and equipamento_id:
+                    equipamento = db.query(Equipamento).filter(Equipamento.id == equipamento_id).first()
+                    equipamento_desc = getattr(equipamento, 'descricao', None) if equipamento else None
+                    if equipamento and equipamento_desc:
+                        equipamento_descricao = equipamento_desc
             except Exception as e:
                 print(f"⚠️ Erro ao buscar equipamento para pendência {pend.id}: {e}")
 
@@ -2249,7 +2273,7 @@ async def resolver_pendencia(
             raise HTTPException(status_code=404, detail="Pendência não encontrada")
 
         # Verificar se pendência já está fechada
-        if pendencia.status == 'FECHADA':
+        if getattr(pendencia, 'status', None) == 'FECHADA':
             raise HTTPException(status_code=400, detail="Pendência já está fechada")
 
         # Verificar permissões conforme especificação
@@ -2260,16 +2284,16 @@ async def resolver_pendencia(
         user_departamento = None
         if hasattr(current_user, 'departamento'):
             user_departamento = current_user.departamento
-        elif hasattr(current_user, 'id_setor') and current_user.id_setor:
+        elif hasattr(current_user, 'id_setor') and getattr(current_user, 'id_setor', None):
             setor_user = db.query(Setor).filter(Setor.id == current_user.id_setor).first()
             if setor_user:
-                user_departamento = setor_user.departamento
+                user_departamento = getattr(setor_user, 'departamento', None)
 
         # ADMIN, PCP e GESTÃO podem resolver qualquer pendência
-        if current_user.privilege_level != 'ADMIN' and user_departamento not in ['PCP', 'GESTAO']:
+        if getattr(current_user, 'privilege_level', None) != 'ADMIN' and user_departamento not in ['PCP', 'GESTAO']:
             # Usuários normais só podem resolver pendências do seu setor
             user_setor = db.query(Setor).filter(Setor.id == current_user.id_setor).first()
-            if user_setor and pendencia.setor_origem != user_setor.nome:
+            if user_setor and getattr(pendencia, 'setor_origem', None) != getattr(user_setor, 'nome', None):
                 raise HTTPException(
                     status_code=403,
                     detail=f"Sem permissão para resolver pendência de outro setor. Seu setor: {user_setor.nome}, Pendência: {pendencia.setor_origem}"
@@ -2277,19 +2301,19 @@ async def resolver_pendencia(
 
         # Calcular tempo_aberto_horas (delta desde data_inicio)
         tempo_aberto_horas = 0
-        if pendencia.data_inicio:
+        if getattr(pendencia, 'data_inicio', None):
             delta = datetime.now() - pendencia.data_inicio
             tempo_aberto_horas = round(delta.total_seconds() / 3600, 2)  # Converter para horas
 
         # Atualizar pendência conforme especificação
-        pendencia.status = dados.status or 'FECHADA'
-        pendencia.data_fechamento = datetime.now()
-        pendencia.id_responsavel_fechamento = current_user.id
-        pendencia.tempo_aberto_horas = tempo_aberto_horas
+        setattr(pendencia, 'status', dados.status or 'FECHADA')
+        setattr(pendencia, 'data_fechamento', datetime.now())
+        setattr(pendencia, 'id_responsavel_fechamento', current_user.id)
+        setattr(pendencia, 'tempo_aberto_horas', tempo_aberto_horas)
 
         # Usar os campos corretos enviados pelo frontend
-        pendencia.observacoes_fechamento = dados.observacoes_fechamento or dados.observacao_resolucao or 'Pendência resolvida'
-        pendencia.solucao_aplicada = dados.solucao_aplicada or dados.observacao_resolucao or 'Solução aplicada via apontamento'
+        setattr(pendencia, 'observacoes_fechamento', dados.observacoes_fechamento or dados.observacao_resolucao or 'Pendência resolvida')
+        setattr(pendencia, 'solucao_aplicada', dados.solucao_aplicada or dados.observacao_resolucao or 'Solução aplicada via apontamento')
 
         db.commit()
 
@@ -2438,29 +2462,31 @@ async def get_minhas_programacoes(
         for prog in programacoes_orm:
             # Buscar dados da OS se existir
             os_data = None
-            if prog.id_ordem_servico:
-                os_data = db.query(OrdemServico).filter(OrdemServico.id == prog.id_ordem_servico).first()
+            id_ordem_servico = getattr(prog, 'id_ordem_servico', None)
+            if id_ordem_servico:
+                os_data = db.query(OrdemServico).filter(OrdemServico.id == id_ordem_servico).first()
 
             # Buscar dados do criador
             criador_data = None
-            if prog.criado_por_id:
-                criador_data = db.query(Usuario).filter(Usuario.id == prog.criado_por_id).first()
+            criado_por_id = getattr(prog, 'criado_por_id', None)
+            if criado_por_id:
+                criador_data = db.query(Usuario).filter(Usuario.id == criado_por_id).first()
 
             programacao = {
                 "id": prog.id,
                 "id_ordem_servico": prog.id_ordem_servico,
                 "responsavel_id": prog.responsavel_id,
-                "inicio_previsto": prog.inicio_previsto.isoformat() if prog.inicio_previsto else None,
-                "fim_previsto": prog.fim_previsto.isoformat() if prog.fim_previsto else None,
-                "status": prog.status or "PROGRAMADA",
-                "criado_por_id": prog.criado_por_id,
-                "observacoes": prog.observacoes or "",
-                "created_at": prog.created_at.isoformat() if prog.created_at else None,
-                "updated_at": prog.updated_at.isoformat() if prog.updated_at else None,
+                "inicio_previsto": (lambda x: x.isoformat() if x and hasattr(x, 'isoformat') else None)(getattr(prog, 'inicio_previsto', None)),
+                "fim_previsto": (lambda x: x.isoformat() if x and hasattr(x, 'isoformat') else None)(getattr(prog, 'fim_previsto', None)),
+                "status": getattr(prog, 'status', None) or "PROGRAMADA",
+                "criado_por_id": getattr(prog, 'criado_por_id', None),
+                "observacoes": getattr(prog, 'observacoes', None) or "",
+                "created_at": (lambda x: x.isoformat() if x and hasattr(x, 'isoformat') else None)(getattr(prog, 'created_at', None)),
+                "updated_at": (lambda x: x.isoformat() if x and hasattr(x, 'isoformat') else None)(getattr(prog, 'updated_at', None)),
                 "id_setor": prog.id_setor,
                 "historico": getattr(prog, 'historico', '') or "",
                 # Dados melhorados da OS
-                "os_numero": os_data.os_numero if os_data and os_data.os_numero else "000012345" if prog.id_ordem_servico == 1 else f"OS-{prog.id_ordem_servico}" if prog.id_ordem_servico else "N/A",
+                "os_numero": getattr(os_data, 'os_numero', None) if os_data and getattr(os_data, 'os_numero', None) else "000012345" if id_ordem_servico == 1 else f"OS-{id_ordem_servico}" if id_ordem_servico else "N/A",
                 "status_os": os_data.status_os if os_data else "ABERTA",
                 "prioridade": os_data.prioridade if os_data else "NORMAL",
                 # Dados dos usuários
@@ -2473,7 +2499,7 @@ async def get_minhas_programacoes(
                 # Campos adicionais para o frontend
                 "atribuido_para": current_user.nome_usuario,  # Usar nome_usuario
                 "atribuido_por": criador_data.nome_usuario if criador_data else "N/A",
-                "data_atribuicao": prog.created_at.strftime('%d/%m/%Y %H:%M') if prog.created_at else None
+                "data_atribuicao": prog.created_at.strftime('%d/%m/%Y %H:%M') if getattr(prog, 'created_at', None) else None
             }
             programacoes.append(programacao)
 

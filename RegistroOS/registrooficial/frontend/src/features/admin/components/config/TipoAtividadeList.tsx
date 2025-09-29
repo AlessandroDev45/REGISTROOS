@@ -14,7 +14,7 @@ const TipoAtividadeList: React.FC<TipoAtividadeListProps> = ({ data: atividades 
     const [deletingId, setDeletingId] = React.useState<number | null>(null);
 
     const handleDeleteClick = async (atividade: AtividadeTipoData) => {
-        if (!window.confirm(`Tem certeza de que deseja deletar o tipo de atividade "${atividade.nome_tipo}"?`)) {
+        if (!window.confirm(`Tem certeza de que deseja deletar o tipo de atividade "${atividade.nome}"?`)) {
             return;
         }
         setDeletingId(atividade.id || null);
@@ -53,7 +53,7 @@ const TipoAtividadeList: React.FC<TipoAtividadeListProps> = ({ data: atividades 
                         {atividades.length > 0 ? (
                             atividades.map((atividade) => (
                                 <tr key={atividade.id}>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{atividade.nome_tipo}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{atividade.nome}</td>
                                     <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate" title={atividade.descricao}>{atividade.descricao || '-'}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                         {atividade.ativo ? (

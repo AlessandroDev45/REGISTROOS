@@ -3,13 +3,28 @@ import { AtividadeTipoData, DescricaoAtividadeData, FalhaTipoData, TipoMaquinaDa
 
 const api = axios.create({
   baseURL: '/api', // URL do backend FastAPI via proxy
-  withCredentials: true, // Send cookies with requests
+  withCredentials: true, // Send cookies with requests (IMPORTANTE para HttpOnly cookies)
 });
 
+// Interceptor para garantir que cookies sejam sempre enviados
 api.interceptors.request.use(config => {
-  // Token is now handled via HttpOnly cookies, no need to add Authorization header
+  // Garantir que withCredentials está sempre true para enviar cookies HttpOnly
+  config.withCredentials = true;
+  console.log('🔐 [API] Enviando requisição com cookies:', config.url);
   return config;
 });
+
+// Interceptor para tratar respostas de erro de autenticação
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      console.log('🚫 [API] Erro 401 - Token inválido ou expirado');
+      // Não redirecionar automaticamente, deixar o AuthContext tratar
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Catalog Endpoints
 export const fetchAtividadeTipos = async (setor?: string) => {

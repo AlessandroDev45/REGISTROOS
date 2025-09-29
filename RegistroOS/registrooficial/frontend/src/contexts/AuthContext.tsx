@@ -185,8 +185,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setSelectedSector(null);
         setRequiresPasswordChange(false);
 
-        // Limpar qualquer cache do axios
-        delete api.defaults.headers.common['Authorization'];
+        // Não precisamos limpar headers Authorization pois usamos cookies HttpOnly
+        // O logout será feito via endpoint /logout que limpa o cookie
 
         // Limpar localStorage se houver algo
         localStorage.clear();

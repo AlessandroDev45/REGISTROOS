@@ -27,60 +27,71 @@ from sqlalchemy.orm import Session
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from pydantic import BaseModel
-import json
 
 from config.database_config import get_db
 from app.dependencies import get_current_user
 from app.database_models import (
     Usuario, Departamento, Setor, TipoMaquina, TipoTeste,
-    Cliente, Equipamento, TipoAtividade, TipoDescricaoAtividade,
+    Cliente, TipoAtividade, TipoDescricaoAtividade,
     TipoCausaRetrabalho, TipoFalha, OrdemServico
+)
+from app.schemas import (
+    DepartamentoCreate, DepartamentoUpdate, DepartamentoResponse,
+    SetorCreate, SetorUpdate, SetorResponse,
+    TipoMaquinaCreate, TipoMaquinaUpdate, TipoMaquinaResponse,
+    TipoTesteCreate, TipoTesteUpdate, TipoTesteResponse,
+    TipoAtividadeCreate, TipoAtividadeUpdate, TipoAtividadeResponse,
+    DescricaoAtividadeCreate, DescricaoAtividadeUpdate, DescricaoAtividadeResponse,
+    TipoFalhaCreate, TipoFalhaUpdate, TipoFalhaResponse,
+    CausaRetrabalhoCreate, CausaRetrabalhoUpdate, CausaRetrabalhoResponse
+)
+from app.utils.db_lookups import (
+    validate_departamento_exists_by_id,
+    get_departamento_nome_by_id
 )
 
 router = APIRouter(tags=["admin-config"])
 
 # ============================================================================
-# MODELOS PYDANTIC PARA CRIAÇÃO DE ENTIDADES
+# MODELOS PYDANTIC IMPORTADOS DE app.schemas
 # ============================================================================
+# Os modelos Pydantic agora estão centralizados em app/schemas.py
+# Importados: DepartamentoCreate, SetorCreate, TipoMaquinaCreate, etc.
 
-class DepartamentoCreate(BaseModel):
-    nome_tipo: str
-    descricao: Optional[str] = None
-    ativo: bool = True
+# Removido TipoTesteCreate local - usando o centralizado de app.schemas
 
-class SetorCreate(BaseModel):
-    nome: str
-    departamento: str
+# Schemas corretos para entidades que usam 'codigo' no banco
+class FalhaTipoCreateCorrect(BaseModel):
+    codigo: str
     descricao: Optional[str] = None
-    id_departamento: int
-    area_tipo: str
-    supervisor_responsavel: Optional[int] = None
-    permite_apontamento: bool = True
-    ativo: bool = True
-
-class TipoMaquinaCreate(BaseModel):
-    nome_tipo: str
-    categoria: str
-    subcategoria: Optional[List[str]] = None
-    descricao: Optional[str] = None
-    id_departamento: int
-    especificacoes_tecnicas: Optional[str] = None
-    campos_teste_resultado: Optional[str] = None
-    setor: Optional[str] = None
-    departamento: Optional[str] = None
-    ativo: bool = True
-
-class TipoTesteCreate(BaseModel):
-    nome: str
-    departamento: str
-    setor: Optional[str] = None
-    tipo_teste: Optional[str] = None
-    descricao: Optional[str] = None
-    tipo_maquina: Optional[int] = None
-    teste_exclusivo_setor: bool = False
-    descricao_teste_exclusivo: Optional[str] = None
     categoria: Optional[str] = None
-    subcategoria: Optional[int] = None
+    severidade: Optional[str] = None
+    departamento: Optional[str] = None
+    setor: Optional[str] = None
+    ativo: bool = True
+
+class CausaRetrabalhoCreateCorrect(BaseModel):
+    codigo: str
+    descricao: Optional[str] = None
+    departamento: Optional[str] = None
+    setor: Optional[str] = None
+    ativo: bool = True
+
+class DescricaoAtividadeCreateCorrect(BaseModel):
+    codigo: str
+    descricao: Optional[str] = None
+    categoria: Optional[str] = None
+    departamento: Optional[str] = None
+    setor: Optional[str] = None
+    ativo: bool = True
+
+class AtividadeTipoCreateCorrect(BaseModel):
+    nome_tipo: str
+    descricao: Optional[str] = None
+    categoria: Optional[str] = None
+    departamento: Optional[str] = None
+    setor: Optional[str] = None
+    id_tipo_maquina: Optional[int] = None
     ativo: bool = True
 
 class ClienteCreate(BaseModel):
@@ -116,19 +127,24 @@ def verificar_admin(current_user: Any = Depends(get_current_user)):
 # ENDPOINTS DE CRIAÇÃO DE ENTIDADES
 # ============================================================================
 
-@router.get("/departamentos", response_model=List[Dict[str, Any]])
-async def listar_departamentos(
+# ============================================================================
+# ENDPOINTS DE CONFIGURAÇÃO - COMPATIBILIDADE COM FRONTEND
+# ============================================================================
+
+# Endpoint adicional para compatibilidade com frontend
+@router.get("/config/departamentos", response_model=List[dict])
+async def listar_departamentos_config(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(verificar_admin)
 ):
-    """Listar todos os departamentos"""
+    """Listar todos os departamentos (endpoint de configuração)"""
     try:
         departamentos = db.query(Departamento).all()
-
         return [
             {
                 "id": dept.id,
-                "nome_tipo": dept.nome_tipo,
+                "nome": dept.nome_tipo,  # Alias para compatibilidade frontend
+                "nome_tipo": dept.nome_tipo,  # Campo original
                 "descricao": dept.descricao,
                 "ativo": dept.ativo,
                 "data_criacao": dept.data_criacao,
@@ -138,12 +154,215 @@ async def listar_departamentos(
         ]
 
     except Exception as e:
+        print(f"❌ Erro ao listar departamentos (config): {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro ao listar departamentos: {str(e)}"
         )
 
-@router.post("/departamentos", response_model=Dict[str, Any])
+@router.post("/config/departamentos", response_model=DepartamentoResponse)
+async def criar_departamento_config(
+    departamento_data: DepartamentoCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Criar novo departamento (endpoint de configuração)"""
+    return criar_departamento(departamento_data, db, current_user)
+
+@router.get("/config/departamentos/{departamento_id}", response_model=DepartamentoResponse)
+async def obter_departamento_config(
+    departamento_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Obter departamento por ID (endpoint de configuração)"""
+    return buscar_departamento(departamento_id, db, current_user)
+
+@router.put("/config/departamentos/{departamento_id}", response_model=DepartamentoResponse)
+async def atualizar_departamento_config(
+    departamento_id: int,
+    departamento_data: DepartamentoUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Atualizar departamento (endpoint de configuração)"""
+    return atualizar_departamento(departamento_id, departamento_data, db, current_user)
+
+# =============================================================================
+# ENDPOINTS DE CONFIGURAÇÃO PARA SETORES
+# =============================================================================
+
+@router.get("/config/setores", response_model=List[SetorResponse])
+async def listar_setores_config(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Listar todos os setores (endpoint de configuração)"""
+    return listar_setores(db, current_user)
+
+@router.post("/config/setores", response_model=SetorResponse)
+async def criar_setor_config(
+    setor_data: SetorCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Criar novo setor (endpoint de configuração)"""
+    return criar_setor(setor_data, db, current_user)
+
+@router.get("/config/setores/{setor_id}", response_model=SetorResponse)
+async def obter_setor_config(
+    setor_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Obter setor por ID (endpoint de configuração)"""
+    return buscar_setor(setor_id, db, current_user)
+
+@router.put("/config/setores/{setor_id}", response_model=SetorResponse)
+async def atualizar_setor_config(
+    setor_id: int,
+    setor_data: SetorUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Atualizar setor (endpoint de configuração)"""
+    return atualizar_setor(setor_id, setor_data, db, current_user)
+
+@router.delete("/config/setores/{setor_id}")
+async def deletar_setor_config(
+    setor_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Deletar setor (endpoint de configuração)"""
+    return deletar_setor(setor_id, db, current_user)
+
+# =============================================================================
+# ENDPOINTS DE CONFIGURAÇÃO PARA TIPOS DE MÁQUINA
+# =============================================================================
+
+@router.get("/config/tipos-maquina", response_model=List[dict])
+async def listar_tipos_maquina_config(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Listar todos os tipos de máquina (endpoint de configuração)"""
+    return listar_tipos_maquina(db, current_user)
+
+@router.post("/config/tipos-maquina", response_model=TipoMaquinaResponse)
+async def criar_tipo_maquina_config(
+    tipo_data: TipoMaquinaCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Criar novo tipo de máquina (endpoint de configuração)"""
+    return criar_tipo_maquina(tipo_data, db, current_user)
+
+@router.get("/config/tipos-maquina/{tipo_id}", response_model=TipoMaquinaResponse)
+async def obter_tipo_maquina_config(
+    tipo_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Obter tipo de máquina por ID (endpoint de configuração)"""
+    return buscar_tipo_maquina(tipo_id, db, current_user)
+
+@router.put("/config/tipos-maquina/{tipo_id}", response_model=TipoMaquinaResponse)
+async def atualizar_tipo_maquina_config(
+    tipo_id: int,
+    tipo_data: TipoMaquinaUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Atualizar tipo de máquina (endpoint de configuração)"""
+    return atualizar_tipo_maquina(tipo_id, tipo_data, db, current_user)
+
+@router.delete("/config/tipos-maquina/{tipo_id}")
+async def deletar_tipo_maquina_config(
+    tipo_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Deletar tipo de máquina (endpoint de configuração)"""
+    return deletar_tipo_maquina(tipo_id, db, current_user)
+
+
+
+@router.get("/departamentos", response_model=List[dict])
+async def listar_departamentos(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Listar todos os departamentos ativos"""
+    try:
+        departamentos = db.query(Departamento).all()
+        return [
+            {
+                "id": dept.id,
+                "nome": dept.nome_tipo,  # Alias para compatibilidade frontend
+                "nome_tipo": dept.nome_tipo,  # Campo original
+                "descricao": dept.descricao,
+                "ativo": dept.ativo,
+                "data_criacao": dept.data_criacao,
+                "data_ultima_atualizacao": dept.data_ultima_atualizacao
+            }
+            for dept in departamentos
+        ]
+
+    except Exception as e:
+        print(f"❌ Erro ao listar departamentos: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao listar departamentos: {str(e)}"
+        )
+
+
+
+
+
+# Endpoint adicional para compatibilidade com frontend - DELETE
+@router.delete("/config/departamentos/{departamento_id}")
+async def deletar_departamento_config(
+    departamento_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Deletar departamento (endpoint de configuração)"""
+    try:
+        departamento = db.query(Departamento).filter(Departamento.id == departamento_id).first()
+
+        if not departamento:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Departamento com ID {departamento_id} não encontrado"
+            )
+
+        # Verificar se há setores vinculados
+        setores_vinculados = db.query(Setor).filter(Setor.departamento == departamento.nome_tipo).count()
+        if setores_vinculados > 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Não é possível deletar o departamento. Existem {setores_vinculados} setores vinculados."
+            )
+
+        # Soft delete - marcar como inativo ao invés de deletar
+        setattr(departamento, 'ativo', False)
+        setattr(departamento, 'data_ultima_atualizacao', datetime.now())
+
+        db.commit()
+
+        return {"message": f"Departamento '{departamento.nome_tipo}' foi desativado com sucesso"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao deletar departamento: {str(e)}"
+        )
+
+@router.post("/departamentos", response_model=DepartamentoResponse)
 async def criar_departamento(
     departamento_data: DepartamentoCreate,
     db: Session = Depends(get_db),
@@ -153,43 +372,1280 @@ async def criar_departamento(
     try:
         # Verificar se já existe
         existente = db.query(Departamento).filter_by(nome_tipo=departamento_data.nome_tipo).first()
-        
+
         if existente:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Departamento '{departamento_data.nome_tipo}' já existe"
             )
-        
-        # Criar novo departamento
-        novo_departamento = Departamento()  # type: ignore
-        novo_departamento.nome_tipo = departamento_data.nome_tipo  # type: ignore
-        novo_departamento.descricao = departamento_data.descricao  # type: ignore
-        novo_departamento.ativo = departamento_data.ativo  # type: ignore
-        novo_departamento.data_criacao = datetime.now()  # type: ignore
-        novo_departamento.data_ultima_atualizacao = datetime.now()  # type: ignore
-        
+
+        # Criar novo departamento usando dados do schema
+        novo_departamento = Departamento(
+            nome_tipo=departamento_data.nome_tipo,
+            descricao=departamento_data.descricao,
+            ativo=departamento_data.ativo,
+            data_criacao=datetime.now(),
+            data_ultima_atualizacao=datetime.now()
+        )
+
         db.add(novo_departamento)
         db.commit()
         db.refresh(novo_departamento)
-        
-        return {
-            "id": novo_departamento.id,
-            "nome_tipo": novo_departamento.nome_tipo,
-            "descricao": novo_departamento.descricao,
-            "ativo": novo_departamento.ativo,
-            "data_criacao": novo_departamento.data_criacao,
-            "message": "Departamento criado com sucesso"
-        }
+
+        return DepartamentoResponse.model_validate(novo_departamento)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao criar departamento: {str(e)}"
+        )
+
+# ============================================================================
+# ENDPOINTS PARA TIPOS DE MÁQUINA
+# ============================================================================
+
+@router.get("/tipos-maquina", response_model=List[dict])
+async def listar_tipos_maquina(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Listar todos os tipos de máquina ativos"""
+    try:
+        print("🔧 [DEBUG] Iniciando busca de tipos de máquina...")
+        tipos_maquina = db.query(TipoMaquina).all()
+        print(f"🔧 [DEBUG] Encontrados {len(tipos_maquina)} tipos de máquina")
+
+        result = []
+        for tm in tipos_maquina:
+            print(f"🔧 [DEBUG] Processando máquina ID: {tm.id}, Nome: {tm.nome_tipo}")
+            print(f"🔧 [DEBUG] campos_teste_resultado: {repr(tm.campos_teste_resultado)}")
+
+            item = {
+                "id": tm.id,
+                "nome": tm.nome_tipo,  # Campo correto
+                "nome_tipo": tm.nome_tipo,
+                "departamento": tm.departamento,
+                "setor": tm.setor,
+                "categoria": tm.categoria,
+                "subcategoria": tm.subcategoria,
+                "descricao": tm.descricao,
+                "campos_teste_resultado": tm.campos_teste_resultado or "{}",  # Garantir que não seja None
+                "ativo": tm.ativo
+            }
+            result.append(item)
+            print(f"🔧 [DEBUG] Item processado com sucesso: {item['id']}")
+
+        print(f"🔧 [DEBUG] Retornando {len(result)} itens")
+        return result
+
+    except Exception as e:
+        print(f"❌ Erro ao listar tipos de máquina: {str(e)}")
+        import traceback
+        print(f"❌ Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao listar tipos de máquina: {str(e)}"
+        )
+
+# ============================================================================
+# ENDPOINTS PARA TIPOS DE TESTE
+# ============================================================================
+
+@router.get("/tipos-teste", response_model=List[TipoTesteResponse])
+async def listar_tipos_teste(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Listar todos os tipos de teste"""
+    try:
+        tipos_teste = db.query(TipoTeste).all()
+        return [TipoTesteResponse.model_validate(tt) for tt in tipos_teste]
+
+    except Exception as e:
+        print(f"❌ Erro ao listar tipos de teste: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao listar tipos de teste: {str(e)}"
+        )
+
+# Endpoints de configuração para tipos de teste
+@router.get("/config/tipos-teste", response_model=List[TipoTesteResponse])
+async def listar_tipos_teste_config(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Endpoint de compatibilidade para tipos de teste"""
+    return await listar_tipos_teste(db, current_user)
+
+@router.post("/config/tipos-teste", response_model=TipoTesteResponse)
+async def criar_tipo_teste_config(
+    tipo_data: TipoTesteCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Criar novo tipo de teste (endpoint de configuração)"""
+    return await criar_tipo_teste(tipo_data, db, current_user)
+
+@router.get("/config/tipos-teste/{tipo_id}", response_model=TipoTesteResponse)
+async def obter_tipo_teste_config(
+    tipo_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Obter tipo de teste por ID (endpoint de configuração)"""
+    return await buscar_tipo_teste(tipo_id, db, current_user)
+
+@router.put("/config/tipos-teste/{tipo_id}", response_model=TipoTesteResponse)
+async def atualizar_tipo_teste_config(
+    tipo_id: int,
+    tipo_data: TipoTesteUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Atualizar tipo de teste (endpoint de configuração)"""
+    return await atualizar_tipo_teste(tipo_id, tipo_data, db, current_user)
+
+@router.delete("/config/tipos-teste/{tipo_id}")
+async def deletar_tipo_teste_config(
+    tipo_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Deletar tipo de teste (endpoint de configuração)"""
+    return await deletar_tipo_teste(tipo_id, db, current_user)
+
+# =============================================================================
+# ENDPOINTS DE CONFIGURAÇÃO PARA TIPOS DE ATIVIDADE
+# =============================================================================
+
+@router.get("/config/tipos-atividade", response_model=List[TipoAtividadeResponse])
+async def listar_tipos_atividade_config(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Listar todos os tipos de atividade (endpoint de configuração)"""
+    return await listar_tipos_atividade(db, current_user)
+
+@router.post("/config/tipos-atividade", response_model=TipoAtividadeResponse)
+async def criar_tipo_atividade_config(
+    atividade_data: TipoAtividadeCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Criar novo tipo de atividade (endpoint de configuração)"""
+    return await criar_tipo_atividade(atividade_data, db, current_user)
+
+@router.get("/config/tipos-atividade/{atividade_id}", response_model=TipoAtividadeResponse)
+async def obter_tipo_atividade_config(
+    atividade_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Obter tipo de atividade por ID (endpoint de configuração)"""
+    return await buscar_tipo_atividade(atividade_id, db, current_user)
+
+@router.put("/config/tipos-atividade/{atividade_id}", response_model=TipoAtividadeResponse)
+async def atualizar_tipo_atividade_config(
+    atividade_id: int,
+    atividade_data: TipoAtividadeUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Atualizar tipo de atividade (endpoint de configuração)"""
+    return await atualizar_tipo_atividade(atividade_id, atividade_data, db, current_user)
+
+@router.delete("/config/tipos-atividade/{atividade_id}")
+async def deletar_tipo_atividade_config(
+    atividade_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Deletar tipo de atividade (endpoint de configuração)"""
+    return await deletar_tipo_atividade(atividade_id, db, current_user)
+
+# =============================================================================
+# ENDPOINTS DE CONFIGURAÇÃO PARA DESCRIÇÕES DE ATIVIDADE
+# =============================================================================
+
+@router.get("/config/descricoes-atividade", response_model=List[DescricaoAtividadeResponse])
+async def listar_descricoes_atividade_config(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Listar todas as descrições de atividade (endpoint de configuração)"""
+    return await listar_descricoes_atividade(db, current_user)
+
+@router.post("/config/descricoes-atividade", response_model=DescricaoAtividadeResponse)
+async def criar_descricao_atividade_config(
+    descricao_data: DescricaoAtividadeCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Criar nova descrição de atividade (endpoint de configuração)"""
+    return await criar_descricao_atividade(descricao_data, db, current_user)
+
+@router.get("/config/descricoes-atividade/{descricao_id}", response_model=DescricaoAtividadeResponse)
+async def obter_descricao_atividade_config(
+    descricao_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Obter descrição de atividade por ID (endpoint de configuração)"""
+    return await buscar_descricao_atividade(descricao_id, db, current_user)
+
+@router.put("/config/descricoes-atividade/{descricao_id}", response_model=DescricaoAtividadeResponse)
+async def atualizar_descricao_atividade_config(
+    descricao_id: int,
+    descricao_data: DescricaoAtividadeUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Atualizar descrição de atividade (endpoint de configuração)"""
+    return await atualizar_descricao_atividade(descricao_id, descricao_data, db, current_user)
+
+@router.delete("/config/descricoes-atividade/{descricao_id}")
+async def deletar_descricao_atividade_config(
+    descricao_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Deletar descrição de atividade (endpoint de configuração)"""
+    return await deletar_descricao_atividade(descricao_id, db, current_user)
+
+# =============================================================================
+# ENDPOINTS DE CONFIGURAÇÃO PARA TIPOS DE FALHA
+# =============================================================================
+
+@router.get("/config/tipos-falha", response_model=List[TipoFalhaResponse])
+async def listar_tipos_falha_config(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Listar todos os tipos de falha (endpoint de configuração)"""
+    return await listar_tipos_falha(db, current_user)
+
+@router.post("/config/tipos-falha", response_model=TipoFalhaResponse)
+async def criar_tipo_falha_config(
+    falha_data: TipoFalhaCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Criar novo tipo de falha (endpoint de configuração)"""
+    return await criar_tipo_falha(falha_data, db, current_user)
+
+@router.get("/config/tipos-falha/{falha_id}", response_model=TipoFalhaResponse)
+async def obter_tipo_falha_config(
+    falha_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Obter tipo de falha por ID (endpoint de configuração)"""
+    return await buscar_tipo_falha(falha_id, db, current_user)
+
+@router.put("/config/tipos-falha/{falha_id}", response_model=TipoFalhaResponse)
+async def atualizar_tipo_falha_config(
+    falha_id: int,
+    falha_data: TipoFalhaUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Atualizar tipo de falha (endpoint de configuração)"""
+    return await atualizar_tipo_falha(falha_id, falha_data, db, current_user)
+
+@router.delete("/config/tipos-falha/{falha_id}")
+async def deletar_tipo_falha_config(
+    falha_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Deletar tipo de falha (endpoint de configuração)"""
+    return await deletar_tipo_falha(falha_id, db, current_user)
+
+# =============================================================================
+# ENDPOINTS DE CONFIGURAÇÃO PARA CAUSAS DE RETRABALHO
+# =============================================================================
+
+@router.get("/config/causas-retrabalho", response_model=List[CausaRetrabalhoResponse])
+async def listar_causas_retrabalho_config(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Listar todas as causas de retrabalho (endpoint de configuração)"""
+    return await listar_causas_retrabalho(db, current_user)
+
+@router.post("/config/causas-retrabalho", response_model=CausaRetrabalhoResponse)
+async def criar_causa_retrabalho_config(
+    causa_data: CausaRetrabalhoCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Criar nova causa de retrabalho (endpoint de configuração)"""
+    return await criar_causa_retrabalho(causa_data, db, current_user)
+
+@router.get("/config/causas-retrabalho/{causa_id}", response_model=CausaRetrabalhoResponse)
+async def obter_causa_retrabalho_config(
+    causa_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Obter causa de retrabalho por ID (endpoint de configuração)"""
+    return await buscar_causa_retrabalho(causa_id, db, current_user)
+
+@router.put("/config/causas-retrabalho/{causa_id}", response_model=CausaRetrabalhoResponse)
+async def atualizar_causa_retrabalho_config(
+    causa_id: int,
+    causa_data: CausaRetrabalhoUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Atualizar causa de retrabalho (endpoint de configuração)"""
+    return await atualizar_causa_retrabalho(causa_id, causa_data, db, current_user)
+
+@router.delete("/config/causas-retrabalho/{causa_id}")
+async def deletar_causa_retrabalho_config(
+    causa_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Deletar causa de retrabalho (endpoint de configuração)"""
+    return await deletar_causa_retrabalho(causa_id, db, current_user)
+
+@router.get("/tipos-teste/{tipo_id}", response_model=TipoTesteResponse)
+async def buscar_tipo_teste(
+    tipo_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Buscar tipo de teste por ID"""
+    try:
+        tipo_teste = db.query(TipoTeste).filter(TipoTeste.id == tipo_id).first()
+
+        if not tipo_teste:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tipo de teste com ID {tipo_id} não encontrado"
+            )
+
+        return TipoTesteResponse.model_validate(tipo_teste)
 
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Erro ao criar departamento: {str(e)}"
+            detail=f"Erro ao buscar tipo de teste: {str(e)}"
         )
 
-@router.get("/departamentos/{departamento_id}", response_model=Dict[str, Any])
+@router.post("/tipos-teste", response_model=TipoTesteResponse)
+async def criar_tipo_teste(
+    tipo_data: TipoTesteCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Criar novo tipo de teste"""
+    try:
+        # Verificar se já existe
+        existente = db.query(TipoTeste).filter(TipoTeste.nome == tipo_data.nome_tipo).first()
+
+        if existente:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Tipo de teste '{tipo_data.nome_tipo}' já existe"
+            )
+
+        # Criar novo tipo de teste
+        novo_tipo = TipoTeste(
+            nome=tipo_data.nome_tipo,  # Usar nome_tipo do schema
+            departamento=tipo_data.departamento,
+            setor=tipo_data.setor,
+            tipo_teste=tipo_data.tipo_teste,
+            descricao=tipo_data.descricao,
+            tipo_maquina=tipo_data.tipo_maquina,
+            categoria=tipo_data.categoria,
+            subcategoria=tipo_data.subcategoria,
+            ativo=tipo_data.ativo,
+            data_criacao=datetime.now(),
+            data_ultima_atualizacao=datetime.now()
+        )
+
+        db.add(novo_tipo)
+        db.commit()
+        db.refresh(novo_tipo)
+
+        return TipoTesteResponse.model_validate(novo_tipo)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao criar tipo de teste: {str(e)}"
+        )
+
+@router.put("/tipos-teste/{tipo_id}", response_model=TipoTesteResponse)
+async def atualizar_tipo_teste(
+    tipo_id: int,
+    tipo_data: TipoTesteUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Atualizar tipo de teste"""
+    try:
+        tipo_teste = db.query(TipoTeste).filter(TipoTeste.id == tipo_id).first()
+
+        if not tipo_teste:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tipo de teste com ID {tipo_id} não encontrado"
+            )
+
+        # Verificar se o novo nome já existe (se foi alterado)
+        if tipo_data.nome_tipo and tipo_data.nome_tipo != tipo_teste.nome:
+            existente = db.query(TipoTeste).filter(TipoTeste.nome == tipo_data.nome_tipo).first()
+            if existente:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Tipo de teste '{tipo_data.nome_tipo}' já existe"
+                )
+
+        # Atualizar apenas campos fornecidos (partial update)
+        update_data = tipo_data.model_dump(exclude_unset=True, by_alias=False)
+        for field, value in update_data.items():
+            if field == 'nome_tipo':
+                setattr(tipo_teste, 'nome', value)  # Mapear nome_tipo para nome na DB
+            else:
+                setattr(tipo_teste, field, value)
+
+        setattr(tipo_teste, 'data_ultima_atualizacao', datetime.now())
+
+        db.commit()
+        db.refresh(tipo_teste)
+
+        return TipoTesteResponse.model_validate(tipo_teste)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao atualizar tipo de teste: {str(e)}"
+        )
+
+@router.delete("/tipos-teste/{tipo_id}")
+async def deletar_tipo_teste(
+    tipo_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Deletar tipo de teste (soft delete)"""
+    try:
+        tipo_teste = db.query(TipoTeste).filter(TipoTeste.id == tipo_id).first()
+
+        if not tipo_teste:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tipo de teste com ID {tipo_id} não encontrado"
+            )
+
+        # DELETE FÍSICO - apagar da database
+        db.delete(tipo_teste)
+        db.commit()
+
+        return {"message": f"Tipo de teste '{tipo_teste.nome}' foi deletado com sucesso"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao deletar tipo de teste: {str(e)}"
+        )
+
+# ============================================================================
+# ENDPOINTS PARA TIPOS DE ATIVIDADE
+# ============================================================================
+
+@router.get("/tipos-atividade", response_model=List[TipoAtividadeResponse])
+async def listar_tipos_atividade(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Listar todos os tipos de atividade ativos"""
+    try:
+        tipos_atividade = db.query(TipoAtividade).all()
+
+        # Criar lista com campos nome_tipo e nome para cada atividade
+        atividades_response = []
+        for ta in tipos_atividade:
+            atividade_dict = {
+                "id": ta.id,
+                "nome_tipo": ta.nome_tipo,
+                "nome": ta.nome_tipo,  # Alias para compatibilidade
+                "descricao": ta.descricao,
+                "departamento": ta.departamento,
+                "setor": ta.setor,
+                "categoria": ta.categoria,
+                "ativo": ta.ativo,
+                "data_criacao": ta.data_criacao,
+                "data_ultima_atualizacao": ta.data_ultima_atualizacao
+            }
+            atividades_response.append(TipoAtividadeResponse.model_validate(atividade_dict))
+
+        return atividades_response
+
+    except Exception as e:
+        print(f"❌ Erro ao listar tipos de atividade: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao listar tipos de atividade: {str(e)}"
+        )
+
+@router.post("/tipos-atividade", response_model=TipoAtividadeResponse)
+async def criar_tipo_atividade(
+    atividade_data: TipoAtividadeCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Criar novo tipo de atividade"""
+    try:
+        # Verificar se já existe
+        existente = db.query(TipoAtividade).filter(TipoAtividade.nome_tipo == atividade_data.nome_tipo).first()
+
+        if existente:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Tipo de atividade '{atividade_data.nome_tipo}' já existe"
+            )
+
+        # Criar novo tipo de atividade
+        novo_tipo = TipoAtividade(
+            nome_tipo=atividade_data.nome_tipo,
+            departamento=atividade_data.departamento,
+            setor=atividade_data.setor,
+            descricao=atividade_data.descricao,
+            categoria=atividade_data.categoria,
+            ativo=atividade_data.ativo,
+            data_criacao=datetime.now(),
+            data_ultima_atualizacao=datetime.now()
+        )
+
+        db.add(novo_tipo)
+        db.commit()
+        db.refresh(novo_tipo)
+
+        return TipoAtividadeResponse.model_validate(novo_tipo)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao criar tipo de atividade: {str(e)}"
+        )
+
+@router.get("/tipos-atividade/{atividade_id}", response_model=TipoAtividadeResponse)
+async def buscar_tipo_atividade(
+    atividade_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Buscar tipo de atividade por ID"""
+    try:
+        tipo_atividade = db.query(TipoAtividade).filter(TipoAtividade.id == atividade_id).first()
+
+        if not tipo_atividade:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tipo de atividade com ID {atividade_id} não encontrado"
+            )
+
+        # Criar resposta com ambos os campos nome_tipo e nome
+        atividade_dict = {
+            "id": tipo_atividade.id,
+            "nome_tipo": tipo_atividade.nome_tipo,
+            "nome": tipo_atividade.nome_tipo,  # Alias para compatibilidade
+            "descricao": tipo_atividade.descricao,
+            "departamento": tipo_atividade.departamento,
+            "setor": tipo_atividade.setor,
+            "categoria": tipo_atividade.categoria,
+            "ativo": tipo_atividade.ativo,
+            "data_criacao": tipo_atividade.data_criacao,
+            "data_ultima_atualizacao": tipo_atividade.data_ultima_atualizacao
+        }
+        return TipoAtividadeResponse.model_validate(atividade_dict)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao buscar tipo de atividade: {str(e)}"
+        )
+
+@router.put("/tipos-atividade/{atividade_id}", response_model=TipoAtividadeResponse)
+async def atualizar_tipo_atividade(
+    atividade_id: int,
+    atividade_data: TipoAtividadeUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Atualizar tipo de atividade"""
+    try:
+        tipo_atividade = db.query(TipoAtividade).filter(TipoAtividade.id == atividade_id).first()
+
+        if not tipo_atividade:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tipo de atividade com ID {atividade_id} não encontrado"
+            )
+
+        # Verificar se o novo nome já existe (se foi alterado)
+        if atividade_data.nome_tipo and atividade_data.nome_tipo != tipo_atividade.nome_tipo:
+            existente = db.query(TipoAtividade).filter(TipoAtividade.nome_tipo == atividade_data.nome_tipo).first()
+            if existente:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Tipo de atividade '{atividade_data.nome_tipo}' já existe"
+                )
+
+        # Atualizar campos usando setattr
+        update_data = atividade_data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            # Se o campo for 'nome', atualizar também 'nome_tipo'
+            if field == 'nome':
+                setattr(tipo_atividade, 'nome_tipo', value)
+            setattr(tipo_atividade, field, value)
+
+        setattr(tipo_atividade, 'data_ultima_atualizacao', datetime.now())
+
+        db.commit()
+        db.refresh(tipo_atividade)
+
+        # Criar resposta com ambos os campos nome_tipo e nome
+        atividade_dict = {
+            "id": tipo_atividade.id,
+            "nome_tipo": tipo_atividade.nome_tipo,
+            "nome": tipo_atividade.nome_tipo,  # Alias para compatibilidade
+            "descricao": tipo_atividade.descricao,
+            "departamento": tipo_atividade.departamento,
+            "setor": tipo_atividade.setor,
+            "categoria": tipo_atividade.categoria,
+            "ativo": tipo_atividade.ativo,
+            "data_criacao": tipo_atividade.data_criacao,
+            "data_ultima_atualizacao": tipo_atividade.data_ultima_atualizacao
+        }
+        return TipoAtividadeResponse.model_validate(atividade_dict)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao atualizar tipo de atividade: {str(e)}"
+        )
+
+@router.delete("/tipos-atividade/{atividade_id}")
+async def deletar_tipo_atividade(
+    atividade_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Deletar tipo de atividade (soft delete)"""
+    try:
+        tipo_atividade = db.query(TipoAtividade).filter(TipoAtividade.id == atividade_id).first()
+
+        if not tipo_atividade:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tipo de atividade com ID {atividade_id} não encontrado"
+            )
+
+        # DELETE FÍSICO - apagar da database
+        db.delete(tipo_atividade)
+        db.commit()
+
+        return {"message": f"Tipo de atividade '{tipo_atividade.nome_tipo}' foi deletado com sucesso"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao deletar tipo de atividade: {str(e)}"
+        )
+
+# ============================================================================
+# ENDPOINTS PARA TIPOS DE FALHA
+# ============================================================================
+
+@router.get("/tipos-falha", response_model=List[TipoFalhaResponse])
+async def listar_tipos_falha(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Listar todos os tipos de falha ativos"""
+    try:
+        tipos_falha = db.query(TipoFalha).all()
+        return [TipoFalhaResponse.model_validate(tf) for tf in tipos_falha]
+
+    except Exception as e:
+        print(f"❌ Erro ao listar tipos de falha: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao listar tipos de falha: {str(e)}"
+        )
+
+@router.post("/tipos-falha", response_model=TipoFalhaResponse)
+async def criar_tipo_falha(
+    falha_data: TipoFalhaCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Criar novo tipo de falha"""
+    try:
+        # Verificar se já existe
+        existente = db.query(TipoFalha).filter(TipoFalha.codigo == falha_data.codigo).first()
+
+        if existente:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Tipo de falha '{falha_data.codigo}' já existe"
+            )
+
+        # Criar novo tipo de falha
+        novo_tipo = TipoFalha(
+            codigo=falha_data.codigo,
+            departamento=falha_data.departamento,
+            setor=falha_data.setor,
+            descricao=falha_data.descricao,
+            categoria=falha_data.categoria,
+            ativo=falha_data.ativo,
+            data_criacao=datetime.now(),
+            data_ultima_atualizacao=datetime.now()
+        )
+
+        db.add(novo_tipo)
+        db.commit()
+        db.refresh(novo_tipo)
+
+        return TipoFalhaResponse.model_validate(novo_tipo)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao criar tipo de falha: {str(e)}"
+        )
+
+@router.get("/tipos-falha/{falha_id}", response_model=TipoFalhaResponse)
+async def buscar_tipo_falha(
+    falha_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Buscar tipo de falha por ID"""
+    try:
+        tipo_falha = db.query(TipoFalha).filter(TipoFalha.id == falha_id).first()
+
+        if not tipo_falha:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tipo de falha com ID {falha_id} não encontrado"
+            )
+
+        return TipoFalhaResponse.model_validate(tipo_falha)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao buscar tipo de falha: {str(e)}"
+        )
+
+@router.put("/tipos-falha/{falha_id}", response_model=TipoFalhaResponse)
+async def atualizar_tipo_falha(
+    falha_id: int,
+    falha_data: TipoFalhaUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Atualizar tipo de falha"""
+    try:
+        tipo_falha = db.query(TipoFalha).filter(TipoFalha.id == falha_id).first()
+
+        if not tipo_falha:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tipo de falha com ID {falha_id} não encontrado"
+            )
+
+        # Verificar se o novo código já existe (se foi alterado)
+        if falha_data.codigo and falha_data.codigo != tipo_falha.codigo:
+            existente = db.query(TipoFalha).filter(TipoFalha.codigo == falha_data.codigo).first()
+            if existente:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Tipo de falha '{falha_data.codigo}' já existe"
+                )
+
+        # Atualizar campos usando setattr
+        update_data = falha_data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(tipo_falha, field, value)
+
+        setattr(tipo_falha, 'data_ultima_atualizacao', datetime.now())
+
+        db.commit()
+        db.refresh(tipo_falha)
+
+        return TipoFalhaResponse.model_validate(tipo_falha)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao atualizar tipo de falha: {str(e)}"
+        )
+
+@router.delete("/tipos-falha/{falha_id}")
+async def deletar_tipo_falha(
+    falha_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Deletar tipo de falha (soft delete)"""
+    try:
+        tipo_falha = db.query(TipoFalha).filter(TipoFalha.id == falha_id).first()
+
+        if not tipo_falha:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tipo de falha com ID {falha_id} não encontrado"
+            )
+
+        # DELETE FÍSICO - apagar da database
+        db.delete(tipo_falha)
+        db.commit()
+
+        return {"message": f"Tipo de falha '{tipo_falha.codigo}' foi deletado com sucesso"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao deletar tipo de falha: {str(e)}"
+        )
+
+# ============================================================================
+# ENDPOINTS PARA CAUSAS DE RETRABALHO
+# ============================================================================
+
+@router.get("/causas-retrabalho", response_model=List[CausaRetrabalhoResponse])
+async def listar_causas_retrabalho(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Listar todas as causas de retrabalho ativas"""
+    try:
+        causas_retrabalho = db.query(TipoCausaRetrabalho).all()
+        return [CausaRetrabalhoResponse.model_validate(cr) for cr in causas_retrabalho]
+
+    except Exception as e:
+        print(f"❌ Erro ao listar causas de retrabalho: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao listar causas de retrabalho: {str(e)}"
+        )
+
+@router.get("/causas-retrabalho/{causa_id}", response_model=CausaRetrabalhoResponse)
+async def buscar_causa_retrabalho(
+    causa_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Buscar causa de retrabalho por ID"""
+    try:
+        causa_retrabalho = db.query(TipoCausaRetrabalho).filter(TipoCausaRetrabalho.id == causa_id).first()
+
+        if not causa_retrabalho:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Causa de retrabalho com ID {causa_id} não encontrada"
+            )
+
+        return CausaRetrabalhoResponse.model_validate(causa_retrabalho)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao buscar causa de retrabalho: {str(e)}"
+        )
+
+@router.post("/causas-retrabalho", response_model=CausaRetrabalhoResponse)
+async def criar_causa_retrabalho(
+    causa_data: CausaRetrabalhoCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Criar nova causa de retrabalho"""
+    try:
+        # Verificar se já existe
+        existente = db.query(TipoCausaRetrabalho).filter(TipoCausaRetrabalho.codigo == causa_data.codigo).first()
+
+        if existente:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Causa de retrabalho '{causa_data.codigo}' já existe"
+            )
+
+        # Criar nova causa de retrabalho
+        nova_causa = TipoCausaRetrabalho(
+            codigo=causa_data.codigo,
+            descricao=causa_data.descricao,
+            departamento=causa_data.departamento,
+            setor=causa_data.setor,
+            ativo=causa_data.ativo,
+            data_criacao=datetime.now(),
+            data_ultima_atualizacao=datetime.now()
+        )
+
+        db.add(nova_causa)
+        db.commit()
+        db.refresh(nova_causa)
+
+        return CausaRetrabalhoResponse.model_validate(nova_causa)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao criar causa de retrabalho: {str(e)}"
+        )
+
+@router.put("/causas-retrabalho/{causa_id}", response_model=CausaRetrabalhoResponse)
+async def atualizar_causa_retrabalho(
+    causa_id: int,
+    causa_data: CausaRetrabalhoUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Atualizar causa de retrabalho"""
+    try:
+        causa_retrabalho = db.query(TipoCausaRetrabalho).filter(TipoCausaRetrabalho.id == causa_id).first()
+
+        if not causa_retrabalho:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Causa de retrabalho com ID {causa_id} não encontrada"
+            )
+
+        # Verificar se o novo código já existe (se foi alterado)
+        if causa_data.codigo and causa_data.codigo != causa_retrabalho.codigo:
+            existente = db.query(TipoCausaRetrabalho).filter(TipoCausaRetrabalho.codigo == causa_data.codigo).first()
+            if existente:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Causa de retrabalho '{causa_data.codigo}' já existe"
+                )
+
+        # Atualizar apenas campos fornecidos (partial update)
+        update_data = causa_data.model_dump(exclude_unset=True, by_alias=False)
+        for field, value in update_data.items():
+            setattr(causa_retrabalho, field, value)
+
+        setattr(causa_retrabalho, 'data_ultima_atualizacao', datetime.now())
+
+        db.commit()
+        db.refresh(causa_retrabalho)
+
+        return CausaRetrabalhoResponse.model_validate(causa_retrabalho)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao atualizar causa de retrabalho: {str(e)}"
+        )
+
+@router.delete("/causas-retrabalho/{causa_id}")
+async def deletar_causa_retrabalho(
+    causa_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Deletar causa de retrabalho (soft delete)"""
+    try:
+        causa_retrabalho = db.query(TipoCausaRetrabalho).filter(TipoCausaRetrabalho.id == causa_id).first()
+
+        if not causa_retrabalho:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Causa de retrabalho com ID {causa_id} não encontrada"
+            )
+
+        # DELETE FÍSICO - apagar da database
+        db.delete(causa_retrabalho)
+        db.commit()
+
+        return {"message": f"Causa de retrabalho '{causa_retrabalho.codigo}' foi deletada com sucesso"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao deletar causa de retrabalho: {str(e)}"
+        )
+
+# ============================================================================
+# ENDPOINTS PARA DESCRIÇÕES DE ATIVIDADE
+# ============================================================================
+
+@router.get("/descricoes-atividade", response_model=List[DescricaoAtividadeResponse])
+async def listar_descricoes_atividade(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Listar todas as descrições de atividade ativas"""
+    try:
+        descricoes_atividade = db.query(TipoDescricaoAtividade).all()
+        return [DescricaoAtividadeResponse.model_validate(da) for da in descricoes_atividade]
+
+    except Exception as e:
+        print(f"❌ Erro ao listar descrições de atividade: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao listar descrições de atividade: {str(e)}"
+        )
+
+@router.post("/descricoes-atividade", response_model=DescricaoAtividadeResponse)
+async def criar_descricao_atividade(
+    descricao_data: DescricaoAtividadeCreate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Criar nova descrição de atividade"""
+    try:
+        # Verificar se já existe
+        existente = db.query(TipoDescricaoAtividade).filter(TipoDescricaoAtividade.codigo == descricao_data.codigo).first()
+
+        if existente:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Descrição de atividade '{descricao_data.codigo}' já existe"
+            )
+
+        # Criar nova descrição de atividade
+        nova_descricao = TipoDescricaoAtividade(
+            codigo=descricao_data.codigo,
+            descricao=descricao_data.descricao,
+            departamento=descricao_data.departamento,
+            setor=descricao_data.setor,
+            categoria=descricao_data.categoria,
+            ativo=descricao_data.ativo,
+            data_criacao=datetime.now(),
+            data_ultima_atualizacao=datetime.now()
+        )
+
+        db.add(nova_descricao)
+        db.commit()
+        db.refresh(nova_descricao)
+
+        return DescricaoAtividadeResponse.model_validate(nova_descricao)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao criar descrição de atividade: {str(e)}"
+        )
+
+@router.get("/descricoes-atividade/{descricao_id}", response_model=DescricaoAtividadeResponse)
+async def buscar_descricao_atividade(
+    descricao_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Buscar descrição de atividade por ID"""
+    try:
+        descricao_atividade = db.query(TipoDescricaoAtividade).filter(TipoDescricaoAtividade.id == descricao_id).first()
+
+        if not descricao_atividade:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Descrição de atividade com ID {descricao_id} não encontrada"
+            )
+
+        return DescricaoAtividadeResponse.model_validate(descricao_atividade)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao buscar descrição de atividade: {str(e)}"
+        )
+
+@router.put("/descricoes-atividade/{descricao_id}", response_model=DescricaoAtividadeResponse)
+async def atualizar_descricao_atividade(
+    descricao_id: int,
+    descricao_data: DescricaoAtividadeUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Atualizar descrição de atividade"""
+    try:
+        descricao_atividade = db.query(TipoDescricaoAtividade).filter(TipoDescricaoAtividade.id == descricao_id).first()
+
+        if not descricao_atividade:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Descrição de atividade com ID {descricao_id} não encontrada"
+            )
+
+        # Verificar se o novo código já existe (se foi alterado)
+        if descricao_data.codigo and descricao_data.codigo != descricao_atividade.codigo:
+            existente = db.query(TipoDescricaoAtividade).filter(TipoDescricaoAtividade.codigo == descricao_data.codigo).first()
+            if existente:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Descrição de atividade '{descricao_data.codigo}' já existe"
+                )
+
+        # Atualizar campos usando setattr
+        update_data = descricao_data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(descricao_atividade, field, value)
+
+        setattr(descricao_atividade, 'data_ultima_atualizacao', datetime.now())
+
+        db.commit()
+        db.refresh(descricao_atividade)
+
+        return DescricaoAtividadeResponse.model_validate(descricao_atividade)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao atualizar descrição de atividade: {str(e)}"
+        )
+
+@router.delete("/descricoes-atividade/{descricao_id}")
+async def deletar_descricao_atividade(
+    descricao_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Deletar descrição de atividade (soft delete)"""
+    try:
+        descricao_atividade = db.query(TipoDescricaoAtividade).filter(TipoDescricaoAtividade.id == descricao_id).first()
+
+        if not descricao_atividade:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Descrição de atividade com ID {descricao_id} não encontrada"
+            )
+
+        # DELETE FÍSICO - apagar da database
+        db.delete(descricao_atividade)
+        db.commit()
+
+        return {"message": f"Descrição de atividade '{descricao_atividade.codigo}' foi deletada com sucesso"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao deletar descrição de atividade: {str(e)}"
+        )
+
+# ============================================================================
+# ENDPOINT PARA ESTRUTURA HIERÁRQUICA
+# ============================================================================
+
+@router.get("/estrutura-hierarquica", response_model=dict)
+async def obter_estrutura_hierarquica(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Obter estrutura hierárquica completa (departamentos -> setores)"""
+    try:
+        # Buscar todos os departamentos
+        departamentos = db.query(Departamento).filter(Departamento.ativo == True).all()
+
+        estrutura = []
+        for dept in departamentos:
+            # Buscar setores do departamento
+            setores = db.query(Setor).filter(
+                Setor.id_departamento == dept.id,
+                Setor.ativo == True
+            ).all()
+
+            dept_data = {
+                "id": dept.id,
+                "nome": dept.nome_tipo,
+                "tipo": "departamento",
+                "descricao": dept.descricao,
+                "ativo": dept.ativo,
+                "setores": [
+                    {
+                        "id": setor.id,
+                        "nome": setor.nome,
+                        "tipo": "setor",
+                        "descricao": setor.descricao,
+                        "ativo": setor.ativo,
+                        "departamento_id": setor.id_departamento
+                    }
+                    for setor in setores
+                ]
+            }
+            estrutura.append(dept_data)
+
+        return {
+            "estrutura": estrutura,
+            "total_departamentos": len(estrutura),
+            "total_setores": sum(len(dept["setores"]) for dept in estrutura),
+            "data_consulta": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        print(f"❌ Erro ao obter estrutura hierárquica: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao obter estrutura hierárquica: {str(e)}"
+        )
+
+@router.get("/departamentos/{departamento_id}", response_model=DepartamentoResponse)
 async def buscar_departamento(
     departamento_id: int,
     db: Session = Depends(get_db),
@@ -205,14 +1661,17 @@ async def buscar_departamento(
                 detail=f"Departamento com ID {departamento_id} não encontrado"
             )
 
-        return {
+        # Criar resposta com ambos os campos nome_tipo e nome
+        dept_dict = {
             "id": departamento.id,
             "nome_tipo": departamento.nome_tipo,
+            "nome": departamento.nome_tipo,  # Alias para compatibilidade
             "descricao": departamento.descricao,
             "ativo": departamento.ativo,
             "data_criacao": departamento.data_criacao,
             "data_ultima_atualizacao": departamento.data_ultima_atualizacao
         }
+        return DepartamentoResponse.model_validate(dept_dict)
 
     except HTTPException:
         raise
@@ -222,10 +1681,10 @@ async def buscar_departamento(
             detail=f"Erro ao buscar departamento: {str(e)}"
         )
 
-@router.put("/departamentos/{departamento_id}", response_model=Dict[str, Any])
+@router.put("/departamentos/{departamento_id}", response_model=DepartamentoResponse)
 async def atualizar_departamento(
     departamento_id: int,
-    departamento_data: DepartamentoCreate,
+    departamento_data: DepartamentoUpdate,
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(verificar_admin)
 ):
@@ -240,39 +1699,48 @@ async def atualizar_departamento(
             )
 
         # Verificar se o novo nome já existe (exceto para o próprio departamento)
-        existente = db.query(Departamento).filter(
-            Departamento.nome_tipo == departamento_data.nome_tipo,
-            Departamento.id != departamento_id
-        ).first()
+        if departamento_data.nome_tipo:
+            existente = db.query(Departamento).filter(
+                Departamento.nome_tipo == departamento_data.nome_tipo,
+                Departamento.id != departamento_id
+            ).first()
 
-        if existente:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Departamento '{departamento_data.nome_tipo}' já existe"
-            )
+            if existente:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Departamento '{departamento_data.nome_tipo}' já existe"
+                )
 
-        # Atualizar dados
-        departamento.nome_tipo = departamento_data.nome_tipo  # type: ignore
-        departamento.descricao = departamento_data.descricao  # type: ignore
-        departamento.ativo = departamento_data.ativo  # type: ignore
-        departamento.data_ultima_atualizacao = datetime.now()  # type: ignore
+        # Atualizar apenas campos fornecidos (partial update)
+        update_data = departamento_data.model_dump(exclude_unset=True, by_alias=False)
+        for field, value in update_data.items():
+            # Se o campo for 'nome', atualizar também 'nome_tipo'
+            if field == 'nome':
+                setattr(departamento, 'nome_tipo', value)
+            setattr(departamento, field, value)
+
+        # Atualizar timestamp usando setattr para evitar problemas de tipo
+        setattr(departamento, 'data_ultima_atualizacao', datetime.now())
 
         db.commit()
         db.refresh(departamento)
 
-        return {
+        # Criar resposta com ambos os campos nome_tipo e nome
+        dept_dict = {
             "id": departamento.id,
             "nome_tipo": departamento.nome_tipo,
+            "nome": departamento.nome_tipo,  # Alias para compatibilidade
             "descricao": departamento.descricao,
             "ativo": departamento.ativo,
             "data_criacao": departamento.data_criacao,
-            "data_ultima_atualizacao": departamento.data_ultima_atualizacao,
-            "message": "Departamento atualizado com sucesso"
+            "data_ultima_atualizacao": departamento.data_ultima_atualizacao
         }
+        return DepartamentoResponse.model_validate(dept_dict)
 
     except HTTPException:
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro ao atualizar departamento: {str(e)}"
@@ -284,8 +1752,9 @@ async def deletar_departamento(
     db: Session = Depends(get_db),
     current_user: Usuario = Depends(verificar_admin)
 ):
-    """Deletar departamento"""
+    """Deletar departamento (soft delete - marca como inativo)"""
     try:
+        # Buscar departamento
         departamento = db.query(Departamento).filter(Departamento.id == departamento_id).first()
 
         if not departamento:
@@ -294,15 +1763,9 @@ async def deletar_departamento(
                 detail=f"Departamento com ID {departamento_id} não encontrado"
             )
 
-        # Verificar se há setores vinculados
-        setores_vinculados = db.query(Setor).filter(Setor.id_departamento == departamento_id).count()
 
-        if setores_vinculados > 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Não é possível deletar o departamento. Há {setores_vinculados} setor(es) vinculado(s)"
-            )
 
+        # DELETE FÍSICO - apagar da database
         db.delete(departamento)
         db.commit()
 
@@ -313,12 +1776,13 @@ async def deletar_departamento(
     except HTTPException:
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro ao deletar departamento: {str(e)}"
         )
 
-@router.post("/setores", response_model=Dict[str, Any])
+@router.post("/setores", response_model=SetorResponse)
 async def criar_setor(
     setor_data: SetorCreate,
     db: Session = Depends(get_db),
@@ -326,66 +1790,254 @@ async def criar_setor(
 ):
     """Criar novo setor"""
     try:
-        # Verificar se já existe
+        # Verificar se já existe setor com mesmo nome no mesmo departamento
         existente = db.query(Setor).filter(
-            Setor.nome == setor_data.nome
+            Setor.nome == setor_data.nome,
+            Setor.id_departamento == setor_data.id_departamento
         ).first()
-        
+
         if existente:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Setor '{setor_data.nome}' já existe"
+                detail=f"Setor '{setor_data.nome}' já existe no departamento especificado"
             )
-        
-        # Verificar se departamento existe
-        departamento = db.query(Departamento).filter(
-            Departamento.id == setor_data.id_departamento
-        ).first()
-        
-        if not departamento:
+
+        # Validar se departamento existe e está ativo usando ID
+        if not validate_departamento_exists_by_id(db, setor_data.id_departamento):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Departamento com ID {setor_data.id_departamento} não encontrado"
+                detail=f"Departamento com ID {setor_data.id_departamento} não encontrado ou inativo"
             )
-        
+
+        # Obter nome do departamento para compatibilidade
+        departamento_nome = get_departamento_nome_by_id(db, setor_data.id_departamento)
+
         # Criar novo setor
         novo_setor = Setor(
             nome=setor_data.nome,
-            departamento=setor_data.departamento,
+            departamento=departamento_nome,  # Campo de compatibilidade
             descricao=setor_data.descricao,
             ativo=setor_data.ativo,
             id_departamento=setor_data.id_departamento,
             area_tipo=setor_data.area_tipo,
-            supervisor_responsavel=setor_data.supervisor_responsavel,
+            supervisor_responsavel=getattr(setor_data, 'supervisor_responsavel', None),
             permite_apontamento=setor_data.permite_apontamento,
             data_criacao=datetime.now(),
             data_ultima_atualizacao=datetime.now()
         )
-        
+
         db.add(novo_setor)
         db.commit()
         db.refresh(novo_setor)
-        
-        return {
-            "id": novo_setor.id,
-            "nome": novo_setor.nome,
-            "departamento": novo_setor.departamento,
-            "descricao": novo_setor.descricao,
-            "area_tipo": novo_setor.area_tipo,
-            "ativo": novo_setor.ativo,
-            "data_criacao": novo_setor.data_criacao,
-            "message": "Setor criado com sucesso"
-        }
-        
+
+        # Retornar com schema tipado e nome do departamento
+        setor_response = SetorResponse.model_validate(novo_setor)
+        setor_response.departamento = departamento_nome
+
+        return setor_response
+
     except HTTPException:
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro ao criar setor: {str(e)}"
         )
 
-@router.post("/tipos-maquina", response_model=Dict[str, Any])
+@router.get("/setores/{setor_id}", response_model=SetorResponse)
+async def buscar_setor(
+    setor_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Buscar setor por ID"""
+    try:
+        setor = db.query(Setor).filter(Setor.id == setor_id).first()
+
+        if not setor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Setor com ID {setor_id} não encontrado"
+            )
+
+        # Criar resposta com todos os campos necessários
+        setor_dict = {
+            "id": setor.id,
+            "nome": setor.nome,
+            "descricao": setor.descricao,
+            "ativo": setor.ativo,
+            "area_tipo": setor.area_tipo,
+            "tipo_area": setor.area_tipo,  # Alias para compatibilidade
+            "permite_apontamento": setor.permite_apontamento,
+            "id_departamento": setor.id_departamento,
+            "departamento": setor.departamento,  # Nome do departamento
+            "data_criacao": setor.data_criacao,
+            "data_ultima_atualizacao": setor.data_ultima_atualizacao
+        }
+
+        # Enriquecer com nome do departamento se necessário
+        departamento_id = getattr(setor, 'id_departamento', None)
+        if departamento_id is not None:
+            dept_nome = get_departamento_nome_by_id(db, departamento_id)
+            setor_dict["departamento"] = dept_nome
+
+        return SetorResponse.model_validate(setor_dict)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao buscar setor: {str(e)}"
+        )
+
+@router.put("/setores/{setor_id}", response_model=SetorResponse)
+async def atualizar_setor(
+    setor_id: int,
+    setor_data: SetorUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Atualizar setor"""
+    try:
+        setor = db.query(Setor).filter(Setor.id == setor_id).first()
+
+        if not setor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Setor com ID {setor_id} não encontrado"
+            )
+
+        # Verificar se o novo nome já existe no mesmo departamento (exceto para o próprio setor)
+        if setor_data.nome and setor_data.id_departamento:
+            existente = db.query(Setor).filter(
+                Setor.nome == setor_data.nome,
+                Setor.id_departamento == setor_data.id_departamento,
+                Setor.id != setor_id
+            ).first()
+
+            if existente:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Setor '{setor_data.nome}' já existe no departamento especificado"
+                )
+
+        # Validar departamento se fornecido usando ID
+        if setor_data.id_departamento and not validate_departamento_exists_by_id(db, setor_data.id_departamento):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Departamento com ID {setor_data.id_departamento} não encontrado ou inativo"
+            )
+
+        # Atualizar apenas campos fornecidos (partial update)
+        update_data = setor_data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(setor, field, value)
+
+        # Atualizar campo de compatibilidade se departamento mudou
+        if setor_data.id_departamento:
+            departamento_nome = get_departamento_nome_by_id(db, setor_data.id_departamento)
+            setattr(setor, 'departamento', departamento_nome)
+
+        setattr(setor, 'data_ultima_atualizacao', datetime.now())
+
+        db.commit()
+        db.refresh(setor)
+
+        # Retornar com nome do departamento
+        setor_response = SetorResponse.model_validate(setor)
+        departamento_id = getattr(setor, 'id_departamento', None)
+        if departamento_id is not None:
+            dept_nome = get_departamento_nome_by_id(db, departamento_id)
+            setor_response.departamento = dept_nome
+
+        return setor_response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao atualizar setor: {str(e)}"
+        )
+
+@router.delete("/setores/{setor_id}", response_model=Dict[str, Any])
+async def deletar_setor(
+    setor_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Deletar setor (soft delete - marca como inativo)"""
+    try:
+        # Buscar setor
+        setor = db.query(Setor).filter(Setor.id == setor_id).first()
+
+        if not setor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Setor com ID {setor_id} não encontrado"
+            )
+
+
+
+        # DELETE FÍSICO - apagar da database
+        db.delete(setor)
+        db.commit()
+
+        return {
+            "message": f"Setor '{setor.nome}' deletado com sucesso"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao deletar setor: {str(e)}"
+        )
+
+@router.get("/tipos-maquina/{tipo_id}", response_model=TipoMaquinaResponse)
+async def buscar_tipo_maquina(
+    tipo_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Buscar tipo de máquina por ID"""
+    try:
+        tipo_maquina = db.query(TipoMaquina).filter(TipoMaquina.id == tipo_id).first()
+
+        if not tipo_maquina:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tipo de máquina com ID {tipo_id} não encontrado"
+            )
+
+        # Criar resposta com ambos os campos nome_tipo e nome
+        tipo_dict = {
+            "id": tipo_maquina.id,
+            "nome_tipo": tipo_maquina.nome_tipo,
+            "nome": tipo_maquina.nome_tipo,  # Alias para compatibilidade
+            "categoria": tipo_maquina.categoria,
+            "subcategoria": tipo_maquina.subcategoria,
+            "setor": tipo_maquina.setor,
+            "ativo": tipo_maquina.ativo,
+            "data_criacao": tipo_maquina.data_criacao,
+            "data_ultima_atualizacao": tipo_maquina.data_ultima_atualizacao
+        }
+        return TipoMaquinaResponse.model_validate(tipo_dict)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao buscar tipo de máquina: {str(e)}"
+        )
+
+@router.post("/tipos-maquina", response_model=TipoMaquinaResponse)
 async def criar_tipo_maquina(
     tipo_data: TipoMaquinaCreate,
     db: Session = Depends(get_db),
@@ -397,50 +2049,146 @@ async def criar_tipo_maquina(
         existente = db.query(TipoMaquina).filter(
             TipoMaquina.nome_tipo == tipo_data.nome_tipo
         ).first()
-        
+
         if existente:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Tipo de máquina '{tipo_data.nome_tipo}' já existe"
             )
-        
+
+        # Converter subcategoria para JSON se necessário
+        subcategoria_json = None
+        if tipo_data.subcategoria:
+            import json
+            subcategoria_json = json.dumps(tipo_data.subcategoria)
+
         # Criar novo tipo de máquina
         novo_tipo = TipoMaquina(
             nome_tipo=tipo_data.nome_tipo,
-            categoria=tipo_data.categoria,
-            subcategoria=tipo_data.subcategoria,
-            descricao=tipo_data.descricao,
-            ativo=tipo_data.ativo,
-            id_departamento=tipo_data.id_departamento,
-            especificacoes_tecnicas=tipo_data.especificacoes_tecnicas,
-            campos_teste_resultado=tipo_data.campos_teste_resultado,
-            setor=tipo_data.setor,
             departamento=tipo_data.departamento,
+            setor=tipo_data.setor,
+            categoria=tipo_data.categoria,
+            subcategoria=subcategoria_json,  # Armazenar como JSON
+            descricao=tipo_data.descricao,
+            id_departamento=tipo_data.id_departamento,
+            ativo=tipo_data.ativo,
             data_criacao=datetime.now(),
             data_ultima_atualizacao=datetime.now()
         )
-        
+
         db.add(novo_tipo)
         db.commit()
         db.refresh(novo_tipo)
-        
-        return {
-            "id": novo_tipo.id,
-            "nome_tipo": novo_tipo.nome_tipo,
-            "categoria": novo_tipo.categoria,
-            "subcategoria": novo_tipo.subcategoria,
-            "descricao": novo_tipo.descricao,
-            "ativo": novo_tipo.ativo,
-            "data_criacao": novo_tipo.data_criacao,
-            "message": "Tipo de máquina criado com sucesso"
-        }
-        
+
+        # Retornar com schema tipado
+        return TipoMaquinaResponse.model_validate(novo_tipo)
+
     except HTTPException:
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro ao criar tipo de máquina: {str(e)}"
+        )
+
+@router.put("/tipos-maquina/{tipo_id}", response_model=TipoMaquinaResponse)
+async def atualizar_tipo_maquina(
+    tipo_id: int,
+    tipo_data: TipoMaquinaUpdate,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Atualizar tipo de máquina"""
+    try:
+        tipo_maquina = db.query(TipoMaquina).filter(TipoMaquina.id == tipo_id).first()
+
+        if not tipo_maquina:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tipo de máquina com ID {tipo_id} não encontrado"
+            )
+
+        # Verificar se o novo nome já existe (se foi alterado)
+        if tipo_data.nome_tipo and tipo_data.nome_tipo != tipo_maquina.nome_tipo:
+            existente = db.query(TipoMaquina).filter(TipoMaquina.nome_tipo == tipo_data.nome_tipo).first()
+            if existente:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Tipo de máquina '{tipo_data.nome_tipo}' já existe"
+                )
+
+        # Atualizar campos
+        update_data = tipo_data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            if field == 'subcategoria':
+                if value and isinstance(value, list):
+                    import json
+                    setattr(tipo_maquina, field, json.dumps(value))
+                elif isinstance(value, str):
+                    setattr(tipo_maquina, field, value)
+                else:
+                    setattr(tipo_maquina, field, None)
+            else:
+                setattr(tipo_maquina, field, value)
+
+        setattr(tipo_maquina, 'data_ultima_atualizacao', datetime.now())
+
+        db.commit()
+        db.refresh(tipo_maquina)
+
+        # Criar resposta com ambos os campos nome_tipo e nome
+        tipo_dict = {
+            "id": tipo_maquina.id,
+            "nome_tipo": tipo_maquina.nome_tipo,
+            "nome": tipo_maquina.nome_tipo,  # Alias para compatibilidade
+            "categoria": tipo_maquina.categoria,
+            "subcategoria": tipo_maquina.subcategoria,
+            "setor": tipo_maquina.setor,
+            "ativo": tipo_maquina.ativo,
+            "data_criacao": tipo_maquina.data_criacao,
+            "data_ultima_atualizacao": tipo_maquina.data_ultima_atualizacao
+        }
+        return TipoMaquinaResponse.model_validate(tipo_dict)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao atualizar tipo de máquina: {str(e)}"
+        )
+
+@router.delete("/tipos-maquina/{tipo_id}")
+async def deletar_tipo_maquina(
+    tipo_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(verificar_admin)
+):
+    """Deletar tipo de máquina (soft delete)"""
+    try:
+        tipo_maquina = db.query(TipoMaquina).filter(TipoMaquina.id == tipo_id).first()
+
+        if not tipo_maquina:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tipo de máquina com ID {tipo_id} não encontrado"
+            )
+
+        # DELETE FÍSICO - apagar da database
+        db.delete(tipo_maquina)
+        db.commit()
+
+        return {"message": f"Tipo de máquina '{tipo_maquina.nome_tipo}' foi deletado com sucesso"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao deletar tipo de máquina: {str(e)}"
         )
 
 @router.post("/clientes", response_model=Dict[str, Any])
@@ -548,26 +2296,30 @@ async def get_configuracoes_sistema(
             detail=f"Erro ao obter configurações: {str(e)}"
         )
 
-@router.get("/setores", response_model=List[Dict[str, Any]])
+@router.get("/setores", response_model=List[SetorResponse])
 async def listar_setores(
     db: Session = Depends(get_db),
-    current_user: Any = Depends(verificar_admin)
+    current_user: Usuario = Depends(verificar_admin)
 ):
-    """Listar todos os setores"""
+    """Listar todos os setores ativos com informações do departamento (otimizado com JOIN)"""
     try:
-        setores = db.query(Setor).all()
-        return [
-            {
-                "id": setor.id,
-                "nome": setor.nome,
-                "departamento": setor.departamento,
-                "descricao": setor.descricao,
-                "ativo": setor.ativo,
-                "data_criacao": setor.data_criacao,
-                "data_ultima_atualizacao": setor.data_ultima_atualizacao
-            }
-            for setor in setores
-        ]
+        # Query otimizada com JOIN para evitar múltiplas consultas - apenas setores ativos
+        setores_query = db.query(
+            Setor,
+            Departamento.nome_tipo.label('departamento_nome')
+        ).outerjoin(
+            Departamento, Setor.id_departamento == Departamento.id
+        ).all()
+
+        # Construir resposta com dados já carregados
+        setores_enriched = []
+        for setor, departamento_nome in setores_query:
+            setor_data = SetorResponse.model_validate(setor)
+            setor_data.departamento = departamento_nome
+            setores_enriched.append(setor_data)
+
+        return setores_enriched
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -582,14 +2334,21 @@ async def get_admin_config_status(
     return {
         "status": "ACTIVE",
         "admin_config_endpoints": [
+            "GET /departamentos - Listar departamentos",
             "POST /departamentos - Criar departamento",
-            "POST /setores - Criar setor", 
+            "GET /departamentos/{id} - Buscar departamento",
+            "PUT /departamentos/{id} - Atualizar departamento",
+            "DELETE /departamentos/{id} - Deletar departamento",
+            "GET /setores - Listar setores",
+            "POST /setores - Criar setor",
+            "GET /setores/{id} - Buscar setor",
+            "PUT /setores/{id} - Atualizar setor",
+            "DELETE /setores/{id} - Deletar setor",
             "POST /tipos-maquina - Criar tipo de máquina",
             "POST /tipos-teste - Criar tipo de teste",
             "POST /clientes - Criar cliente",
             "POST /equipamentos - Criar equipamento",
-            "GET /sistema - Configurações do sistema",
-            "GET /setores - Listar setores"
+            "GET /sistema - Configurações do sistema"
         ],
         "privilege_required": "ADMIN",
         "current_user": {

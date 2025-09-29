@@ -8,7 +8,7 @@ export default defineConfig({
     port: 3001,
     host: true,
     open: false, // Não abrir automaticamente o navegador
-    strictPort: true, // Falhar se a porta estiver ocupada
+    strictPort: false, // Tentar próxima porta se estiver ocupada
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',  // Forçar IPv4 em vez de localhost

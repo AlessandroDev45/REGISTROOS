@@ -4,13 +4,13 @@ import { StyledInput } from '../../../../components/UIComponents'; // Assuming S
 import { DepartamentoData } from '../../../../services/adminApi';
 
 interface DepartamentoFormData {
-    nome_tipo: string; // Campo correto da DB
+    nome: string; // Frontend usa 'nome', backend recebe via alias
     descricao: string;
     ativo: boolean;
 }
 
 interface DepartamentoFormErrors {
-    nome_tipo?: string;
+    nome?: string;
     descricao?: string;
 }
 
@@ -28,7 +28,7 @@ const DepartamentoForm: React.FC<DepartamentoFormProps> = ({
     isEdit = false,
 }) => {
     const [formData, setFormData] = useState<DepartamentoFormData>({
-        nome_tipo: initialData?.nome_tipo || '',
+        nome: initialData?.nome || '',
         descricao: initialData?.descricao || '',
         ativo: initialData?.ativo ?? true,
     });
@@ -36,7 +36,7 @@ const DepartamentoForm: React.FC<DepartamentoFormProps> = ({
 
     useEffect(() => {
         setFormData({
-            nome_tipo: initialData?.nome_tipo || '',
+            nome: initialData?.nome || '',
             descricao: initialData?.descricao || '',
             ativo: initialData?.ativo ?? true,
         });
@@ -61,8 +61,8 @@ const DepartamentoForm: React.FC<DepartamentoFormProps> = ({
 
     const validateForm = (): boolean => {
         const newErrors: DepartamentoFormErrors = {};
-        if (!formData.nome_tipo.trim()) {
-            newErrors.nome_tipo = 'Nome do departamento é obrigatório';
+        if (!formData.nome.trim()) {
+            newErrors.nome = 'Nome do departamento é obrigatório';
         }
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -91,15 +91,15 @@ const DepartamentoForm: React.FC<DepartamentoFormProps> = ({
                         Nome do Departamento *
                     </label>
                     <StyledInput
-                        id="nome_tipo"
-                        name="nome_tipo"
-                        value={formData.nome_tipo}
+                        id="nome"
+                        name="nome"
+                        value={formData.nome}
                         onChange={handleInputChange}
                         placeholder="Ex: MOTORES"
-                        error={errors.nome_tipo}
+                        error={errors.nome}
                         required
                     />
-                    {errors.nome_tipo && <p className="mt-1 text-sm text-red-600">{errors.nome_tipo}</p>}
+                    {errors.nome && <p className="mt-1 text-sm text-red-600">{errors.nome}</p>}
                 </div>
 
                 <div>

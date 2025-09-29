@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getDashboardAvancado, getAlertasPCP } from '../../../services/api';
+import { setorService } from '../../../services/adminApi';
 
 interface MetricasGerais {
   os_por_status: Array<{ status: string; total: number }>;
@@ -65,11 +66,22 @@ const DashboardPCPInterativo: React.FC<DashboardPCPInterativoProps> = ({
   const [periodo, setPeriodo] = useState(periodoDias);
   const [setor, setSetor] = useState(setorSelecionado);
   const [abaSelecionada, setAbaSelecionada] = useState<'geral' | 'eficiencia' | 'alertas'>('geral');
+  const [setores, setSetores] = useState<Array<{id: number, nome: string}>>([]);
 
   useEffect(() => {
     carregarDashboard();
     carregarAlertas();
+    carregarSetores();
   }, [periodo, setor]);
+
+  const carregarSetores = async () => {
+    try {
+      const setoresData = await setorService.getSetores();
+      setSetores(setoresData);
+    } catch (error) {
+      console.error('Erro ao carregar setores:', error);
+    }
+  };
 
   const carregarDashboard = async () => {
     setLoading(true);
@@ -197,9 +209,11 @@ const DashboardPCPInterativo: React.FC<DashboardPCPInterativoProps> = ({
                 className="border border-gray-300 rounded px-3 py-1 text-sm"
               >
                 <option value="">Todos os setores</option>
-                <option value="1">PCP</option>
-                <option value="2">Mecânica</option>
-                <option value="3">Elétrica</option>
+                {setores.map((setorItem) => (
+                  <option key={setorItem.id} value={setorItem.id}>
+                    {setorItem.nome}
+                  </option>
+                ))}
               </select>
             </div>
             

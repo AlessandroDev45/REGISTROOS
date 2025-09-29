@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyledInput, SelectField } from '../../../../components/UIComponents'; // Assuming StyledInput and SelectField exist
-import { setorService, DepartamentoData, SetorData } from '../../../../services/adminApi'; // Import DepartamentoData as well
+import { setorService, departamentoService, DepartamentoData, SetorData } from '../../../../services/adminApi'; // Import DepartamentoData as well
 import { formatarTextoInput, criarHandlerTextoValidado } from '../../../../utils/textValidation';
 
 // Type for errors, where each value is a string message or undefined
@@ -38,7 +38,7 @@ const SetorForm: React.FC<SetorFormProps> = ({
         // Fetch departments for the dropdown
         const fetchDepartamentos = async () => {
             try {
-                const data = await setorService.getDepartamentos(); // Using setorService for convenience, it wraps adminConfigService
+                const data = await departamentoService.getDepartamentos(); // Using departamentoService
                 setDepartamentos(data);
             } catch (error) {
                 console.error("Error fetching departments:", error);
@@ -97,7 +97,13 @@ const SetorForm: React.FC<SetorFormProps> = ({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (validateForm()) {
-            onSubmit(formData, isEdit);
+            // Mapear nome do departamento para ID antes de enviar
+            const departamentoSelecionado = departamentos.find(dept => (dept.nome || dept.nome_tipo) === formData.departamento);
+            const dataToSubmit = {
+                ...formData,
+                id_departamento: departamentoSelecionado?.id
+            };
+            onSubmit(dataToSubmit, isEdit);
         }
     };
 

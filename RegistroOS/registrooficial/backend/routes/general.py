@@ -382,7 +382,7 @@ async def save_apontamento_with_pendencia(
         cliente_nome = apontamento_data.get("cliente") or apontamento_data.get("inpCliente") or "Cliente Não Informado"
 
         # Buscar cliente através da relação se existir
-        if hasattr(ordem_servico, 'id_cliente') and ordem_servico.id_cliente:
+        if hasattr(ordem_servico, 'id_cliente') and ordem_servico.id_cliente is not None:
             try:
                 cliente_obj = db.query(Cliente).filter(Cliente.id == ordem_servico.id_cliente).first()
                 if cliente_obj:

@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import AdminConfigContent from './components/config/AdminConfigContent';
-import { setorService, tipoMaquinaService, atividadeTipoService, falhaTipoService, causaRetrabalhoService, departamentoService, centroCustoService, tipoTesteService, descricaoAtividadeService } from '../../services/adminApi';
+import {
+    setorService,
+    tipoMaquinaService,
+    atividadeTipoService,
+    falhaTipoService,
+    causaRetrabalhoService,
+    departamentoService,
+    centroCustoService,
+    tipoTesteService,
+    descricaoAtividadeService
+} from '../../services/adminApi';
 import Layout from '../../components/Layout';
 
 const AdminPage: React.FC = () => {
@@ -15,7 +25,7 @@ const AdminPage: React.FC = () => {
         const fetchAllConfigData = async () => {
             setLoadingConfig(true);
             try {
-                const [setores, tiposMaquina, tiposTeste, atividades, falhasResponse, causasRetrabalho, centroCusto, descricoesAtividade] = await Promise.all([
+                const [setores, tiposMaquina, tiposTeste, atividades, falhasResponse, causasRetrabalho, centroCusto, descricoesAtividade, departamentos] = await Promise.all([
                     setorService.getSetores(),
                     tipoMaquinaService.getTiposMaquina(),
                     tipoTesteService.getTiposTeste(),
@@ -23,7 +33,8 @@ const AdminPage: React.FC = () => {
                     falhaTipoService.getFalhasTipo(),
                     causaRetrabalhoService.getCausasRetrabalho(),
                     centroCustoService.getCentrosCusto(), // Usar o serviço correto de centro de custo
-                    descricaoAtividadeService.getDescricoesAtividade()
+                    descricaoAtividadeService.getDescricoesAtividade(),
+                    departamentoService.getDepartamentos() // Adicionar busca de departamentos
                 ]);
 
                 // Verificar se falhas está desabilitado
@@ -45,7 +56,7 @@ const AdminPage: React.FC = () => {
                     atividades,
                     falhas,
                     causas_retrabalho: causasRetrabalho,
-                    centro_custo: centroCusto,
+                    centro_custo: departamentos.length > 0 ? departamentos : centroCusto, // Usar departamentos se disponível, senão centroCusto
                     descricao_atividades: descricoesAtividade
                 });
             } catch (error) {
@@ -98,6 +109,13 @@ const AdminPage: React.FC = () => {
                     break;
                 case 'centro_custo':
                     await centroCustoService.deleteCentroCusto(item.id);
+                    setConfigData(prev => ({
+                        ...prev,
+                        centro_custo: prev.centro_custo.filter(c => c.id !== item.id)
+                    }));
+                    break;
+                case 'departamentos':
+                    await departamentoService.deleteDepartamento(item.id);
                     setConfigData(prev => ({
                         ...prev,
                         centro_custo: prev.centro_custo.filter(c => c.id !== item.id)
@@ -222,6 +240,23 @@ const AdminPage: React.FC = () => {
                     setConfigData(prev => ({
                         ...prev,
                         centro_custo: [...prev.centro_custo, newCentro]
+                    }));
+                    alert('Departamento criado com sucesso!');
+                }
+            } else if (configType === 'departamentos') {
+                // Handle departamentos creation/update
+                if (isEdit && currentConfigItem) {
+                    const updatedDepartamento = await departamentoService.updateDepartamento(currentConfigItem.id, data);
+                    setConfigData(prev => ({
+                        ...prev,
+                        centro_custo: prev.centro_custo.map(d => d.id === currentConfigItem.id ? updatedDepartamento : d)
+                    }));
+                    alert('Departamento atualizado com sucesso!');
+                } else {
+                    const newDepartamento = await departamentoService.createDepartamento(data);
+                    setConfigData(prev => ({
+                        ...prev,
+                        centro_custo: [...prev.centro_custo, newDepartamento]
                     }));
                     alert('Departamento criado com sucesso!');
                 }

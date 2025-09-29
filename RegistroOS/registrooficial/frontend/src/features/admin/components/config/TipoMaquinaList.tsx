@@ -55,7 +55,7 @@ const TipoMaquinaList: React.FC<TipoMaquinaListProps> = ({ data: tiposMaquina = 
                         {tiposMaquina.length > 0 ? (
                             tiposMaquina.map((tipo) => (
                                 <tr key={tipo.id}>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{tipo.nome_tipo}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{tipo.nome}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{tipo.categoria}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{tipo.subcategoria || '-'}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

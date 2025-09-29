@@ -1,67 +1,71 @@
+import { STATUS_COLORS, STATUS_OS, PRIORITY_COLORS, PRIORIDADES, TIPOS_ATIVIDADE } from './constants';
+
 export const getStatusColorClass = (status: string): string => {
     switch (status?.toUpperCase()) {
-        case 'FINALIZADA':
+        case STATUS_OS.FINALIZADA:
         case 'CONCLUIDO':
         case 'APROVADO':
-            return 'bg-green-100 text-green-800';
-        case 'EM_ANDAMENTO':
+            return STATUS_COLORS.SUCCESS;
+        case STATUS_OS.EM_ANDAMENTO:
         case 'EXECUTANDO':
         case 'EM_ANALISE':
         case 'AGENDADO':
-            return 'bg-blue-100 text-blue-800';
-        case 'PENDENTE':
+            return STATUS_COLORS.INFO;
+        case STATUS_OS.PENDENTE:
         case 'AGUARDANDO':
         case 'PAUSADO':
         case 'AGUARDANDO_APROVACAO':
-            return 'bg-yellow-100 text-yellow-800';
+            return STATUS_COLORS.WARNING;
         case 'ATRASADA':
         case 'ATRASADO':
         case 'REJEITADO':
-        case 'CANCELADO':
-            return 'bg-red-100 text-red-800';
+        case STATUS_OS.CANCELADA:
+            return STATUS_COLORS.ERROR;
         default:
-            return 'bg-gray-100 text-gray-800';
+            return STATUS_COLORS.DEFAULT;
     }
 };
 
 export const getPriorityColorClass = (prioridade: string): string => {
     switch (prioridade?.toUpperCase()) {
-        case 'URGENTE':
-            return 'bg-red-500 text-white'; // Or a lighter red if it's border
-        case 'ALTA':
-            return 'bg-orange-500 text-white'; // Or lighter orange
-        case 'MEDIA':
-        case 'NORMAL':
-            return 'bg-yellow-500 text-white'; // Or lighter yellow
-        case 'BAIXA':
-            return 'bg-green-500 text-white'; // Or lighter green
+        case PRIORIDADES.URGENTE:
+            return STATUS_COLORS.ERROR;
+        case PRIORIDADES.ALTA:
+            return 'bg-orange-100 text-orange-800';
+        case PRIORIDADES.MEDIA:
+        case PRIORIDADES.NORMAL:
+            return STATUS_COLORS.INFO;
+        case PRIORIDADES.BAIXA:
+            return STATUS_COLORS.DEFAULT;
         default:
-            return 'bg-gray-500 text-white';
+            return STATUS_COLORS.DEFAULT;
+    }
+};
+
+export const getPriorityTextColorClass = (prioridade: string): string => {
+    switch (prioridade?.toUpperCase()) {
+        case PRIORIDADES.URGENTE: return 'text-red-600';
+        case PRIORIDADES.ALTA: return 'text-orange-600';
+        case PRIORIDADES.MEDIA:
+        case PRIORIDADES.NORMAL: return 'text-blue-600';
+        case PRIORIDADES.BAIXA: return 'text-gray-600';
+        default: return 'text-gray-600';
     }
 };
 
 export const getPriorityBorderColorClass = (prioridade: string): string => {
-    switch (prioridade?.toUpperCase()) {
-        case 'URGENTE':
-            return 'border-red-200';
-        case 'ALTA':
-            return 'border-orange-200';
-        case 'MEDIA':
-        case 'NORMAL':
-            return 'border-blue-200';
-        case 'BAIXA':
-            return 'border-gray-200';
-        default:
-            return 'border-gray-200';
-    }
+    const prioridadeUpper = prioridade?.toUpperCase() as keyof typeof PRIORITY_COLORS;
+    return PRIORITY_COLORS[prioridadeUpper] || PRIORITY_COLORS[PRIORIDADES.BAIXA];
 };
 
 export const getTipoColorClass = (tipo: string): string => {
     switch (tipo?.toUpperCase()) {
-      case 'MANUTENCAO': return 'bg-blue-100 text-blue-800';
-      case 'TESTE': return 'bg-purple-100 text-purple-800';
-      case 'MONTAGEM': return 'bg-green-100 text-green-800';
-      case 'DESMONTAGEM': return 'bg-orange-100 text-orange-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case TIPOS_ATIVIDADE.MANUTENCAO: return STATUS_COLORS.INFO;
+      case TIPOS_ATIVIDADE.TESTE: return 'bg-purple-100 text-purple-800';
+      case TIPOS_ATIVIDADE.MONTAGEM: return STATUS_COLORS.SUCCESS;
+      case TIPOS_ATIVIDADE.DESMONTAGEM: return 'bg-orange-100 text-orange-800';
+      case TIPOS_ATIVIDADE.INSPECAO: return STATUS_COLORS.WARNING;
+      case TIPOS_ATIVIDADE.REPARO: return STATUS_COLORS.ERROR;
+      default: return STATUS_COLORS.DEFAULT;
     }
 };

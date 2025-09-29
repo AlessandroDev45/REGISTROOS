@@ -4,18 +4,19 @@ import { TipoMaquinaData, departamentoService, setorService } from '../../../../
 
 // Update interface to match backend API payload and form fields
 interface TipoMaquinaFormData {
-    nome_tipo: string; // Campo correto da DB
+    nome: string; // Frontend usa 'nome', backend recebe via alias
     descricao: string;
-    departamento: string;
-    setor: string;
+    departamento: string; // Nome do departamento (para exibição)
+    setor: string; // Nome do setor (para exibição)
+    id_departamento?: number; // ID do departamento (para envio ao backend)
     categoria: string; // Campo categoria da máquina (MOTOR, GERADOR, etc.)
-    subcategoria?: string; // Campo subcategoria (ESTATOR, ROTOR, etc.)
+    subcategoria: string; // String separada por vírgulas (convertida para array no backend)
     ativo: boolean;
 }
 
 // Update errors interface
 interface TipoMaquinaFormErrors {
-    nome_tipo?: string;
+    nome?: string;
     descricao?: string;
     departamento?: string;
     setor?: string;
@@ -37,12 +38,12 @@ const TipoMaquinaForm: React.FC<TipoMaquinaFormProps> = ({
     isEdit = false
 }) => {
     const [formData, setFormData] = useState<TipoMaquinaFormData>({
-        nome_tipo: initialData?.nome_tipo || '',
+        nome: initialData?.nome || '',
         descricao: initialData?.descricao || '',
         departamento: initialData?.departamento || 'MOTORES',
         setor: initialData?.setor || '',
         categoria: initialData?.categoria || '',
-        subcategoria: initialData?.subcategoria || '',
+        subcategoria: Array.isArray(initialData?.subcategoria) ? initialData.subcategoria.join(', ') : (initialData?.subcategoria || ''),
         ativo: initialData?.ativo ?? true,
     });
     const [errors, setErrors] = useState<TipoMaquinaFormErrors>({});
@@ -53,12 +54,12 @@ const TipoMaquinaForm: React.FC<TipoMaquinaFormProps> = ({
     useEffect(() => {
         if (initialData) {
             setFormData({
-                nome_tipo: initialData?.nome_tipo || '',
+                nome: initialData?.nome || '',
                 descricao: initialData?.descricao || '',
                 departamento: initialData?.departamento || 'MOTORES',
                 setor: initialData?.setor || '',
                 categoria: initialData?.categoria || '',
-                subcategoria: initialData?.subcategoria || '',
+                subcategoria: Array.isArray(initialData?.subcategoria) ? initialData.subcategoria.join(', ') : (initialData?.subcategoria || ''),
                 ativo: initialData?.ativo ?? true,
             });
             setErrors({});
@@ -81,12 +82,12 @@ const TipoMaquinaForm: React.FC<TipoMaquinaFormProps> = ({
         fetchDepartamentos();
 
         setFormData({
-            nome_tipo: initialData?.nome_tipo || '',
+            nome: initialData?.nome || '',
             descricao: initialData?.descricao || '',
             departamento: initialData?.departamento || 'MOTORES',
             setor: initialData?.setor || '',
             categoria: initialData?.categoria || '',
-            subcategoria: initialData?.subcategoria || '',
+            subcategoria: Array.isArray(initialData?.subcategoria) ? initialData.subcategoria.join(', ') : (initialData?.subcategoria || ''),
             ativo: initialData?.ativo ?? true,
         });
         setErrors({});
@@ -143,11 +144,9 @@ const TipoMaquinaForm: React.FC<TipoMaquinaFormProps> = ({
     const validateForm = (): boolean => {
         const newErrors: TipoMaquinaFormErrors = {};
 
-        if (!formData.nome_tipo.trim()) {
-            newErrors.nome_tipo = 'Nome do tipo de máquina é obrigatório';
+        if (!formData.nome.trim()) {
+            newErrors.nome = 'Nome do tipo de máquina é obrigatório';
         }
-
-
 
         if (!formData.departamento) {
             newErrors.departamento = 'Departamento é obrigatório';
@@ -164,8 +163,14 @@ const TipoMaquinaForm: React.FC<TipoMaquinaFormProps> = ({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (validateForm()) {
-            // Enviar dados com os campos corretos da DB
-            onSubmit(formData, isEdit);
+            // Mapear nome do departamento para ID antes de enviar
+            const departamentoSelecionado = departamentos.find(dept => (dept.nome || dept.nome_tipo) === formData.departamento);
+            const dataToSubmit = {
+                ...formData,
+                id_departamento: departamentoSelecionado?.id,
+                subcategoria: formData.subcategoria.split(',').map(s => s.trim()).filter(s => s) // Converter string para array
+            };
+            onSubmit(dataToSubmit, isEdit);
         }
     };
 
@@ -193,8 +198,8 @@ const TipoMaquinaForm: React.FC<TipoMaquinaFormProps> = ({
                     >
                         <option value="">Selecione um departamento</option>
                         {departamentos.map((dept) => (
-                            <option key={dept.id} value={dept.nome_tipo}>
-                                {dept.nome_tipo}
+                            <option key={dept.id} value={dept.nome || dept.nome_tipo}>
+                                {dept.nome || dept.nome_tipo}
                             </option>
                         ))}
                     </SelectField>
@@ -219,17 +224,17 @@ const TipoMaquinaForm: React.FC<TipoMaquinaFormProps> = ({
                 {/* Second Row: Nome */}
                 <div className="grid grid-cols-1 gap-6">
                     <div>
-                        <label htmlFor="nome_tipo" className="block text-sm font-medium text-gray-700">Nome do tipo de máquina *</label>
+                        <label htmlFor="nome" className="block text-sm font-medium text-gray-700">Nome do tipo de máquina *</label>
                         <input
                             type="text"
-                            id="nome_tipo"
-                            name="nome_tipo"
-                            value={formData.nome_tipo}
+                            id="nome"
+                            name="nome"
+                            value={formData.nome}
                             onChange={handleInputChange}
                             placeholder="EX: MAQUINA ROTATIVA CA, MAQUINA ROTATIVA CC, MAQUINA ESTATICA CA"
                             className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
                         />
-                        {errors.nome_tipo && <p className="mt-1 text-sm text-red-600">{errors.nome_tipo}</p>}
+                        {errors.nome && <p className="mt-1 text-sm text-red-600">{errors.nome}</p>}
                     </div>
                 </div>
 
