@@ -30,6 +30,8 @@ const SetorForm: React.FC<SetorFormProps> = ({
         descricao: initialData?.descricao || '',
         ativo: initialData?.ativo ?? true,
         area_tipo: initialData?.area_tipo || 'PRODUCAO', // Default value for new field
+        id_departamento: initialData?.id_departamento,
+        id: initialData?.id,
     });
     const [errors, setErrors] = useState<SetorFormErrors>({});
     const [departamentos, setDepartamentos] = useState<DepartamentoData[]>([]);
@@ -53,6 +55,8 @@ const SetorForm: React.FC<SetorFormProps> = ({
             descricao: initialData?.descricao || '',
             ativo: initialData?.ativo ?? true,
             area_tipo: initialData?.area_tipo || 'PRODUCAO',
+            id_departamento: initialData?.id_departamento,
+            id: initialData?.id,
         });
         setErrors({});
     }, [initialData]);
@@ -98,7 +102,7 @@ const SetorForm: React.FC<SetorFormProps> = ({
         e.preventDefault();
         if (validateForm()) {
             // Mapear nome do departamento para ID antes de enviar
-            const departamentoSelecionado = departamentos.find(dept => (dept.nome || dept.nome_tipo) === formData.departamento);
+            const departamentoSelecionado = departamentos.find(dept => (dept.nome || dept.nome) === formData.departamento);
             const dataToSubmit = {
                 ...formData,
                 id_departamento: departamentoSelecionado?.id
@@ -145,9 +149,9 @@ const SetorForm: React.FC<SetorFormProps> = ({
                         required
                     >
                         <option value="">Selecione um departamento</option>
-                        {departamentos.map(dept => (
-                            <option key={dept.id} value={dept.nome_tipo}>
-                                {dept.nome_tipo}
+                        {departamentos.map((dept) => (
+                            <option key={dept.id} value={dept.nome}>
+                                {dept.nome}
                             </option>
                         ))}
                     </SelectField>

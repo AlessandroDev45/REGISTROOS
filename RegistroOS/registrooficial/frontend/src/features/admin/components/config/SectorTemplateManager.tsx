@@ -30,8 +30,20 @@ const SectorTemplateManager: React.FC<SectorTemplateManagerProps> = ({
     const [searchTerm, setSearchTerm] = useState('');
     const [filteredTemplates, setFilteredTemplates] = useState<SectorTemplate[]>([]);
 
-    // Templates serão carregados da API
-    const [templates, setTemplates] = useState<SectorTemplate[]>([]);
+    // Mock templates data
+    const mockTemplates: SectorTemplate[] = [
+        {
+            id: '1',
+            name: 'Motores Elétricos',
+            description: 'Template para setores que trabalham com motores elétricos',
+            data: {
+                tiposMaquina: ['MAQUINA ROTATIVA CA', 'MAQUINA ROTATIVA CC'],
+                tiposAtividade: ['MONTAGEM', 'TESTES ELÉTRICOS', 'TESTES MECÂNICOS', 'INSPEÇÃO FINAL'],
+                descricoesAtividade: ['MONTAGEM DE MOTORES', 'TESTES DE ROTOR', 'TESTES DE ESTATOR', 'TESTES DE ISOLAMENTO'],
+                tiposFalha: ['ISOLAMENTO RESSECADO (ESTATOR)', 'FALHA NO MANCHEL', 'DEFEITO DE ROLAMENTO'],
+                testesEstaticos: {
+                    carcaca: ['ca_carc_inspecao_visual', 'ca_carc_supressores'],
+                    estator: ['ca_estator_res_isol', 'ca_estator_impedancia', 'ca_estator_hipot'],
                     rotor: ['ca_rotor_res_isol', 'ca_rotor_res_ohmica', 'ca_rotor_surge']
                 }
             },

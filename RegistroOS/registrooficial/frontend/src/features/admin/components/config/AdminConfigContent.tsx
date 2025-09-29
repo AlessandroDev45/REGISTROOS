@@ -16,7 +16,6 @@ import TipoFalhaList from './TipoFalhaList';
 import CausaRetrabalhoList from './CausaRetrabalhoList';
 import DescricaoAtividadeForm from './DescricaoAtividadeForm';
 import DepartamentoForm from './DepartamentoForm';
-
 import HierarchicalSectorViewer from './HierarchicalSectorViewer';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -33,6 +32,7 @@ import {
 } from '../../../../services/adminApi';
 
 import { useGenericForm } from '../../../../hooks/useGenericForm';
+
 // Definindo os tipos aqui para evitar dependências circulares ou importações complexas
 interface SetorData {
     id: number;
@@ -64,6 +64,70 @@ interface TipoMaquinaData {
     departamento: 'MOTORES' | 'TRANSFORMADORES';
     descricao: string;
     campos_teste_resultado?: string; // JSON string
+    ativo: boolean;
+}
+
+interface DepartamentoData {
+    id?: number;
+    nome: string;
+    nome_tipo?: string;
+    descricao?: string;
+    ativo?: boolean;
+}
+
+interface TipoTesteData {
+    id?: number;
+    nome: string;
+    tipo_teste: string;
+    descricao: string;
+    ativo: boolean;
+    tipo_maquina?: string;
+    teste_exclusivo_setor?: boolean;
+    descricao_teste_exclusivo?: string;
+    categoria?: string;
+    subcategoria?: number;
+}
+
+interface AtividadeTipoData {
+    id?: number;
+    nome: string;
+    descricao: string;
+    tipo_atividade: string;
+    ativo: boolean;
+    nome_tipo?: string; // Adicionado para compatibilidade
+}
+
+interface FalhaTipoData {
+    id?: number;
+    nome: string;
+    descricao: string;
+    ativo: boolean;
+    nome_tipo?: string; // Adicionado para compatibilidade
+}
+
+interface CausaRetrabalhoData {
+    id?: number;
+    nome: string;
+    descricao: string;
+    ativo: boolean;
+    nome_tipo?: string; // Adicionado para compatibilidade
+}
+
+interface CentroCustoData {
+    id?: number;
+    nome: string;
+    descricao?: string;
+    ativo?: boolean;
+    nome_tipo?: string; // Adicionado para compatibilidade
+}
+
+interface DescricaoAtividadeData {
+    id?: number;
+    codigo: string;
+    descricao: string;
+    setor: string;
+    departamento: string;
+    categoria: string;
     ativo: boolean;
 }
 
@@ -195,15 +259,12 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
 
         let filtered = [...data];
 
-
-
         // Aplicar filtro de departamento (para todas as abas exceto centro_custo)
         if (selectedDepartamento && tabType !== 'centro_custo') {
             const beforeFilter = filtered.length;
             filtered = filtered.filter(item =>
                 item.departamento === selectedDepartamento
             );
-
         }
 
         // Aplicar filtro de setor (para abas que têm setor)
@@ -212,7 +273,6 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
             filtered = filtered.filter(item =>
                 item.setor === selectedSetor
             );
-
         }
 
         // Aplicar filtro de tipo_teste (apenas para aba tipos_testes)
@@ -245,7 +305,6 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
             } else if (selectedStatus === 'inativo') {
                 filtered = filtered.filter(item => item.ativo === false);
             }
-
         }
 
         // Aplicar filtro de pesquisa (para todas as abas)
@@ -266,9 +325,7 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
                     field && field.toLowerCase().includes(searchLower)
                 );
             });
-
         }
-
 
         return filtered;
     };
@@ -323,7 +380,6 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
                                     </option>
                                 ))}
                             </select>
-
                         </div>
                     )}
 
@@ -346,7 +402,6 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
                                     </option>
                                 ))}
                             </select>
-
                         </div>
                     )}
 
@@ -572,7 +627,6 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
                     return <div className="p-4 text-red-600">Erro ao carregar Estrutura Hierárquica: {(error as Error).message}</div>;
                 }
 
-
             default:
                 return null;
         }
@@ -744,7 +798,7 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
                     >
                         🔄 Causas de Retrabalho
                     </button>
-                    
+
                     {/* Abas de navegação especial */}
                     <button
                         onClick={() => setActiveTab('hierarchy')}
@@ -755,8 +809,6 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
                     >
                         🌳 Estrutura Hierárquica
                     </button>
-                    
-
                 </nav>
             </div>
 
@@ -776,3 +828,4 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
 };
 
 export default AdminConfigContent;
+}
