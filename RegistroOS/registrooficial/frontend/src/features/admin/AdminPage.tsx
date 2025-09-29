@@ -38,7 +38,7 @@ const AdminPage: React.FC = () => {
                 ]);
 
                 // Verificar se falhas está desabilitado
-                let falhas = [];
+                let falhas: any[] = [];
                 if (Array.isArray(falhasResponse)) {
                     falhas = falhasResponse;
                 } else if (falhasResponse && typeof falhasResponse === 'object' && 'status' in falhasResponse) {

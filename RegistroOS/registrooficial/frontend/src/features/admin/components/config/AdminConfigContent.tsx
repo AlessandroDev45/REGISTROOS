@@ -215,17 +215,7 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
         if (tabType === 'setores') { // Ajustado para 'setores' em vez de 'full_sector'
             setIsCreatingFullInstance(true);
         }
-        // Passar o tipo para o componente pai
-        if (typeof onCreateNew === 'function') {
-            (onCreateNew as any)(tabType);
-        } else {
-            onCreateNew();
-        }
-    };
-
-    const handleCreateFullSector = () => {
-        setIsCreatingFullInstance(true);
-        setActiveTab('setores');
+        // Chamar a função onCreateNew do componente pai
         onCreateNew();
     };
 
@@ -244,15 +234,6 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
         // Para editar, o usuário deve usar os botões específicos de edição
     };
 
-    const handleCopySectorSelect = (sectorData: any) => {
-        // Passar os dados do setor copiado para o formulário completo
-        setActiveTab('setores');
-        setIsCreatingFullInstance(true);
-        // O componente pai precisa saber que é um setor copiado
-        // Isso pode ser feito através de uma prop especial ou evento
-        toast.success('Setor copiado com sucesso! Agora você pode ajustar os dados.');
-    };
-
     // Função para filtrar dados baseado nos filtros selecionados
     const getFilteredData = (data: any[], tabType: ConfigTabKey) => {
         if (!data) return [];
@@ -261,7 +242,6 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
 
         // Aplicar filtro de departamento (para todas as abas exceto centro_custo)
         if (selectedDepartamento && tabType !== 'centro_custo') {
-            const beforeFilter = filtered.length;
             filtered = filtered.filter(item =>
                 item.departamento === selectedDepartamento
             );
@@ -269,7 +249,6 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
 
         // Aplicar filtro de setor (para abas que têm setor)
         if (selectedSetor && ['tipos_maquina', 'tipos_testes', 'atividades', 'descricao_atividades', 'falhas', 'causas_retrabalho'].includes(tabType)) {
-            const beforeFilter = filtered.length;
             filtered = filtered.filter(item =>
                 item.setor === selectedSetor
             );
@@ -299,7 +278,6 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
 
         // Aplicar filtro de status (para todas as abas)
         if (selectedStatus) {
-            const beforeFilter = filtered.length;
             if (selectedStatus === 'ativo') {
                 filtered = filtered.filter(item => item.ativo === true);
             } else if (selectedStatus === 'inativo') {
@@ -309,7 +287,6 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
 
         // Aplicar filtro de pesquisa (para todas as abas)
         if (searchTerm) {
-            const beforeFilter = filtered.length;
             const searchLower = searchTerm.toLowerCase();
             filtered = filtered.filter(item => {
                 // Pesquisar em diferentes campos dependendo do tipo
@@ -828,4 +805,3 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
 };
 
 export default AdminConfigContent;
-}
