@@ -153,17 +153,21 @@ async def get_estrutura_hierarquica(
                     TipoDescricaoAtividade.ativo.is_(True)
                 ).all()
 
-                # Buscar tipos de falha (TipoFalha não tem campo setor)
-                tipos_falha = db.query(TipoFalha).filter(
-                    TipoFalha.ativo.is_(True),
-                    TipoFalha.id_departamento == dept.id  # Usar ID do departamento
-                ).all()
+                # Buscar tipos de falha
+                try:
+                    tipos_falha = db.query(TipoFalha).filter(
+                        TipoFalha.ativo.is_(True)
+                    ).all()
+                except Exception:
+                    tipos_falha = []
 
-                # Buscar causas de retrabalho (TipoCausaRetrabalho não tem campo setor)
-                causas_retrabalho = db.query(TipoCausaRetrabalho).filter(
-                    TipoCausaRetrabalho.ativo.is_(True),
-                    TipoCausaRetrabalho.id_departamento == dept.id  # Usar ID do departamento
-                ).all()
+                # Buscar causas de retrabalho
+                try:
+                    causas_retrabalho = db.query(TipoCausaRetrabalho).filter(
+                        TipoCausaRetrabalho.ativo.is_(True)
+                    ).all()
+                except Exception:
+                    causas_retrabalho = []
 
                 setor_data = {
                     "id": setor_obj.id,
@@ -198,24 +202,24 @@ async def get_estrutura_hierarquica(
                     "descricoes_atividade": [
                         {
                             "id": da.id,
-                            "codigo": da.codigo,
-                            "descricao": da.descricao
+                            "codigo": getattr(da, 'codigo', ''),
+                            "descricao": getattr(da, 'descricao', '')
                         }
                         for da in descricoes_atividade
                     ],
                     "tipos_falha": [
                         {
                             "id": tf.id,
-                            "codigo": tf.codigo,
-                            "descricao": tf.descricao
+                            "codigo": getattr(tf, 'codigo', ''),
+                            "descricao": getattr(tf, 'descricao', '')
                         }
                         for tf in tipos_falha
                     ],
                     "causas_retrabalho": [
                         {
                             "id": cr.id,
-                            "codigo": cr.codigo,
-                            "descricao": cr.descricao
+                            "codigo": getattr(cr, 'codigo', ''),
+                            "descricao": getattr(cr, 'descricao', '')
                         }
                         for cr in causas_retrabalho
                     ]

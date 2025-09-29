@@ -109,7 +109,7 @@ const HierarchicalSectorViewer: React.FC<HierarchicalSectorViewerProps> = ({
                 params.append('setor', selectedFilters.setor);
             }
 
-            const response = await api.get(`/estrutura-hierarquica-debug?${params.toString()}`);
+            const response = await api.get(`/estrutura-hierarquica?${params.toString()}`);
             const data: EstruturaResponse = response.data;
             setEstrutura(data.estrutura);
 
