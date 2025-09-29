@@ -227,7 +227,7 @@ async def get_categorias_maquina_admin(
         ).distinct()
 
         # Adicionar filtros de departamento e setor se o usuário não for ADMIN
-        if current_user.privilege_level != 'ADMIN':  # type: ignore
+        if str(current_user.privilege_level) != 'ADMIN':  # type: ignore
             query = query.filter(
                 and_(
                     TipoMaquina.departamento == current_user.departamento,
@@ -860,7 +860,7 @@ async def rejeitar_apontamento(
     """
     try:
         # Verificar privilégios
-        if current_user.privilege_level not in ["SUPERVISOR", "GESTAO", "ADMIN"]:
+        if str(current_user.privilege_level) not in ["SUPERVISOR", "GESTAO", "ADMIN"]:
             raise HTTPException(status_code=403, detail="Acesso negado: apenas supervisores, gestão e admins podem rejeitar apontamentos")
 
         # Buscar apontamento
@@ -872,7 +872,7 @@ async def rejeitar_apontamento(
             raise HTTPException(status_code=404, detail="Apontamento não encontrado")
 
         # Verificar se o supervisor pode rejeitar este apontamento (mesmo setor)
-        if getattr(current_user, 'privilege_level', None) == "SUPERVISOR":
+        if str(getattr(current_user, 'privilege_level', None)) == "SUPERVISOR":
             if getattr(apontamento, 'id_setor', None) != getattr(current_user, 'id_setor', None):
                 raise HTTPException(status_code=403, detail="Supervisores só podem rejeitar apontamentos do seu setor")
 
@@ -1074,10 +1074,10 @@ async def editar_apontamento(
         if getattr(apontamento, 'id_usuario', None) == getattr(current_user, 'id', None):
             pode_editar = True
         # Supervisor do mesmo setor pode editar
-        elif getattr(current_user, 'privilege_level', None) == "SUPERVISOR" and getattr(apontamento, 'id_setor', None) == getattr(current_user, 'id_setor', None):
+        elif str(getattr(current_user, 'privilege_level', None)) == "SUPERVISOR" and getattr(apontamento, 'id_setor', None) == getattr(current_user, 'id_setor', None):
             pode_editar = True
         # Gestão e Admin podem editar qualquer apontamento
-        elif current_user.privilege_level in ["GESTAO", "ADMIN"]:
+        elif str(current_user.privilege_level) in ["GESTAO", "ADMIN"]:
             pode_editar = True
 
         if not pode_editar:
@@ -1141,22 +1141,36 @@ async def editar_apontamento(
 # =============================================================================
 
 @router.get("/formulario/tipos-maquina", operation_id="dev_get_formulario_tipos_maquina")
-async def get_tipos_maquina_formulario(db: Session = Depends(get_db)):
+async def get_tipos_maquina_formulario(
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Endpoint para obter tipos de máquina disponíveis para o formulário de apontamento.
-    Retorna apenas tipos ativos, garantindo nome_tipo único.
+    Filtra por departamento e setor do usuário logado se não for admin, retorna apenas tipos ativos, garantindo nome_tipo único.
     """
     try:
-        # Modificar a consulta para retornar nome_tipo distinto, pegando o primeiro ID e descrição
-        # Se há múltiplas entradas com o mesmo nome_tipo, o MIN(id) e MIN(descricao) garantem uma escolha consistente
-        sql = text("""
+        base_sql = """
             SELECT MIN(id) as id, nome_tipo, MIN(descricao) as descricao
             FROM tipos_maquina
             WHERE ativo = 1
+        """
+        params = {}
+        if str(current_user.privilege_level) != 'ADMIN':
+            base_sql += """
+                AND departamento = :departamento
+                AND setor = :setor
+            """
+            params = {
+                "departamento": getattr(current_user, 'departamento', None),
+                "setor": getattr(current_user, 'setor', None)
+            }
+        base_sql += """
             GROUP BY nome_tipo
             ORDER BY nome_tipo
-        """)
-        result = db.execute(sql)
+        """
+        sql = text(base_sql)
+        result = db.execute(sql, params)
         tipos = result.fetchall()
 
         return [
@@ -1228,16 +1242,28 @@ async def get_causas_retrabalho_formulario(db: Session = Depends(get_db)):
         return []
 
 @router.get("/formulario/tipos-atividade", operation_id="dev_get_formulario_tipos_atividade")
-async def get_tipos_atividade_formulario(db: Session = Depends(get_db)):
+async def get_tipos_atividade_formulario(
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Endpoint para obter tipos de atividade disponíveis para o formulário de apontamento.
-    Retorna apenas tipos ativos.
+    Filtra por departamento e setor do usuário logado, retorna apenas tipos ativos.
     """
     try:
         from sqlalchemy import text
 
-        sql = text("SELECT id, nome_tipo, descricao FROM tipo_atividade WHERE ativo = 1 ORDER BY nome_tipo")
-        result = db.execute(sql)
+        base_sql = "SELECT id, nome_tipo, descricao FROM tipo_atividade WHERE ativo = 1"
+        params = {}
+        if str(current_user.privilege_level) != 'ADMIN':
+            base_sql += " AND departamento = :departamento AND setor = :setor"
+            params = {
+                "departamento": getattr(current_user, 'departamento', None),
+                "setor": getattr(current_user, 'setor', None)
+            }
+        base_sql += " ORDER BY nome_tipo"
+        sql = text(base_sql)
+        result = db.execute(sql, params)
         tipos = result.fetchall()
 
         return [
@@ -1253,16 +1279,28 @@ async def get_tipos_atividade_formulario(db: Session = Depends(get_db)):
         return []
 
 @router.get("/formulario/descricoes-atividade", operation_id="dev_get_formulario_descricoes_atividade")
-async def get_descricoes_atividade_formulario(db: Session = Depends(get_db)):
+async def get_descricoes_atividade_formulario(
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Endpoint para obter descrições de atividade disponíveis para o formulário.
-    Retorna apenas descrições ativas.
+    Filtra por departamento e setor do usuário logado, retorna apenas descrições ativas.
     """
     try:
         from sqlalchemy import text
 
-        sql = text("SELECT id, codigo, descricao, tipo_maquina FROM tipo_descricao_atividade WHERE ativo = 1 ORDER BY codigo")
-        result = db.execute(sql)
+        base_sql = "SELECT id, codigo, descricao, tipo_maquina FROM tipo_descricao_atividade WHERE ativo = 1"
+        params = {}
+        if str(current_user.privilege_level) != 'ADMIN':
+            base_sql += " AND departamento = :departamento AND setor = :setor"
+            params = {
+                "departamento": getattr(current_user, 'departamento', None),
+                "setor": getattr(current_user, 'setor', None)
+            }
+        base_sql += " ORDER BY codigo"
+        sql = text(base_sql)
+        result = db.execute(sql, params)
         descricoes = result.fetchall()
 
         return [
@@ -2277,7 +2315,7 @@ async def resolver_pendencia(
             raise HTTPException(status_code=400, detail="Pendência já está fechada")
 
         # Verificar permissões conforme especificação
-        if current_user.privilege_level not in ['ADMIN', 'SUPERVISOR', 'USER']:
+        if str(current_user.privilege_level) not in ['ADMIN', 'SUPERVISOR', 'USER']:
             raise HTTPException(status_code=403, detail="Sem permissão para resolver pendências")
 
         # Verificar permissões: setor criador, PCP, GESTÃO e ADMIN podem resolver
