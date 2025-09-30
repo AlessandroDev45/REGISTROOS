@@ -13,6 +13,33 @@ interface TipoMaquinaListProps {
 const TipoMaquinaList: React.FC<TipoMaquinaListProps> = ({ data: tiposMaquina = [], onEdit, onDelete, onCreateNew, loading, error }) => {
     const [deletingId, setDeletingId] = useState<number | null>(null);
 
+    // Função para quebrar texto se maior que 15 caracteres
+    const formatTextWithBreak = (text: string, maxLength: number = 15) => {
+        if (!text || text.length <= maxLength) return text;
+
+        // Quebrar em palavras para evitar cortar no meio de uma palavra
+        const words = text.split(' ');
+        let result = '';
+        let currentLine = '';
+
+        for (const word of words) {
+            if ((currentLine + word).length <= maxLength) {
+                currentLine += (currentLine ? ' ' : '') + word;
+            } else {
+                if (result) result += '\n';
+                result += currentLine;
+                currentLine = word;
+            }
+        }
+
+        if (currentLine) {
+            if (result) result += '\n';
+            result += currentLine;
+        }
+
+        return result;
+    };
+
     const handleDeleteClick = async (tipo: TipoMaquinaData) => {
         if (!window.confirm(`Tem certeza de que deseja deletar o tipo de máquina "${tipo.nome_tipo}"?`)) {
             return;
@@ -47,6 +74,8 @@ const TipoMaquinaList: React.FC<TipoMaquinaListProps> = ({ data: tiposMaquina = 
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoria</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subcategoria</th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Departamento</th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Setor</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ativo</th>
                             <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
                         </tr>
@@ -56,8 +85,26 @@ const TipoMaquinaList: React.FC<TipoMaquinaListProps> = ({ data: tiposMaquina = 
                             tiposMaquina.map((tipo) => (
                                 <tr key={tipo.id}>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{tipo.nome}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{tipo.categoria}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{tipo.subcategoria || '-'}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-500">
+                                        <div className="whitespace-pre-line">
+                                            {formatTextWithBreak(tipo.categoria || '-')}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-500">
+                                        <div className="whitespace-pre-line">
+                                            {formatTextWithBreak(tipo.subcategoria || '-')}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-500">
+                                        <div className="whitespace-pre-line">
+                                            {formatTextWithBreak(tipo.departamento || '-')}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-500">
+                                        <div className="whitespace-pre-line">
+                                            {formatTextWithBreak(tipo.setor || '-')}
+                                        </div>
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                         {tipo.ativo ? (
                                             <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
@@ -88,7 +135,7 @@ const TipoMaquinaList: React.FC<TipoMaquinaListProps> = ({ data: tiposMaquina = 
                             ))
                         ) : (
                             <tr>
-                                <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">
+                                <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
                                     Nenhum tipo de máquina encontrado.
                                 </td>
                             </tr>

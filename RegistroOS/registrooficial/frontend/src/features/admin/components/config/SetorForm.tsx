@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyledInput, SelectField } from '../../../../components/UIComponents'; // Assuming StyledInput and SelectField exist
 import { setorService, departamentoService, DepartamentoData, SetorData } from '../../../../services/adminApi'; // Import DepartamentoData as well
 import { formatarTextoInput, criarHandlerTextoValidado } from '../../../../utils/textValidation';
+import { useClickOutside } from '../../../../hooks/useClickOutside';
 
 // Type for errors, where each value is a string message or undefined
 interface SetorFormErrors {
@@ -35,6 +36,7 @@ const SetorForm: React.FC<SetorFormProps> = ({
     });
     const [errors, setErrors] = useState<SetorFormErrors>({});
     const [departamentos, setDepartamentos] = useState<DepartamentoData[]>([]);
+    const formRef = useClickOutside<HTMLDivElement>(onCancel);
 
     useEffect(() => {
         // Fetch departments for the dropdown
@@ -48,18 +50,23 @@ const SetorForm: React.FC<SetorFormProps> = ({
             }
         };
         fetchDepartamentos();
+    }, []);
 
-        setFormData({
-            nome: initialData?.nome || '',
-            departamento: initialData?.departamento || 'MOTORES',
-            descricao: initialData?.descricao || '',
-            ativo: initialData?.ativo ?? true,
-            area_tipo: initialData?.area_tipo || 'PRODUCAO',
-            id_departamento: initialData?.id_departamento,
-            id: initialData?.id,
-        });
-        setErrors({});
-    }, [initialData]);
+    // Separar o useEffect para initialData para evitar limpeza de campos
+    useEffect(() => {
+        if (initialData && isEdit) {
+            setFormData({
+                nome: initialData?.nome || '',
+                departamento: initialData?.departamento || 'MOTORES',
+                descricao: initialData?.descricao || '',
+                ativo: initialData?.ativo ?? true,
+                area_tipo: initialData?.area_tipo || 'PRODUCAO',
+                id_departamento: initialData?.id_departamento,
+                id: initialData?.id,
+            });
+            setErrors({});
+        }
+    }, [initialData, isEdit]);
 
     const handleInputChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -113,7 +120,7 @@ const SetorForm: React.FC<SetorFormProps> = ({
 
     return (
         <div className="mt-6">
-            <div className="p-6 bg-white rounded-lg shadow-md">
+            <div ref={formRef} className="p-6 bg-white rounded-lg shadow-md">
                 <div className="mb-6">
                     <h2 className="text-2xl font-semibold text-gray-700">
                         {isEdit ? 'Editar Setor' : 'Adicionar Novo Setor'}
@@ -126,16 +133,29 @@ const SetorForm: React.FC<SetorFormProps> = ({
                     <label htmlFor="nome" className="block text-sm font-medium text-gray-700">
                         Nome do Setor *
                     </label>
-                    <StyledInput
+                    <input
+                        type="text"
                         id="nome"
                         name="nome"
                         value={formData.nome}
                         onChange={handleInputChange}
                         placeholder="Ex: Montagem Motores"
-                        error={errors.nome}
                         required
+                        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors ${
+                            errors.nome
+                                ? 'border-red-500 focus:ring-red-500'
+                                : formData.nome.trim()
+                                    ? 'border-green-500 focus:ring-green-500'
+                                    : 'border-gray-300 focus:ring-blue-500'
+                        }`}
                     />
                     {errors.nome && <p className="mt-1 text-sm text-red-600">{errors.nome}</p>}
+                    {!errors.nome && !formData.nome.trim() && (
+                        <p className="mt-1 text-sm text-gray-500">Digite o nome do setor para habilitar o botão</p>
+                    )}
+                    {!errors.nome && formData.nome.trim() && (
+                        <p className="mt-1 text-sm text-green-600">✓ Nome válido</p>
+                    )}
                 </div>
 
                 <div>
@@ -226,7 +246,12 @@ const SetorForm: React.FC<SetorFormProps> = ({
                     </button>
                     <button
                         type="submit"
-                        className="px-6 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={!formData.nome.trim() || !formData.departamento.trim()}
+                        className={`px-6 py-3 font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-200 ${
+                            (formData.nome.trim() && formData.departamento.trim())
+                                ? 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500'
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
                     >
                         {isEdit ? 'Confirmar Edição' : 'Adicionar Setor'}
                     </button>

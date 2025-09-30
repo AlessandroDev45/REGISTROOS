@@ -35,7 +35,7 @@ const ProgramacaoFiltros: React.FC<ProgramacaoFiltrosProps> = ({
     onFiltrosChange({});
   };
 
-  // Carregar departamentos da API
+  // Carregar departamentos da API apenas uma vez
   useEffect(() => {
     const carregarDepartamentos = async () => {
       try {
@@ -44,14 +44,30 @@ const ProgramacaoFiltros: React.FC<ProgramacaoFiltrosProps> = ({
       } catch (error) {
         console.error('Erro ao carregar departamentos:', error);
         // Fallback: extrair departamentos únicos dos setores
-        const deptFromSetores = Array.from(
-          new Set(todosSetores.map(setor => setor.departamento).filter(Boolean))
-        );
-        setDepartamentos(deptFromSetores.map(nome => ({ nome_tipo: nome })));
+        if (todosSetores.length > 0) {
+          const deptFromSetores = Array.from(
+            new Set(todosSetores.map(setor => setor.departamento).filter(Boolean))
+          );
+          setDepartamentos(deptFromSetores.map(nome => ({ nome_tipo: nome })));
+        }
       }
     };
-    carregarDepartamentos();
-  }, [todosSetores]);
+
+    // Só carregar se ainda não temos departamentos
+    if (departamentos.length === 0) {
+      carregarDepartamentos();
+    }
+  }, []); // Remover todosSetores da dependência para evitar loop
+
+  // Fallback para departamentos usando setores (apenas se necessário)
+  useEffect(() => {
+    if (departamentos.length === 0 && todosSetores.length > 0) {
+      const deptFromSetores = Array.from(
+        new Set(todosSetores.map(setor => setor.departamento).filter(Boolean))
+      );
+      setDepartamentos(deptFromSetores.map(nome => ({ nome_tipo: nome })));
+    }
+  }, [todosSetores.length]); // Usar apenas o length para evitar re-renders desnecessários
 
   return (
     <div className="bg-white p-4 rounded-lg shadow border mb-6">

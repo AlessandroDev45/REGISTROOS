@@ -2,21 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import Layout from '../../components/Layout';
-import PesquisaPorOSTab from '../../features/desenvolvimento/components/tabs/PesquisaOSTab';
-import RelatorioCompletoModal from '../../components/RelatorioCompletoModal';
-import { useCachedSetores } from '../../hooks/useCachedSetores';
 
 const ConsultaOsPage = () => {
     const navigate = useNavigate();
-    const { setoresMotores, setoresTransformadores, loading: setoresLoading } = useCachedSetores();
     const [numos, setNumos] = useState('');
     const [loading, setLoading] = useState(false);
     const [osData, setOsData] = useState<any>(null);
     const [error, setError] = useState('');
-    const [activeSubTab, setActiveSubTab] = useState<'consulta-dados' | 'pesquisa-por-os'>('consulta-dados');
-    const [selectedSetorFiltro, setSelectedSetorFiltro] = useState<string>('');
-    const [relatorioModalOpen, setRelatorioModalOpen] = useState(false);
-    const [selectedOsId, setSelectedOsId] = useState<number | null>(null);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
@@ -96,10 +88,6 @@ const ConsultaOsPage = () => {
         } catch {
             return dateStr;
         }
-    };
-
-    const handleSetorFiltroChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        setSelectedSetorFiltro(e.target.value);
     };
 
     const renderConsultaDadosContent = () => (
@@ -327,77 +315,8 @@ const ConsultaOsPage = () => {
 
     return (
         <Layout>
-            <div className="bg-white rounded-lg shadow-md p-6">
-                {/* Sub-tabs Navigation */}
-                <div className="border-b border-gray-200 mb-6">
-                    <nav className="flex space-x-4">
-                        <button
-                            onClick={() => setActiveSubTab('consulta-dados')}
-                            className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                                activeSubTab === 'consulta-dados'
-                                    ? 'border-blue-500 text-blue-600'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            }`}
-                        >
-                            📊 Consulta Dados
-                        </button>
-                        <button
-                            onClick={() => setActiveSubTab('pesquisa-por-os')}
-                            className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                                activeSubTab === 'pesquisa-por-os'
-                                    ? 'border-blue-500 text-blue-600'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            }`}
-                        >
-                            🔍 Pesquisa Por OS
-                        </button>
-                    </nav>
-                </div>
+            {renderConsultaDadosContent()}
 
-                {/* Sub-tab Content */}
-                <div>
-                    {activeSubTab === 'consulta-dados' && renderConsultaDadosContent()}
-                    {activeSubTab === 'pesquisa-por-os' && (
-                        <div>
-                            <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-lg font-semibold">Pesquisa de OS</h2>
-                                <div>
-                                    <label htmlFor="setorFiltroConsulta" className="block text-sm font-medium text-gray-700">Filtrar por Setor</label>
-                                    <select
-                                        id="setorFiltroConsulta"
-                                        value={selectedSetorFiltro}
-                                        onChange={handleSetorFiltroChange}
-                                        className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-                                    >
-                                        <option value="">Todos os Setores</option>
-                                        {[...new Set([...setoresMotores.map(s => s.nome), ...setoresTransformadores.map(s => s.nome)])].map((nomeSetor: string, index: number) => (
-                                            <option key={`setor-${index}-${nomeSetor}`} value={nomeSetor}>{nomeSetor}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-                            <PesquisaPorOSTab
-                                setorFiltro={selectedSetorFiltro}
-                                onVerOS={(osId: number) => {
-                                    setSelectedOsId(osId);
-                                    setRelatorioModalOpen(true);
-                                }}
-                            />
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Modal de Relatório Completo */}
-            <RelatorioCompletoModal
-                isOpen={relatorioModalOpen}
-                onClose={() => {
-                    setRelatorioModalOpen(false);
-                    setSelectedOsId(null);
-                }}
-                osId={selectedOsId || 0}
-                origemPagina="consulta"
-            />
         </Layout>
     );
 };

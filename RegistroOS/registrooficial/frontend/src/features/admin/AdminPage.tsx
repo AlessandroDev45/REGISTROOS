@@ -49,6 +49,17 @@ const AdminPage: React.FC = () => {
                     }
                 }
 
+                console.log('🔧 [ADMIN] Dados carregados:', {
+                    setores: setores?.length || 0,
+                    tipos_maquina: tiposMaquina?.length || 0,
+                    tipos_testes: tiposTeste?.length || 0,
+                    atividades: atividades?.length || 0,
+                    falhas: falhas?.length || 0,
+                    causas_retrabalho: causasRetrabalho?.length || 0,
+                    centro_custo: (departamentos.length > 0 ? departamentos : centroCusto)?.length || 0,
+                    descricao_atividades: descricoesAtividade?.length || 0
+                });
+
                 setConfigData({
                     setores,
                     tipos_maquina: tiposMaquina,
@@ -108,7 +119,7 @@ const AdminPage: React.FC = () => {
                     }));
                     break;
                 case 'centro_custo':
-                    await centroCustoService.deleteCentroCusto(item.id);
+                    await departamentoService.deleteDepartamento(item.id);
                     setConfigData(prev => ({
                         ...prev,
                         centro_custo: prev.centro_custo.filter(c => c.id !== item.id)
@@ -162,13 +173,15 @@ const AdminPage: React.FC = () => {
     };
 
     const handleCreateNew = (type?: string) => {
+        console.log('🆕 [ADMIN] handleCreateNew chamado com tipo:', type);
         setCurrentConfigItem(null);
-        setConfigType(type || 'full_sector'); // Set to specific type or full sector creation
+        setConfigType(type || 'centro_custo'); // Default para centro_custo (departamento)
         setShowConfigForm(true);
+        console.log('🆕 [ADMIN] Estado atualizado - configType:', type || 'centro_custo', 'showConfigForm:', true);
     };
 
     const handleSubmit = async (data: any, isEdit: boolean) => {
-        console.log('Form submitted:', data, isEdit);
+        console.log('🚀 [ADMIN] Form submitted:', { data, isEdit, configType, currentConfigItem });
         try {
             // Handle full sector creation
             if (configType === 'full_sector') {
@@ -227,19 +240,23 @@ const AdminPage: React.FC = () => {
                     alert('Tipo de teste criado com sucesso!');
                 }
             } else if (configType === 'centro_custo') {
-                // Handle centro custo creation/update
+                // Handle centro custo (departamento) creation/update
+                console.log('🏢 [ADMIN] Processando centro_custo (departamento):', { data, isEdit });
+                console.log('🏢 [ADMIN] Dados recebidos do form:', JSON.stringify(data, null, 2));
                 if (isEdit && currentConfigItem) {
-                    const updatedCentro = await centroCustoService.updateCentroCusto(currentConfigItem.id, data);
+                    const updatedDepartamento = await departamentoService.updateDepartamento(currentConfigItem.id, data);
                     setConfigData(prev => ({
                         ...prev,
-                        centro_custo: prev.centro_custo.map(c => c.id === currentConfigItem.id ? updatedCentro : c)
+                        centro_custo: prev.centro_custo.map(c => c.id === currentConfigItem.id ? updatedDepartamento : c)
                     }));
                     alert('Departamento atualizado com sucesso!');
                 } else {
-                    const newCentro = await centroCustoService.createCentroCusto(data);
+                    console.log('🏢 [ADMIN] Chamando departamentoService.createDepartamento com:', data);
+                    const newDepartamento = await departamentoService.createDepartamento(data);
+                    console.log('🏢 [ADMIN] Departamento criado com sucesso:', newDepartamento);
                     setConfigData(prev => ({
                         ...prev,
-                        centro_custo: [...prev.centro_custo, newCentro]
+                        centro_custo: [...prev.centro_custo, newDepartamento]
                     }));
                     alert('Departamento criado com sucesso!');
                 }

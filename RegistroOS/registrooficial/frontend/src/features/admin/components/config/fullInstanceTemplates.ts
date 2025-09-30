@@ -23,7 +23,7 @@ export const getDepartmentsTemplate = async () => {
 // Função para buscar setores reais da API
 export const getSectorsByDepartmentTemplate = async () => {
     try {
-        const response = await api.get('/admin/setores');
+        const response = await api.get('/setores');
         const setoresPorDepartamento: any = {};
 
         response.data.forEach((setor: any) => {

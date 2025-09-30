@@ -8,6 +8,7 @@ import TipoTesteList from './TipoTesteList';
 import DescricaoAtividadeList from './DescricaoAtividadeList';
 import CentroCustoList from './CentroCustoList';
 import CentroCustoForm from './CentroCustoForm';
+import DepartamentoList from './DepartamentoList';
 import TipoAtividadeForm from './TipoAtividadeForm';
 import TipoFalhaForm from './TipoFalhaForm';
 import CausaRetrabalhoForm from './CausaRetrabalhoForm';
@@ -211,12 +212,13 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
     }, [activeTab]);
 
     const handleCreateNewForTab = (tabType: ConfigTabKey) => {
+        console.log('🆕 [ADMIN CONFIG] handleCreateNewForTab chamado com:', tabType);
         setActiveTab(tabType);
         if (tabType === 'setores') { // Ajustado para 'setores' em vez de 'full_sector'
             setIsCreatingFullInstance(true);
         }
-        // Chamar a função onCreateNew do componente pai
-        onCreateNew();
+        // Chamar a função onCreateNew do componente pai passando o tipo correto
+        (onCreateNew as any)(tabType);
     };
 
     const handleTreeSelect = (item: any) => {
@@ -487,13 +489,10 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
         switch (activeTab) {
             case 'centro_custo':
                 return (
-                    <CentroCustoList
-                        data={getFilteredData(configData.centro_custo || [], 'centro_custo')}
-                        onEdit={(centroCusto) => onEdit(centroCusto, 'centro_custo')}
-                        onDelete={async (centroCusto) => await onDelete('centro_custo', centroCusto)}
+                    <DepartamentoList
+                        onEdit={(departamento) => onEdit(departamento, 'centro_custo')}
                         onCreateNew={() => handleCreateNewForTab('centro_custo')}
-                        loading={loadingConfig}
-                        error={null}
+                        refreshData={() => window.location.reload()} // Recarregar página para atualizar dados
                     />
                 );
             case 'setores':

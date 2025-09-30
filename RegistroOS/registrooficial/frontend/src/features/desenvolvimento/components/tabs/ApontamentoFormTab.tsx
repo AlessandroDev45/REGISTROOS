@@ -73,9 +73,14 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
     const [testesExclusivosSelecionados, setTestesExclusivosSelecionados] = useState<Record<number, boolean>>({});
     const [loadingDropdowns, setLoadingDropdowns] = useState(false);
 
+    // Estados para controlar carregamentos únicos
+    const [dadosInicaisCarregados, setDadosInicaisCarregados] = useState(false);
+
     // Estados para categorias e subcategorias
     const [categoriasMaquina, setCategoriasMaquina] = useState<string[]>([]);
     const [subcategoriasDisponiveis, setSubcategoriasDisponiveis] = useState<string[]>([]);
+    const [tiposMaquinaCategoria, setTiposMaquinaCategoria] = useState<any[]>([]);
+    const [tipoMaquinaSelecionado, setTipoMaquinaSelecionado] = useState<any>(null);
 
     // Estados removidos - sistema de testes exclusivos simplificado
 
@@ -121,11 +126,33 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
         }
     }, [configuracaoAtual]);
 
+    // Função para remover duplicatas por ID
+    const removeDuplicatesById = (array: any[]) => {
+        const seen = new Set();
+        return array.filter(item => {
+            if (seen.has(item.id)) {
+                console.warn(`🚨 ID duplicado encontrado: ${item.id}`, item);
+                return false;
+            }
+            seen.add(item.id);
+            return true;
+        });
+    };
+
     // Funções para carregar dados dos dropdowns
     const loadTiposMaquina = async () => {
         try {
             const response = await api.get('/desenvolvimento/formulario/tipos-maquina');
-            setTiposMaquina(response.data || []);
+            const dadosLimpos = removeDuplicatesById(response.data || []);
+            console.log(`📋 Tipos de máquina carregados: ${dadosLimpos.length} (originais: ${response.data?.length || 0})`);
+
+            // Log das categorias para debug
+            console.log('📋 Categorias encontradas:');
+            dadosLimpos.forEach(tipo => {
+                console.log(`   - ${tipo.nome_tipo} | Categoria: '${tipo.categoria}'`);
+            });
+
+            setTiposMaquina(dadosLimpos);
         } catch (error) {
             console.error('Erro ao carregar tipos de máquina:', error);
             setTiposMaquina([]);
@@ -134,8 +161,18 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
 
     const loadTiposAtividade = async (tipoMaquinaId?: number) => {
         try {
-            const response = await api.get('/desenvolvimento/formulario/tipos-atividade');
-            setTiposAtividade(response.data || []);
+            let url = '/desenvolvimento/formulario/tipos-atividade';
+            if (tipoMaquinaId) {
+                url += `?tipo_maquina_id=${tipoMaquinaId}`;
+                console.log(`🔧 Carregando tipos de atividade para tipo de máquina ID: ${tipoMaquinaId}`);
+            } else {
+                console.log('🔧 Carregando TODOS os tipos de atividade');
+            }
+
+            const response = await api.get(url);
+            const dadosLimpos = removeDuplicatesById(response.data || []);
+            console.log(`🔧 Tipos de atividade carregados: ${dadosLimpos.length} (originais: ${response.data?.length || 0})`);
+            setTiposAtividade(dadosLimpos);
         } catch (error) {
             console.error('Erro ao carregar tipos de atividade:', error);
             setTiposAtividade([]);
@@ -163,13 +200,15 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
             });
 
             const descricoes = response.data || [];
+            const dadosLimpos = removeDuplicatesById(descricoes);
             console.log('📄 Descrições processadas:', {
-                length: descricoes.length,
-                isArray: Array.isArray(descricoes),
-                sample: descricoes.slice(0, 2)
+                length: dadosLimpos.length,
+                originais: descricoes.length,
+                isArray: Array.isArray(dadosLimpos),
+                sample: dadosLimpos.slice(0, 2)
             });
 
-            setDescricoesAtividade(descricoes);
+            setDescricoesAtividade(dadosLimpos);
             console.log('✅ Estado descrições atualizado com sucesso!');
 
         } catch (error: unknown) {
@@ -186,10 +225,63 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
     const loadCausasRetrabalho = async () => {
         try {
             const response = await api.get('/desenvolvimento/formulario/causas-retrabalho');
-            setCausasRetrabalho(response.data || []);
+            const dadosLimpos = removeDuplicatesById(response.data || []);
+            console.log(`🔄 Causas de retrabalho carregadas: ${dadosLimpos.length} (originais: ${response.data?.length || 0})`);
+            setCausasRetrabalho(dadosLimpos);
         } catch (error) {
             console.error('Erro ao carregar causas de retrabalho:', error);
             setCausasRetrabalho([]);
+        }
+    };
+
+    const loadTiposPorCategoria = async (nomeGeral: string) => {
+        try {
+            console.log(`🔧 Carregando todos os tipos específicos para nome geral: ${nomeGeral}`);
+
+            // Usar o novo endpoint que separa as categorias por vírgula
+            const response = await api.get(`/desenvolvimento/formulario/categorias-por-nome-tipo/${encodeURIComponent(nomeGeral)}`);
+            const categorias = response.data || [];
+
+            console.log(`🔧 Categorias encontradas para '${nomeGeral}':`, categorias);
+            console.log(`🔧 Total de categorias: ${categorias.length}`);
+
+            // Atualizar lista com as categorias específicas
+            setCategoriasMaquina(categorias);
+
+            // Limpar seleções
+            setFormData((prev: any) => ({
+                ...prev,
+                categoriaSelecionada: '',
+                subcategoriasSelecionadas: []
+            }));
+            setSubcategoriasDisponiveis([]);
+
+            return categorias;
+        } catch (error) {
+            console.error('Erro ao carregar tipos por categoria:', error);
+            setCategoriasMaquina([]);
+            return [];
+        }
+    };
+
+    const loadSubcategoriasPorTipo = async (tipoEspecifico: string) => {
+        try {
+            console.log(`🔧 Carregando subcategorias para tipo específico: ${tipoEspecifico}`);
+
+            // Usar o novo endpoint que busca subcategorias por categoria
+            const response = await api.get(`/desenvolvimento/formulario/subcategorias-por-categoria/${encodeURIComponent(tipoEspecifico)}`);
+            const subcategorias = response.data || [];
+
+            console.log(`🔧 Subcategorias encontradas para '${tipoEspecifico}': ${subcategorias.join(', ')}`);
+
+            // Atualizar lista de subcategorias disponíveis
+            setSubcategoriasDisponiveis(subcategorias);
+
+            return subcategorias;
+        } catch (error) {
+            console.error('Erro ao carregar subcategorias por tipo:', error);
+            setSubcategoriasDisponiveis([]);
+            return [];
         }
     };
 
@@ -392,16 +484,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
         }
     };
 
-    const buscarCategoriaDoTipo = async (nomeType: string) => {
-        try {
-            const response = await api.get(`/desenvolvimento/tipos-maquina/categoria-por-nome?nome_tipo=${encodeURIComponent(nomeType)}`);
-            console.log('🎯 Categoria encontrada para', nomeType, ':', response.data.categoria);
-            return response.data.categoria;
-        } catch (error) {
-            console.error('Erro ao buscar categoria do tipo:', error);
-            return null;
-        }
-    };
+
 
     const handleTesteExclusivoChange = (testeId: number, checked: boolean) => {
         setTestesExclusivosSelecionados(prev => ({
@@ -414,14 +497,12 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
     // Função para carregar categorias e subcategorias por nome do tipo de máquina
     const loadCategoriasSubcategoriasPorNomeTipo = async (nomeTipo: string) => {
         try {
-            // Primeiro buscar a categoria do tipo selecionado
-            const categoria = await buscarCategoriaDoTipo(nomeTipo);
-            if (categoria && user?.departamento && user?.setor) {
-                // Carregar subcategorias para essa categoria
-                await loadSubcategoriasPorCategoria(categoria, user.departamento, user.setor);
-                return categoria;
-            }
-            return null;
+            // CORREÇÃO: nome_tipo é a categoria geral, não o tipo específico
+            console.log(`🔧 Carregando tipos específicos para categoria geral: ${nomeTipo}`);
+
+            // Carregar todos os tipos específicos da categoria geral
+            await loadTiposPorCategoria(nomeTipo);
+            return nomeTipo;
         } catch (error) {
             console.error('Erro ao carregar categorias/subcategorias por tipo:', error);
             return null;
@@ -609,6 +690,11 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
     // Carregar dados iniciais dos dropdowns
     useEffect(() => {
         const loadInitialData = async () => {
+            if (dadosInicaisCarregados) {
+                console.log('⚠️ Dados iniciais já foram carregados, pulando...');
+                return;
+            }
+
             console.log('🚀 Iniciando carregamento dos dados iniciais...');
             setLoadingDropdowns(true);
 
@@ -617,9 +703,8 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                 await loadTiposMaquina();
                 console.log('✅ Tipos de máquina carregados');
 
-                console.log('🔧 Carregando tipos de atividade...');
-                await loadTiposAtividade(); // Carregar todos os tipos de atividade inicialmente
-                console.log('✅ Tipos de atividade carregados');
+                console.log('🔧 Tipos de atividade serão carregados quando tipo de máquina for selecionado');
+                // Não carregar tipos de atividade inicialmente - eles dependem do tipo de máquina selecionado
 
                 console.log('📄 Carregando descrições de atividade...');
                 await loadDescricoesAtividade();
@@ -633,6 +718,8 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                 // Não precisa de user?.departamento e user?.setor aqui, o endpoint já filtra se o usuário não for ADMIN
                 await loadCategoriasMaquina();
                 console.log('✅ Categorias de máquina carregadas');
+
+                setDadosInicaisCarregados(true);
 
             } catch (error) {
                 console.error('❌ Erro no carregamento inicial:', error);
@@ -662,32 +749,37 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
         }
     }, [programacaoId, osFromUrl]);
 
+    // Estado para controlar se é a primeira vez que o tipo de máquina está sendo carregado
+    const [tipoMaquinaAnterior, setTipoMaquinaAnterior] = useState<string>('');
+
     // Recarregar tipos de atividade quando tipo de máquina mudar
     useEffect(() => {
         if (formData.selMaq) {
-            // Limpar seleções dependentes quando tipo de máquina muda
-            setFormData((prev: any) => ({ ...prev, selAtiv: '', selDescAtiv: '', categoriaSelecionada: '', subcategoriasSelecionadas: [] }));
-            
+            // Só limpar seleções se o tipo de máquina realmente mudou (não na primeira carga)
+            if (tipoMaquinaAnterior && tipoMaquinaAnterior !== formData.selMaq) {
+                console.log('🔄 Tipo de máquina mudou de', tipoMaquinaAnterior, 'para', formData.selMaq, '- limpando seleções dependentes');
+                setFormData((prev: any) => ({ ...prev, selAtiv: '', selDescAtiv: '', categoriaSelecionada: '', subcategoriasSelecionadas: [] }));
+            }
+
+            // Atualizar o tipo de máquina anterior
+            setTipoMaquinaAnterior(formData.selMaq);
+
             // Carregar tipos de atividade filtrados pelo tipo de máquina
             const tipoMaquinaSelecionado = tiposMaquina.find(tm => tm.nome_tipo === formData.selMaq);
             if (tipoMaquinaSelecionado) {
                 console.log('🔄 Carregando tipos de atividade para tipo de máquina:', tipoMaquinaSelecionado.nome_tipo);
                 loadTiposAtividade(tipoMaquinaSelecionado.id);
 
-                // ✨ NOVO: Quando um tipo de máquina é selecionado,
-                // buscar a categoria associada e pré-selecionar
-                buscarCategoriaDoTipo(tipoMaquinaSelecionado.nome_tipo).then(categoria => {
-                    if (categoria) {
-                        setFormData((prev: any) => ({ ...prev, categoriaSelecionada: categoria }));
-                        // loadSubcategoriasPorCategoria will be triggered by the useEffect below
-                    }
-                });
+                // ✨ NOVO: Carregar todos os tipos específicos da categoria geral selecionada
+                // CORREÇÃO: nome_tipo é a categoria geral (ex: "MAQUINA ROTATIVA CA")
+                loadTiposPorCategoria(formData.selMaq);
             }
         } else {
-            // Carregar TODOS os tipos de atividade quando não há filtro de máquina
-            console.log('🔄 Carregando TODOS os tipos de atividade (sem filtro de máquina)');
-            loadTiposAtividade(); // Sem parâmetro = carrega todos
+            // Limpar tipos de atividade quando não há tipo de máquina selecionado
+            console.log('🔄 Limpando tipos de atividade (nenhum tipo de máquina selecionado)');
+            setTiposAtividade([]); // Limpar lista de atividades
             setFormData((prev: any) => ({ ...prev, selAtiv: '', selDescAtiv: '', categoriaSelecionada: '', subcategoriasSelecionadas: [] }));
+            setTipoMaquinaAnterior('');
         }
     }, [formData.selMaq, tiposMaquina, user]); // Adicionado 'user' à lista de dependências
 
@@ -742,28 +834,32 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
         console.log('🔍 useEffect descrições de atividade executado:', {
             user: user?.primeiro_nome,
             departamento: user?.departamento,
-            setor: user?.setor
+            setor: user?.setor,
+            dadosJaCarregados: dadosInicaisCarregados
         });
 
-        if (user && user.departamento && user.setor) {
-            console.log('✅ Condições atendidas para carregar descrições (removida dependência de tipo de máquina)');
+        // Só carregar se os dados iniciais ainda não foram carregados
+        if (user && user.departamento && user.setor && !dadosInicaisCarregados) {
+            console.log('✅ Condições atendidas para carregar descrições (dados iniciais não carregados ainda)');
             loadDescricoesAtividade();
         } else {
             console.log('❌ Condições não atendidas para descrições:', {
                 hasUser: !!user,
                 hasDepartamento: !!user?.departamento,
-                hasSetor: !!user?.setor
+                hasSetor: !!user?.setor,
+                dadosJaCarregados: dadosInicaisCarregados
             });
         }
-    }, [user?.departamento, user?.setor, user]);
+    }, [user?.departamento, user?.setor, user, dadosInicaisCarregados]);
 
     // useEffect para limpar categorias quando tipo de máquina mudar para vazio
     useEffect(() => {
-        if (!formData.selMaq) {
+        if (!formData.selMaq && tipoMaquinaAnterior) {
+            console.log('🔄 Tipo de máquina removido - limpando categorias');
             setFormData((prev: any) => ({ ...prev, categoriaSelecionada: '', subcategoriasSelecionadas: [] }));
             setSubcategoriasDisponiveis([]);
         }
-    }, [formData.selMaq]);
+    }, [formData.selMaq, tipoMaquinaAnterior]);
 
     // useEffect para carregar subcategorias quando categoria mudar (ou for pré-selecionada)
     useEffect(() => {
@@ -812,6 +908,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
         setMensagemOS('');
         setLoadingOS(false);
         setLoadingDropdowns(false);
+        setDadosInicaisCarregados(false); // Reset do flag de carregamento
         setTiposMaquina([]); // Recarregar tipos de máquina
         setTiposAtividade([]); // Recarregar tipos de atividade
         setDescricoesAtividade([]); // Recarregar descrições de atividade
@@ -1564,12 +1661,10 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                                     subcategoriasSelecionadas: [] // Limpar subcategorias
                                                 });
 
-                                                // Buscar categoria automaticamente quando tipo de máquina é selecionado
-                                                if (novoTipo && user?.departamento && user?.setor) {
-                                                    const categoria = await buscarCategoriaDoTipo(novoTipo);
-                                                    if (categoria) {
-                                                        setFormData((prev: any) => ({ ...prev, categoriaSelecionada: categoria }));
-                                                    }
+                                                // Buscar todos os tipos específicos da categoria geral selecionada
+                                                if (novoTipo) {
+                                                    // CORREÇÃO: novoTipo é a categoria geral (ex: "MAQUINA ROTATIVA CA")
+                                                    loadTiposPorCategoria(novoTipo);
                                                 }
                                             }}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1578,8 +1673,8 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                             <option value="">
                                                 {loadingDropdowns ? 'Carregando...' : 'Selecione o tipo de máquina'}
                                             </option>
-                                            {tiposMaquina.map((tipo) => (
-                                                <option key={tipo.id} value={tipo.nome_tipo}>
+                                            {tiposMaquina.map((tipo, index) => (
+                                                <option key={`maq-${tipo.id}-${index}`} value={tipo.nome_tipo}>
                                                     {tipo.nome_tipo}
                                                 </option>
                                             ))}
@@ -1601,8 +1696,8 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                                     : 'Selecione a atividade'
                                                 }
                                             </option>
-                                            {tiposAtividade.map((tipo) => (
-                                                <option key={tipo.id} value={tipo.nome_tipo}>
+                                            {tiposAtividade.map((tipo, index) => (
+                                                <option key={`ativ-${tipo.id}-${index}`} value={tipo.nome_tipo}>
                                                     {tipo.nome_tipo}
                                                 </option>
                                             ))}
@@ -1630,10 +1725,10 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                                     : 'Selecione a descrição'
                                                 }
                                             </option>
-                                            {descricoesAtividade.map((desc) => {
+                                            {descricoesAtividade.map((desc, index) => {
                                                 console.log('📄 Renderizando descrição:', desc);
                                                 return (
-                                                    <option key={desc.id} value={desc.descricao}>
+                                                    <option key={`desc-${desc.id}-${index}`} value={desc.descricao}>
                                                         {desc.codigo} - {desc.descricao}
                                                     </option>
                                                 );
@@ -1656,39 +1751,40 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                             {/* Categoria da Máquina */}
                                             <div className="bg-white rounded-lg border border-purple-200 p-3">
                                                 <div className="text-sm font-semibold text-purple-800 mb-2">
-                                                    🎯 Categoria da Máquina
+                                                    🎯 Tipos de Máquina da Categoria
                                                     <span className="text-xs text-gray-500 ml-2">
                                                         ({categoriasMaquina.length} disponíveis)
                                                     </span>
                                                 </div>
                                                 {categoriasMaquina.length > 0 ? (
                                                     <div className="space-y-1 max-h-32 overflow-y-auto">
-                                                        {categoriasMaquina.map((categoria) => (
-                                                            <label key={categoria} className="flex items-center text-sm">
+                                                        {categoriasMaquina.map((tipoNome, index) => (
+                                                            <label key={`cat-${tipoNome}-${index}`} className="flex items-center text-sm">
                                                                 <input
                                                                     type="radio"
                                                                     name="categoria"
-                                                                    value={categoria}
-                                                                    checked={formData.categoriaSelecionada === categoria}
+                                                                    value={tipoNome}
+                                                                    checked={formData.categoriaSelecionada === tipoNome}
                                                                     onChange={(e) => {
+                                                                        const tipoSelecionado = e.target.value;
                                                                         setFormData({
                                                                             ...formData,
-                                                                            categoriaSelecionada: e.target.value,
-                                                                            subcategoriasSelecionadas: [] // Limpar subcategorias ao mudar categoria
+                                                                            categoriaSelecionada: tipoSelecionado,
+                                                                            subcategoriasSelecionadas: [] // Reset subcategorias
                                                                         });
+
+                                                                        // Carregar subcategorias do tipo selecionado
+                                                                        loadSubcategoriasPorTipo(tipoSelecionado);
                                                                     }}
                                                                     className="h-4 w-4 text-purple-600 mr-2"
                                                                 />
-                                                                {categoria}
+                                                                <span className="text-xs">{tipoNome}</span>
                                                             </label>
                                                         ))}
                                                     </div>
                                                 ) : (
                                                     <div className="text-xs text-gray-500 italic">
-                                                        {user?.departamento && user?.setor
-                                                            ? 'Nenhuma categoria encontrada para seu departamento/setor'
-                                                            : 'Carregando categorias...'
-                                                        }
+                                                        Selecione um tipo de máquina para ver as opções da categoria
                                                     </div>
                                                 )}
                                             </div>
@@ -1697,12 +1793,15 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                             <div className="bg-white rounded-lg border border-purple-200 p-3">
                                                 <div className="text-sm font-semibold text-purple-800 mb-2">
                                                     🎯 Subcategorias (Partes da Máquina a serem trabalhadas)
+                                                    <span className="text-xs text-gray-500 ml-2">
+                                                        ({subcategoriasDisponiveis.length} disponíveis)
+                                                    </span>
                                                 </div>
                                                 {formData.categoriaSelecionada ? (
                                                     subcategoriasDisponiveis.length > 0 ? (
                                                         <div className="grid grid-cols-2 gap-1 max-h-32 overflow-y-auto">
-                                                            {subcategoriasDisponiveis.map((subcategoria) => (
-                                                                <label key={subcategoria} className="flex items-center text-xs">
+                                                            {subcategoriasDisponiveis.map((subcategoria, index) => (
+                                                                <label key={`subcat-${subcategoria}-${index}`} className="flex items-center text-xs">
                                                                     <input
                                                                         type="checkbox"
                                                                         className="h-3 w-3 text-purple-600 mr-2"
@@ -1819,8 +1918,8 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                                 <option value="">
                                                     {loadingDropdowns ? 'Carregando...' : 'Selecione a causa'}
                                                 </option>
-                                                {causasRetrabalho.map((causa) => (
-                                                    <option key={causa.id} value={causa.codigo}>
+                                                {causasRetrabalho.map((causa, index) => (
+                                                    <option key={`causa-${causa.id}-${index}`} value={causa.codigo}>
                                                         {causa.codigo} - {causa.descricao}
                                                     </option>
                                                 ))}
@@ -1896,7 +1995,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                                     >
                                                         TODOS ({tiposTeste.length})
                                                     </button>
-                                                    {tiposTesteUnicos.map((tipo) => {
+                                                    {tiposTesteUnicos.map((tipo, index) => {
                                                         // Calcular contadores baseados nos filtros já aplicados (exceto tipo)
                                                         let testesParaContar = tiposTesteOriginais;
 
@@ -1921,7 +2020,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                                         const count = testesParaContar.filter(teste => teste.tipo_teste === tipo).length;
                                                         return (
                                                             <button
-                                                                key={tipo}
+                                                                key={`filtro-tipo-${tipo}-${index}`}
                                                                 type="button"
                                                                 onClick={() => handleFiltroTipoTeste(tipo)}
                                                                 className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
@@ -1954,7 +2053,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                                     >
                                                         TODAS ({tiposTeste.length})
                                                     </button>
-                                                    {categoriasUnicas.map((categoria) => {
+                                                    {categoriasUnicas.map((categoria, index) => {
                                                         // Calcular contadores baseados nos filtros já aplicados (exceto categoria)
                                                         let testesParaContar = tiposTesteOriginais;
 
@@ -1987,7 +2086,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                                                                 'bg-gray-600 text-white';
                                                         return (
                                                             <button
-                                                                key={categoria}
+                                                                key={`filtro-cat-${categoria}-${index}`}
                                                                 type="button"
                                                                 onClick={() => handleFiltroCategoria(categoria)}
                                                                 className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
@@ -2138,7 +2237,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
 
                                                                         return (
                                                                             <tr
-                                                                                key={teste.id}
+                                                                                key={`col1-${teste.id}`}
                                                                                 className={`${
                                                                                     isSelected
                                                                                         ? 'bg-blue-50'
@@ -2307,7 +2406,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
 
                                                                         return (
                                                                             <tr
-                                                                                key={teste.id}
+                                                                                key={`col2-${teste.id}`}
                                                                                 className={`${
                                                                                     isSelected
                                                                                         ? 'bg-blue-50'
@@ -2476,7 +2575,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
 
                                                                         return (
                                                                             <tr
-                                                                                key={teste.id}
+                                                                                key={`col3-${teste.id}`}
                                                                                 className={`${
                                                                                     isSelected
                                                                                         ? 'bg-blue-50'
@@ -2756,8 +2855,8 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                             <div className="mb-4">
                                 <h5 className="text-sm font-medium text-gray-700 mb-2">🧪 Testes Exclusivos do Setor</h5>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                    {testesExclusivos.map((teste) => (
-                                        <div key={teste.id}>
+                                    {testesExclusivos.map((teste, index) => (
+                                        <div key={`teste-excl-${teste.id}-${index}`}>
                                             <label className="flex items-center space-x-2">
                                                 <input
                                                     type="checkbox"

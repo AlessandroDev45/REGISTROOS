@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { departamentoService, setorService } from '../../../services/adminApi';
+import { departamentoService } from '../../../services/adminApi';
+import { publicSetorService } from '../../../services/api';
 
 interface FiltrosPendencias {
   status?: string;
@@ -35,7 +36,7 @@ const PendenciasFiltros: React.FC<PendenciasFiltrosProps> = ({
       try {
         const [deptData, setorData] = await Promise.all([
           departamentoService.getDepartamentos(),
-          setorService.getSetores()
+          publicSetorService.getSetores()
         ]);
         setDepartamentos(deptData);
         setSetores(setorData);

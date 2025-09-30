@@ -1,15 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import Layout from '../../components/Layout';
+import PesquisaOSTab from '../desenvolvimento/components/tabs/PesquisaOSTab';
+import RelatorioCompletoModal from '../../components/RelatorioCompletoModal';
+
+interface TabItem {
+    id: string;
+    label: string;
+    icon: string;
+}
 
 const GestaoPage: React.FC = () => {
     const { user } = useAuth();
+    const [activeTab, setActiveTab] = useState<string>('dashboard');
     const [stats, setStats] = useState({
         totalUsers: 0,
         pendingUsers: 0,
         activeProjects: 0,
         completedTasks: 0
     });
+
+    // Estados para o modal de relatório
+    const [relatorioModalOpen, setRelatorioModalOpen] = useState(false);
+    const [selectedOsId, setSelectedOsId] = useState<number | null>(null);
 
     useEffect(() => {
         // Fetch management statistics
@@ -30,157 +43,169 @@ const GestaoPage: React.FC = () => {
         }
     };
 
+    // Definir abas disponíveis
+    const getAvailableTabs = (): TabItem[] => {
+        const tabs: TabItem[] = [
+            { id: 'dashboard', label: 'Dashboard Gestão', icon: '📊' },
+            { id: 'consulta-os', label: 'Consulta OS', icon: '🔍' }
+        ];
+        return tabs;
+    };
+
+    const tabs = getAvailableTabs();
+
+    const handleTabChange = (tabId: string) => {
+        setActiveTab(tabId);
+    };
+
+    const renderTabContent = () => {
+        switch (activeTab) {
+            case 'consulta-os':
+                return <PesquisaOSTab
+                    onVerOS={(osId: number) => {
+                        setSelectedOsId(osId);
+                        setRelatorioModalOpen(true);
+                    }}
+                />;
+            case 'dashboard':
+            default:
+                return renderDashboardContent();
+        }
+    };
+
+    const renderDashboardContent = () => (
+        <div className="w-full p-4 md:p-6 lg:p-8">
+            <h1 className="text-2xl font-bold text-gray-800 mb-6">Painel de Gestão</h1>
+
+            {/* Statistics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                    <div className="flex items-center">
+                        <div className="flex-shrink-0">
+                            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                                <span className="text-white text-sm font-bold">👥</span>
+                            </div>
+                        </div>
+                        <div className="ml-4">
+                            <h3 className="text-lg font-medium text-gray-900">Total de Usuários</h3>
+                            <p className="text-2xl font-bold text-blue-600">{stats.totalUsers}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                    <div className="flex items-center">
+                        <div className="flex-shrink-0">
+                            <div className="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
+                                <span className="text-white text-sm font-bold">⏳</span>
+                            </div>
+                        </div>
+                        <div className="ml-4">
+                            <h3 className="text-lg font-medium text-gray-900">Usuários Pendentes</h3>
+                            <p className="text-2xl font-bold text-yellow-600">{stats.pendingUsers}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                    <div className="flex items-center">
+                        <div className="flex-shrink-0">
+                            <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                                <span className="text-white text-sm font-bold">📊</span>
+                            </div>
+                        </div>
+                        <div className="ml-4">
+                            <h3 className="text-lg font-medium text-gray-900">Projetos Ativos</h3>
+                            <p className="text-2xl font-bold text-green-600">{stats.activeProjects}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                    <div className="flex items-center">
+                        <div className="flex-shrink-0">
+                            <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
+                                <span className="text-white text-sm font-bold">✅</span>
+                            </div>
+                        </div>
+                        <div className="ml-4">
+                            <h3 className="text-lg font-medium text-gray-900">Tarefas Concluídas</h3>
+                            <p className="text-2xl font-bold text-purple-600">{stats.completedTasks}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Management Actions */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Gestão de Usuários</h3>
+                    <p className="text-gray-600 mb-4">Gerencie usuários, permissões e acessos do sistema.</p>
+                    <button className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
+                        Gerenciar Usuários
+                    </button>
+                </div>
+
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Relatórios</h3>
+                    <p className="text-gray-600 mb-4">Acesse relatórios detalhados e análises de performance.</p>
+                    <button className="w-full bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors">
+                        Ver Relatórios
+                    </button>
+                </div>
+
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Configurações</h3>
+                    <p className="text-gray-600 mb-4">Configure parâmetros do sistema e preferências.</p>
+                    <button className="w-full bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors">
+                        Configurar
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+
     return (
         <Layout>
-            <div className="w-full p-4 md:p-6 lg:p-8">
-                <h1 className="text-2xl font-bold text-gray-800 mb-6">Painel de Gestão</h1>
-
-                {/* Statistics Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    <div className="bg-white rounded-lg shadow-sm p-6">
-                        <div className="flex items-center">
-                            <div className="flex-shrink-0">
-                                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                                    <span className="text-white text-sm font-bold">👥</span>
-                                </div>
-                            </div>
-                            <div className="ml-4">
-                                <h3 className="text-lg font-medium text-gray-900">Total de Usuários</h3>
-                                <p className="text-2xl font-bold text-blue-600">{stats.totalUsers}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white rounded-lg shadow-sm p-6">
-                        <div className="flex items-center">
-                            <div className="flex-shrink-0">
-                                <div className="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
-                                    <span className="text-white text-sm font-bold">⏳</span>
-                                </div>
-                            </div>
-                            <div className="ml-4">
-                                <h3 className="text-lg font-medium text-gray-900">Usuários Pendentes</h3>
-                                <p className="text-2xl font-bold text-yellow-600">{stats.pendingUsers}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white rounded-lg shadow-sm p-6">
-                        <div className="flex items-center">
-                            <div className="flex-shrink-0">
-                                <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                                    <span className="text-white text-sm font-bold">📋</span>
-                                </div>
-                            </div>
-                            <div className="ml-4">
-                                <h3 className="text-lg font-medium text-gray-900">Projetos Ativos</h3>
-                                <p className="text-2xl font-bold text-green-600">{stats.activeProjects}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white rounded-lg shadow-sm p-6">
-                        <div className="flex items-center">
-                            <div className="flex-shrink-0">
-                                <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
-                                    <span className="text-white text-sm font-bold">✅</span>
-                                </div>
-                            </div>
-                            <div className="ml-4">
-                                <h3 className="text-lg font-medium text-gray-900">Tarefas Concluídas</h3>
-                                <p className="text-2xl font-bold text-purple-600">{stats.completedTasks}</p>
-                            </div>
-                        </div>
+            <div className="w-full">
+                {/* Navigation Tabs */}
+                <div className="bg-white border-b">
+                    <div className="w-full px-4 sm:px-6 lg:px-8">
+                        <nav className="flex space-x-8" aria-label="Tabs">
+                            {tabs.map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => handleTabChange(tab.id)}
+                                    className={`${
+                                        activeTab === tab.id
+                                            ? 'border-blue-500 text-blue-600'
+                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                    } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2`}
+                                >
+                                    <span>{tab.icon}</span>
+                                    <span>{tab.label}</span>
+                                </button>
+                            ))}
+                        </nav>
                     </div>
                 </div>
 
-                {/* Management Sections */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Recent Activities */}
-                    <div className="bg-white rounded-lg shadow-sm">
-                        <div className="p-6 border-b border-gray-200">
-                            <h2 className="text-lg font-semibold text-gray-900">Atividades Recentes</h2>
-                        </div>
-                        <div className="p-6">
-                            <div className="space-y-4">
-                                <div className="flex items-center">
-                                    <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                                    <div className="flex-1">
-                                        <p className="text-sm text-gray-900">Novo usuário registrado</p>
-                                        <p className="text-xs text-gray-500">2 horas atrás</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center">
-                                    <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
-                                    <div className="flex-1">
-                                        <p className="text-sm text-gray-900">OS #1234 foi atualizada</p>
-                                        <p className="text-xs text-gray-500">4 horas atrás</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center">
-                                    <div className="w-2 h-2 bg-yellow-500 rounded-full mr-3"></div>
-                                    <div className="flex-1">
-                                        <p className="text-sm text-gray-900">Relatório mensal gerado</p>
-                                        <p className="text-xs text-gray-500">1 dia atrás</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Quick Actions */}
-                    <div className="bg-white rounded-lg shadow-sm">
-                        <div className="p-6 border-b border-gray-200">
-                            <h2 className="text-lg font-semibold text-gray-900">Ações Rápidas</h2>
-                        </div>
-                        <div className="p-6">
-                            <div className="grid grid-cols-2 gap-4">
-                                <button className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-center transition-colors">
-                                    <div className="text-2xl mb-2">📊</div>
-                                    <div className="text-sm font-medium text-gray-900">Relatórios</div>
-                                </button>
-                                <button className="p-4 bg-green-50 hover:bg-green-100 rounded-lg text-center transition-colors">
-                                    <div className="text-2xl mb-2">👥</div>
-                                    <div className="text-sm font-medium text-gray-900">Usuários</div>
-                                </button>
-                                <button className="p-4 bg-yellow-50 hover:bg-yellow-100 rounded-lg text-center transition-colors">
-                                    <div className="text-2xl mb-2">📋</div>
-                                    <div className="text-sm font-medium text-gray-900">OS</div>
-                                </button>
-                                <button className="p-4 bg-purple-50 hover:bg-purple-100 rounded-lg text-center transition-colors">
-                                    <div className="text-2xl mb-2">⚙️</div>
-                                    <div className="text-sm font-medium text-gray-900">Configurações</div>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                {/* Tab Content */}
+                <div className="w-full">
+                    {renderTabContent()}
                 </div>
 
-                {/* Additional Management Content */}
-                <div className="mt-6 bg-white rounded-lg shadow-sm">
-                    <div className="p-6 border-b border-gray-200">
-                        <h2 className="text-lg font-semibold text-gray-900">Visão Geral do Sistema</h2>
-                    </div>
-                    <div className="p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div className="text-center">
-                                <h3 className="text-lg font-medium text-gray-900 mb-2">Setores Ativos</h3>
-                                <p className="text-3xl font-bold text-blue-600">8</p>
-                                <p className="text-sm text-gray-500 mt-1">Departamentos em operação</p>
-                            </div>
-                            <div className="text-center">
-                                <h3 className="text-lg font-medium text-gray-900 mb-2">OS em Andamento</h3>
-                                <p className="text-3xl font-bold text-orange-600">23</p>
-                                <p className="text-sm text-gray-500 mt-1">Ordens de serviço ativas</p>
-                            </div>
-                            <div className="text-center">
-                                <h3 className="text-lg font-medium text-gray-900 mb-2">Eficiência</h3>
-                                <p className="text-3xl font-bold text-green-600">94%</p>
-                                <p className="text-sm text-gray-500 mt-1">Taxa de conclusão</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                {/* Modal de Relatório Completo */}
+                {relatorioModalOpen && selectedOsId && (
+                    <RelatorioCompletoModal
+                        osId={selectedOsId}
+                        isOpen={relatorioModalOpen}
+                        onClose={() => {
+                            setRelatorioModalOpen(false);
+                            setSelectedOsId(null);
+                        }}
+                    />
+                )}
             </div>
         </Layout>
     );

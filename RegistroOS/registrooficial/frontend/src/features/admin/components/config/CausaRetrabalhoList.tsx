@@ -13,6 +13,33 @@ interface CausaRetrabalhoListProps {
 const CausaRetrabalhoList: React.FC<CausaRetrabalhoListProps> = ({ data: causas = [], onEdit, onDelete, onCreateNew, loading, error }) => {
     const [deletingId, setDeletingId] = React.useState<number | null>(null);
 
+    // Função para quebrar texto se maior que 15 caracteres
+    const formatTextWithBreak = (text: string, maxLength: number = 15) => {
+        if (!text || text.length <= maxLength) return text;
+
+        // Quebrar em palavras para evitar cortar no meio de uma palavra
+        const words = text.split(' ');
+        let result = '';
+        let currentLine = '';
+
+        for (const word of words) {
+            if ((currentLine + word).length <= maxLength) {
+                currentLine += (currentLine ? ' ' : '') + word;
+            } else {
+                if (result) result += '\n';
+                result += currentLine;
+                currentLine = word;
+            }
+        }
+
+        if (currentLine) {
+            if (result) result += '\n';
+            result += currentLine;
+        }
+
+        return result;
+    };
+
     const handleDeleteClick = async (causa: CausaRetrabalhoData) => {
         if (!window.confirm(`Tem certeza de que deseja deletar a causa de retrabalho "${causa.codigo}"?`)) {
             return;
@@ -46,6 +73,7 @@ const CausaRetrabalhoList: React.FC<CausaRetrabalhoListProps> = ({ data: causas 
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Departamento</th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Setor</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ativo</th>
                             <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
                         </tr>
@@ -56,7 +84,16 @@ const CausaRetrabalhoList: React.FC<CausaRetrabalhoListProps> = ({ data: causas 
                                 <tr key={causa.id}>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{causa.codigo}</td>
                                     <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate" title={causa.descricao}>{causa.descricao}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{causa.departamento}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-500">
+                                        <div className="whitespace-pre-line">
+                                            {formatTextWithBreak(causa.departamento || '-')}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-500">
+                                        <div className="whitespace-pre-line">
+                                            {formatTextWithBreak(causa.setor || '-')}
+                                        </div>
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                         {causa.ativo ? (
                                             <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
@@ -87,7 +124,7 @@ const CausaRetrabalhoList: React.FC<CausaRetrabalhoListProps> = ({ data: causas 
                             ))
                         ) : (
                             <tr>
-                                <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
+                                <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">
                                     Nenhuma causa de retrabalho encontrada.
                                 </td>
                             </tr>

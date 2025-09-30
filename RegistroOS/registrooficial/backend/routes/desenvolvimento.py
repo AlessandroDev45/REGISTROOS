@@ -12,6 +12,15 @@ import sys # Importar sys para o sys.executable
 
 # Configurar logger
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+# Configurar handler se ainda não estiver configurado (evita duplicar handlers)
+# A verificação logger.handlers é uma forma robusta de evitar duplicação em múltiplos imports do módulo.
+if not logger.handlers: # Alterado para verificar se já existem handlers
+    handler = logging.StreamHandler(sys.stdout)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
 
 from app.database_models import (
     Usuario, OrdemServico, ApontamentoDetalhado, Programacao,
@@ -25,12 +34,12 @@ from utils.validators import generate_next_os # Certifique-se de que este import
 # Importar Celery para scraping assíncrono
 try:
     from tasks.scraping_tasks import scrape_os_task, get_queue_status
-    # from celery.result import AsyncResult
+    # from celery.result import AsyncResult # Movido para cá para ser definido se Celery estiver disponível
     CELERY_AVAILABLE = True
     print("✅ Celery disponível - Scraping assíncrono habilitado")
 except ImportError as e:
     CELERY_AVAILABLE = False
-    AsyncResult = None
+    AsyncResult = None # Definir como None se Celery não estiver disponível
     scrape_os_task = None
     get_queue_status = None
     print(f"⚠️ Celery não disponível - Scraping síncrono será usado: {e}")
@@ -38,17 +47,6 @@ except ImportError as e:
 print("🔧 Módulo desenvolvimento.py carregado")
 
 router = APIRouter(tags=["desenvolvimento"])
-
-# Configuração de logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-# Configurar handler se ainda não estiver configurado (evita duplicar handlers)
-if logger.handlers is None:
-    handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-
 
 # =============================================================================
 # FUNÇÕES HELPER
@@ -247,80 +245,6 @@ async def get_categorias_maquina_admin(
 # ENDPOINTS DE SUBCATEGORIAS E PARTES
 # =============================================================================
 
-@router.get("/subcategorias-por-categoria")
-async def get_subcategorias_por_categoria(
-    categoria: str,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
-    """Buscar subcategorias (partes) baseadas na categoria da máquina"""
-    try:
-        # Mapeamento de categorias para suas subcategorias/partes
-        subcategorias_map = {
-            'MOTOR': [
-                'Campo Shunt',
-                'Campo Série',
-                'Interpolos',
-                'Armadura',
-                'Escovas',
-                'Comutador',
-                'Rolamentos',
-                'Ventilação'
-            ],
-            'GERADOR': [
-                'Estator',
-                'Rotor',
-                'Excitatriz',
-                'Regulador de Tensão',
-                'Rolamentos',
-                'Ventilação',
-                'Sistema de Refrigeração'
-            ],
-            'TRANSFORMADOR': [
-                'Núcleo',
-                'Bobinas',
-                'Isolação',
-                'Óleo Isolante',
-                'Buchas',
-                'Comutador de Derivação',
-                'Sistema de Refrigeração'
-            ],
-            'BOMBA': [
-                'Rotor',
-                'Estator',
-                'Carcaça',
-                'Vedações',
-                'Rolamentos',
-                'Acoplamento'
-            ],
-            'COMPRESSOR': [
-                'Pistão',
-                'Cilindro',
-                'Válvulas',
-                'Cabeçote',
-                'Sistema de Lubrificação',
-                'Sistema de Refrigeração'
-            ],
-            'VENTILADOR': [
-                'Hélice',
-                'Motor',
-                'Carcaça',
-                'Rolamentos',
-                'Sistema de Transmissão'
-            ]
-        }
-
-        # Buscar subcategorias para a categoria especificada
-        subcategorias = subcategorias_map.get(categoria.upper(), [])
-
-        return {
-            "categoria": categoria,
-            "subcategorias": subcategorias,
-            "total": len(subcategorias)
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao buscar subcategorias: {str(e)}")
-
 @router.get("/tipos-maquina/categoria-por-nome")
 async def get_categoria_por_nome_tipo(
     nome_tipo: str = Query(...),
@@ -390,32 +314,11 @@ async def get_subcategorias_tipos_maquina(
 
         print(f"Subcategorias encontradas no banco para '{categoria}': {list(subcategorias_set)}")
 
-        # Fallback para subcategorias padrão se não encontrar nada
-        if not subcategorias_set:
-            subcategorias_map = {
-                'MOTOR': ['Campo Shunt', 'Campo Série', 'Interpolos', 'Armadura', 'Escovas', 'Comutador', 'Rolamentos', 'Ventilação'],
-                'MOTOR CA': ['Estator', 'Rotor', 'Rolamentos', 'Ventilação', 'Carcaça'],
-                'MOTOR CC': ['Campo Shunt', 'Campo Série', 'Interpolos', 'Armadura', 'Escovas', 'Comutador'],
-                'GERADOR': ['Estator', 'Rotor', 'Excitatriz', 'Regulador de Tensão', 'Rolamentos', 'Ventilação', 'Sistema de Refrigeração'],
-                'GERADOR CA': ['Estator', 'Rotor', 'Excitatriz', 'Rolamentos', 'Ventilação'],
-                'TRANSFORMADOR': ['Núcleo', 'Bobinas', 'Isolação', 'Óleo Isolante', 'Buchas', 'Comutador de Derivação', 'Sistema de Refrigeração'],
-                'BOMBA': ['Rotor', 'Estator', 'Carcaça', 'Vedações', 'Rolamentos', 'Acoplamento'],
-                'COMPRESSOR': ['Pistão', 'Cilindro', 'Válvulas', 'Cabeçote', 'Sistema de Lubrificação', 'Sistema de Refrigeração'],
-                'VENTILADOR': ['Hélice', 'Motor', 'Carcaça', 'Rolamentos', 'Sistema de Transmissão']
-            }
-            subcategorias_set = set(subcategorias_map.get(categoria.upper(), []))
-
         return sorted(list(subcategorias_set))
 
     except Exception as e:
         print(f"Erro ao buscar subcategorias de tipos de máquina: {e}")
-        # Fallback para subcategorias padrão
-        subcategorias_map = {
-            'MOTOR': ['Campo Shunt', 'Campo Série', 'Interpolos', 'Armadura'],
-            'GERADOR': ['Estator', 'Rotor', 'Excitatriz'],
-            'TRANSFORMADOR': ['Núcleo', 'Bobinas', 'Isolação']
-        }
-        return subcategorias_map.get(categoria.upper(), [])
+        return []
 
 # =============================================================================
 # ENDPOINTS DE APONTAMENTOS
@@ -510,7 +413,7 @@ async def get_meus_apontamentos(
     try:
         query = db.query(ApontamentoDetalhado)
         
-        # Filtros baseados no privilégio
+        # Filtrar por usuário se não for admin
         if current_user.privilege_level == 'USER':  # type: ignore
             query = query.filter(ApontamentoDetalhado.id_usuario == current_user.id)
         elif current_user.privilege_level == 'SUPERVISOR':  # type: ignore
@@ -776,15 +679,17 @@ async def aprovar_apontamento(
             print(f"🔍 Buscando programação para OS: {apontamento.numero_os}")
 
             # Buscar programação diretamente usando JOIN para garantir que encontramos
+            # Buscar programações que estão aguardando aprovação (finalizadas pelo usuário)
             programacao = db.query(Programacao).join(
                 OrdemServico, Programacao.id_ordem_servico == OrdemServico.id
             ).filter(
                 OrdemServico.os_numero == apontamento.numero_os,
-                Programacao.status == 'CONCLUIDA'
+                Programacao.status.in_(['CONCLUIDA', 'AGUARDANDO_APROVACAO'])
             ).first()
 
             if programacao:
                 print(f"✅ Programação encontrada: ID {programacao.id}, Status: {programacao.status}")
+                print(f"🔄 Alterando status de '{programacao.status}' para 'APROVADA'")
 
                 # Aprovar a programação automaticamente
                 setattr(programacao, 'status', 'APROVADA')
@@ -792,8 +697,11 @@ async def aprovar_apontamento(
                 try:
                     programacao.data_aprovacao = datetime.now()
                     programacao.supervisor_aprovacao = current_user.nome_completo
-                except AttributeError:
+                    print(f"📅 Data de aprovação definida: {programacao.data_aprovacao}")
+                    print(f"👨‍💼 Supervisor de aprovação: {current_user.nome_completo}")
+                except AttributeError as e:
                     # Campos podem não existir na tabela
+                    print(f"⚠️ Campos de aprovação não existem na tabela: {e}")
                     pass
 
                 # Adicionar observação sobre aprovação automática
@@ -805,6 +713,7 @@ async def aprovar_apontamento(
                     setattr(programacao, 'observacoes', obs_aprovacao)
 
                 db.commit()
+                print(f"💾 Commit realizado no banco de dados")
 
                 # Buscar o os_numero através da relação
                 os_numero = db.query(OrdemServico.os_numero).filter(
@@ -818,6 +727,9 @@ async def aprovar_apontamento(
                 }
 
                 print(f"✅ Programação {programacao.id} aprovada automaticamente!")
+                print(f"📊 Status final da programação: {programacao.status}")
+                print(f"🔢 OS número: {os_numero}")
+                print(f"🎯 PCP deve ver esta programação como APROVADA agora")
             else:
                 print(f"⚠️ Nenhuma programação CONCLUIDA encontrada para OS {apontamento.numero_os}")
 
@@ -1151,7 +1063,7 @@ async def get_tipos_maquina_formulario(
     """
     try:
         base_sql = """
-            SELECT MIN(id) as id, nome_tipo, MIN(descricao) as descricao
+            SELECT MIN(id) as id, nome_tipo, MIN(descricao) as descricao, MIN(categoria) as categoria
             FROM tipos_maquina
             WHERE ativo = 1
         """
@@ -1177,7 +1089,8 @@ async def get_tipos_maquina_formulario(
             {
                 "id": row[0],
                 "nome_tipo": row[1],
-                "descricao": row[2] or ""
+                "descricao": row[2] or "",
+                "categoria": row[3] or ""
             }
             for row in tipos
         ]
@@ -1199,7 +1112,7 @@ async def get_atividades_por_tipo_maquina(
 
         # Retornar atividades padrão já que a tabela atividades não existe
         # Usar tipos_teste como base para atividades
-        sql = text("SELECT id, nome, descricao FROM tipos_teste WHERE ativo = 1 ORDER BY nome LIMIT 70")
+        sql = text(f"SELECT id, nome, descricao FROM tipos_teste WHERE ativo = 1 AND tipo_maquina = {tipo_maquina_id} ORDER BY nome LIMIT 70")
         result = db.execute(sql)
         atividades = result.fetchall()
 
@@ -1243,39 +1156,196 @@ async def get_causas_retrabalho_formulario(db: Session = Depends(get_db)):
 
 @router.get("/formulario/tipos-atividade", operation_id="dev_get_formulario_tipos_atividade")
 async def get_tipos_atividade_formulario(
+    tipo_maquina_id: Optional[int] = Query(None, description="ID do tipo de máquina para filtrar atividades"),
     current_user: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Endpoint para obter tipos de atividade disponíveis para o formulário de apontamento.
-    Filtra por departamento e setor do usuário logado, retorna apenas tipos ativos.
+    Filtra por departamento e setor do usuário logado, e opcionalmente por tipo de máquina.
+    Retorna apenas tipos ativos.
     """
     try:
         from sqlalchemy import text
 
-        base_sql = "SELECT id, nome_tipo, descricao FROM tipo_atividade WHERE ativo = 1"
+        base_sql = """
+            SELECT DISTINCT ta.id, ta.nome_tipo, ta.descricao,
+                   COALESCE(tm.nome_tipo, 'N/A') as tipo_maquina_nome
+            FROM tipo_atividade ta
+            LEFT JOIN tipos_maquina tm ON ta.id_tipo_maquina = tm.id
+            WHERE ta.ativo = 1
+        """
         params = {}
+
+        # Filtrar por tipo de máquina se fornecido
+        if tipo_maquina_id:
+            base_sql += " AND ta.id_tipo_maquina = :tipo_maquina_id"
+            params["tipo_maquina_id"] = tipo_maquina_id
+
+        # Filtrar por departamento e setor se não for admin
         if str(current_user.privilege_level) != 'ADMIN':
-            base_sql += " AND departamento = :departamento AND setor = :setor"
-            params = {
+            base_sql += " AND ta.departamento = :departamento AND ta.setor = :setor"
+            params.update({
                 "departamento": getattr(current_user, 'departamento', None),
                 "setor": getattr(current_user, 'setor', None)
-            }
-        base_sql += " ORDER BY nome_tipo"
+            })
+
+        base_sql += " ORDER BY ta.nome_tipo"
         sql = text(base_sql)
         result = db.execute(sql, params)
         tipos = result.fetchall()
+
+        print(f"🔧 Tipos de atividade encontrados: {len(tipos)} (filtro tipo_maquina_id: {tipo_maquina_id})")
+        print(f"🔧 Filtros aplicados - Departamento: {params.get('departamento')}, Setor: {params.get('setor')}")
+        print(f"🔧 SQL executado: {base_sql}")
+        print(f"🔧 Parâmetros: {params}")
 
         return [
             {
                 "id": row[0],
                 "nome_tipo": row[1],
-                "descricao": row[2] or ""
+                "descricao": row[2] or "",
+                "tipo_maquina_nome": row[3] or ""
             }
             for row in tipos
         ]
     except Exception as e:
         print(f"Erro ao buscar tipos de atividade: {e}")
+        return []
+
+@router.get("/formulario/categoria-subcategorias/{tipo_maquina_id}", operation_id="dev_get_categoria_subcategorias")
+async def get_categoria_subcategorias_tipo_maquina(
+    tipo_maquina_id: int,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Endpoint para obter categoria e subcategorias de um tipo de máquina específico.
+    """
+    try:
+        from sqlalchemy import text
+
+        sql = text("""
+            SELECT categoria, subcategoria
+            FROM tipos_maquina
+            WHERE id = :tipo_maquina_id AND ativo = 1
+        """)
+
+        result = db.execute(sql, {"tipo_maquina_id": tipo_maquina_id})
+        row = result.fetchone()
+
+        if not row:
+            return {"categoria": "", "subcategorias": []}
+
+        categoria = row[0] or ""
+        subcategorias_str = row[1] or ""
+
+        # Converter string de subcategorias em lista
+        subcategorias = []
+        if subcategorias_str:
+            subcategorias = [sub.strip() for sub in subcategorias_str.split(',') if sub.strip()]
+
+        print(f"🔧 Categoria e subcategorias para tipo_maquina_id {tipo_maquina_id}:")
+        print(f"   Categoria: {categoria}")
+        print(f"   Subcategorias: {subcategorias}")
+
+        return {
+            "categoria": categoria,
+            "subcategorias": subcategorias
+        }
+
+    except Exception as e:
+        print(f"Erro ao buscar categoria e subcategorias: {e}")
+        return {"categoria": "", "subcategorias": []}
+
+@router.get("/formulario/categorias-por-nome-tipo/{nome_tipo}", operation_id="dev_get_categorias_por_nome_tipo")
+async def get_categorias_por_nome_tipo(
+    nome_tipo: str,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Endpoint para obter todas as categorias (tipos específicos) de um nome_tipo (categoria geral).
+    As categorias estão armazenadas como string separada por vírgulas.
+    """
+    try:
+        from sqlalchemy import text
+
+        sql = text("""
+            SELECT DISTINCT categoria
+            FROM tipos_maquina
+            WHERE nome_tipo = :nome_tipo AND ativo = 1
+        """)
+
+        result = db.execute(sql, {"nome_tipo": nome_tipo})
+        rows = result.fetchall()
+
+        categorias_lista = []
+        for row in rows:
+            categorias_str = row[0] or ""
+            if categorias_str:
+                # Separar por vírgula e limpar espaços
+                categorias = [cat.strip() for cat in categorias_str.split(',') if cat.strip()]
+                categorias_lista.extend(categorias)
+
+        # Remover duplicatas mantendo ordem
+        categorias_unicas = []
+        for cat in categorias_lista:
+            if cat not in categorias_unicas:
+                categorias_unicas.append(cat)
+
+        print(f"🔧 Categorias encontradas para nome_tipo '{nome_tipo}': {categorias_unicas}")
+
+        return categorias_unicas
+
+    except Exception as e:
+        print(f"Erro ao buscar categorias por nome_tipo: {e}")
+        return []
+
+@router.get("/formulario/subcategorias-por-categoria/{categoria}", operation_id="dev_get_subcategorias_por_categoria")
+async def get_subcategorias_por_categoria(
+    categoria: str,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Endpoint para obter subcategorias de uma categoria específica.
+    Busca registros onde o campo categoria contém a categoria especificada.
+    """
+    try:
+        from sqlalchemy import text
+
+        sql = text("""
+            SELECT subcategoria
+            FROM tipos_maquina
+            WHERE categoria LIKE :categoria_pattern AND ativo = 1
+        """)
+
+        # Usar LIKE para buscar a categoria dentro da string separada por vírgulas
+        categoria_pattern = f"%{categoria}%"
+        result = db.execute(sql, {"categoria_pattern": categoria_pattern})
+        rows = result.fetchall()
+
+        subcategorias_lista = []
+        for row in rows:
+            subcategorias_str = row[0] or ""
+            if subcategorias_str:
+                # Separar por vírgula e limpar espaços
+                subcategorias = [sub.strip() for sub in subcategorias_str.split(',') if sub.strip()]
+                subcategorias_lista.extend(subcategorias)
+
+        # Remover duplicatas mantendo ordem
+        subcategorias_unicas = []
+        for sub in subcategorias_lista:
+            if sub not in subcategorias_unicas:
+                subcategorias_unicas.append(sub)
+
+        print(f"🔧 Subcategorias encontradas para categoria '{categoria}': {subcategorias_unicas}")
+
+        return subcategorias_unicas
+
+    except Exception as e:
+        print(f"Erro ao buscar subcategorias por categoria: {e}")
         return []
 
 @router.get("/formulario/descricoes-atividade", operation_id="dev_get_formulario_descricoes_atividade")
@@ -2524,21 +2594,42 @@ async def get_minhas_programacoes(
                 "id_setor": prog.id_setor,
                 "historico": getattr(prog, 'historico', '') or "",
                 # Dados melhorados da OS
-                "os_numero": getattr(os_data, 'os_numero', None) if os_data and getattr(os_data, 'os_numero', None) else "000012345" if id_ordem_servico == 1 else f"OS-{id_ordem_servico}" if id_ordem_servico else "N/A",
+                "os_numero": os_data.os_numero if os_data else None,
                 "status_os": os_data.status_os if os_data else "ABERTA",
-                "prioridade": os_data.prioridade if os_data else "NORMAL",
+                "prioridade": getattr(os_data, 'prioridade', "NORMAL") if os_data else "NORMAL",
                 # Dados dos usuários
-                "responsavel_nome": current_user.nome_usuario,  # Usar nome_usuario em vez de nome_completo
-                "criado_por_nome": criador_data.nome_usuario if criador_data else "N/A",
-                # Dados fixos conhecidos (podem ser melhorados depois)
-                "cliente_nome": "AIR LIQUIDE BRASIL",
-                "equipamento_descricao": "MOTOR ELETRICO PARTIDA",
-                "setor_nome": "MECANICA DIA",
+                "responsavel_nome": current_user.nome_completo,  # Use nome_completo consistently
+                "criado_por_nome": getattr(criador_data, 'nome_completo', "N/A") if criador_data else "N/A",
+                # Real data from DB
+                "cliente_nome": None,
+                "equipamento_descricao": None,
+                "setor_nome": None,
                 # Campos adicionais para o frontend
-                "atribuido_para": current_user.nome_usuario,  # Usar nome_usuario
-                "atribuido_por": criador_data.nome_usuario if criador_data else "N/A",
+                "atribuido_para": current_user.nome_completo,
+                "atribuido_por": getattr(criador_data, 'nome_completo', "N/A") if criador_data else "N/A",
                 "data_atribuicao": prog.created_at.strftime('%d/%m/%Y %H:%M') if getattr(prog, 'created_at', None) else None
             }
+
+            # Query real cliente, equipamento, setor
+            if os_data:
+                if hasattr(os_data, 'id_cliente'):
+                    id_cliente = getattr(os_data, 'id_cliente', None)
+                    if id_cliente:
+                        cliente_nome = db.query(Cliente.razao_social).filter(Cliente.id == id_cliente).scalar()
+                        programacao["cliente_nome"] = cliente_nome
+
+                if hasattr(os_data, 'id_equipamento'):
+                    id_equipamento = getattr(os_data, 'id_equipamento', None)
+                    if id_equipamento:
+                        equipamento_desc = db.query(Equipamento.descricao).filter(Equipamento.id == id_equipamento).scalar()
+                        programacao["equipamento_descricao"] = equipamento_desc
+
+            if hasattr(current_user, 'id_setor'):
+                id_setor = getattr(current_user, 'id_setor', None)
+                if id_setor:
+                    setor_nome = db.query(Setor.nome).filter(Setor.id == id_setor).scalar()
+                    programacao["setor_nome"] = setor_nome
+
             programacoes.append(programacao)
 
         return programacoes

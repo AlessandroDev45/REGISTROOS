@@ -26,6 +26,12 @@ api.interceptors.response.use(
   }
 );
 
+// Public sector service (doesn't require admin privileges)
+export const publicSetorService = {
+  getSetores: () => api.get('/setores').then(res => res.data),
+  getSetorById: (id: number) => api.get(`/setores/${id}`).then(res => res.data),
+};
+
 // Catalog Endpoints
 export const fetchAtividadeTipos = async (setor?: string) => {
   try {

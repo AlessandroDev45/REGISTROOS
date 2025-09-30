@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { setorService } from '../services/adminApi';
+import { publicSetorService } from '../services/api';
 
 interface Setor {
   id: number;
@@ -38,7 +38,7 @@ export const useCachedSetores = (): UseSetoresReturn => {
     globalError = null;
 
     try {
-      const setores = await setorService.getSetores();
+      const setores = await publicSetorService.getSetores();
 
       const motores = setores
         .filter(setor => setor.departamento === 'MOTORES' && setor.ativo);

@@ -10,7 +10,6 @@ import logo from '../../logo/assets/logo.png';
 import DashTab from './components/tabs/DashTab';
 import ApontamentoFormTab from './components/tabs/ApontamentoFormTab';
 import MinhasOsTab from './components/tabs/MinhasOsTab';
-import PesquisaOSTab from './components/tabs/PesquisaOSTab';
 import ProgramacaoTab from './components/tabs/ProgramacaoTab';
 import PendenciasTab from './components/tabs/PendenciasTab';
 import GerenciarTab from './components/tabs/GerenciarTab';
@@ -82,6 +81,21 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
 
   // Estados para o formulário de apontamento
   interface FormData {
+    inpNumOS?: string;
+    statusOS?: string;
+    inpCliente?: string;
+    inpEquipamento?: string;
+    selMaq?: string;
+    selAtiv?: string;
+    selDescAtiv?: string;
+    inpData?: string;
+    inpHora?: string;
+    observacao?: string;
+    resultadoGlobal?: string;
+    inpDataFim?: string;
+    inpHoraFim?: string;
+    categoriaSelecionada?: string;
+    subcategoriasSelecionadas?: string[];
     supervisor_horas_orcadas: number;
     supervisor_testes_iniciais: boolean;
     supervisor_testes_parciais: boolean;
@@ -89,12 +103,78 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
     [key: string]: any;
   }
 
-  const [formData, setFormData] = useState<FormData>({
-    supervisor_horas_orcadas: 0,
-    supervisor_testes_iniciais: false,
-    supervisor_testes_parciais: false,
-    supervisor_testes_finais: false
-  });
+  // Função para carregar dados do sessionStorage
+  const loadFormDataFromStorage = (): FormData => {
+    try {
+      const savedData = sessionStorage.getItem('apontamento_form_data');
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        console.log('📂 Dados carregados do sessionStorage:', parsed);
+        return parsed;
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados do sessionStorage:', error);
+    }
+
+    // Retornar dados padrão se não houver dados salvos
+    return {
+      inpNumOS: '',
+      statusOS: '',
+      inpCliente: '',
+      inpEquipamento: '',
+      selMaq: '',
+      selAtiv: '',
+      selDescAtiv: '',
+      inpData: '',
+      inpHora: '',
+      observacao: '',
+      resultadoGlobal: '',
+      inpDataFim: '',
+      inpHoraFim: '',
+      categoriaSelecionada: '',
+      subcategoriasSelecionadas: [],
+      supervisor_horas_orcadas: 0,
+      supervisor_testes_iniciais: false,
+      supervisor_testes_parciais: false,
+      supervisor_testes_finais: false
+    };
+  };
+
+  const [formData, setFormData] = useState<FormData>(loadFormDataFromStorage);
+
+  // Função para salvar dados no sessionStorage
+  const saveFormDataToStorage = (data: FormData) => {
+    try {
+      sessionStorage.setItem('apontamento_form_data', JSON.stringify(data));
+      console.log('💾 Dados salvos no sessionStorage:', data);
+    } catch (error) {
+      console.error('❌ Erro ao salvar dados no sessionStorage:', error);
+    }
+  };
+
+  // Wrapper para setFormData que também salva no storage
+  const setFormDataWithStorage = (data: FormData | ((prev: FormData) => FormData)) => {
+    if (typeof data === 'function') {
+      setFormData(prev => {
+        const newData = data(prev);
+        saveFormDataToStorage(newData);
+        return newData;
+      });
+    } else {
+      setFormData(data);
+      saveFormDataToStorage(data);
+    }
+  };
+
+  // Função para limpar dados do storage
+  const clearFormDataStorage = () => {
+    try {
+      sessionStorage.removeItem('apontamento_form_data');
+      console.log('🗑️ Dados do formulário removidos do sessionStorage');
+    } catch (error) {
+      console.error('❌ Erro ao limpar dados do sessionStorage:', error);
+    }
+  };
   const [testResults, setTestResults] = useState<Record<string, any>>({});
   const [testObservations, setTestObservations] = useState<Record<string, string>>({});
 
@@ -121,7 +201,7 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
       // Remover zeros à esquerda e garantir máximo 5 dígitos
       const osFormatted = osFromUrl.replace(/^0+/, '').slice(0, 5);
 
-      setFormData(prev => ({
+      setFormDataWithStorage(prev => ({
         ...prev,
         inpNumOS: osFormatted
       }));
@@ -134,7 +214,7 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
 
           if (response.data) {
             console.log('✅ [DevelopmentTemplate] OS encontrada, preenchendo status:', response.data.status);
-            setFormData(prev => ({
+            setFormDataWithStorage(prev => ({
               ...prev,
               statusOS: response.data.status || '',
               inpCliente: response.data.cliente || '',
@@ -157,7 +237,6 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
       { id: 'dashboard', label: 'Dashboard', icon: '📊' },
       { id: 'apontamento', label: 'Apontamento', icon: '📝' },
       { id: 'minhas-os', label: 'Meu Dashboard', icon: '📋' },
-      { id: 'pesquisa', label: 'Pesquisa Apontamentos', icon: '🔍' },
       { id: 'pendencias', label: 'Pendências', icon: '⚠️' }
     ];
 
@@ -232,19 +311,19 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
 
 
   const handleSupervisorHorasOrcadasChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData((prev: FormData) => ({ ...prev, supervisor_horas_orcadas: parseFloat(e.target.value) || 0 }));
+    setFormDataWithStorage((prev: FormData) => ({ ...prev, supervisor_horas_orcadas: parseFloat(e.target.value) || 0 }));
   };
 
   const handleSupervisorTestesIniciaisChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData((prev: FormData) => ({ ...prev, supervisor_testes_iniciais: e.target.checked }));
+    setFormDataWithStorage((prev: FormData) => ({ ...prev, supervisor_testes_iniciais: e.target.checked }));
   };
 
   const handleSupervisorTestesParciaisChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData((prev: FormData) => ({ ...prev, supervisor_testes_parciais: e.target.checked }));
+    setFormDataWithStorage((prev: FormData) => ({ ...prev, supervisor_testes_parciais: e.target.checked }));
   };
 
   const handleSupervisorTestesFinaisChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData((prev: FormData) => ({ ...prev, supervisor_testes_finais: e.target.checked }));
+    setFormDataWithStorage((prev: FormData) => ({ ...prev, supervisor_testes_finais: e.target.checked }));
   };
 
   const handleSaveApontamento = async () => {
@@ -266,7 +345,7 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
       case 'apontamento':
         return <ApontamentoFormTab
           formData={formData}
-          setFormData={setFormData}
+          setFormData={setFormDataWithStorage}
           testResults={testResults}
           testObservations={testObservations}
           onTestResultChange={onTestResultChange}
@@ -286,13 +365,6 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
         />;
       case 'minhas-os':
         return <MinhasOsTab />;
-      case 'pesquisa':
-        return <PesquisaOSTab
-          onVerOS={(osId: number) => {
-            setSelectedOsId(osId);
-            setRelatorioModalOpen(true);
-          }}
-        />;
       case 'programacao':
         return <ProgramacaoTab />;
       case 'pendencias':

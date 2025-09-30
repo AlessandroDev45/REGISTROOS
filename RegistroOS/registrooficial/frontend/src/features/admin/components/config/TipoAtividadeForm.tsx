@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useClickOutside } from '../../../../hooks/useClickOutside';
 import { StyledInput, SelectField } from '../../../../components/UIComponents';
 import { AtividadeTipoData, departamentoService, setorService } from '../../../../services/adminApi'; // Import AtividadeTipoData
 
@@ -47,6 +48,9 @@ const TipoAtividadeForm: React.FC<TipoAtividadeFormProps> = ({
     const [setores, setSetores] = useState<any[]>([]);
     const [categorias, setCategorias] = useState<string[]>([]);
 
+    // Hook para fechar ao clicar fora
+    const formRef = useClickOutside<HTMLDivElement>(onCancel);
+
 
     useEffect(() => {
         setFormData({
@@ -58,7 +62,7 @@ const TipoAtividadeForm: React.FC<TipoAtividadeFormProps> = ({
             ativo: initialData?.ativo ?? true,
         });
         setErrors({});
-    }, [initialData]);
+    }, [initialData, isEdit]);
 
     // Carregar dados para filtros
     useEffect(() => {
@@ -141,7 +145,7 @@ const TipoAtividadeForm: React.FC<TipoAtividadeFormProps> = ({
 
     return (
         <div className="mt-6">
-            <div className="p-6 bg-white rounded-lg shadow-md">
+            <div ref={formRef} className="p-6 bg-white rounded-lg shadow-md">
                 <div className="mb-6">
                     <h2 className="text-2xl font-semibold text-gray-700">
                         {isEdit ? 'Editar Tipo de Atividade' : 'Adicionar Novo Tipo de Atividade'}
@@ -280,9 +284,14 @@ const TipoAtividadeForm: React.FC<TipoAtividadeFormProps> = ({
                     </button>
                     <button
                         type="submit"
-                        className="px-6 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={!formData.nome_tipo?.trim()}
+                        className={`px-6 py-3 font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-200 ${
+                            formData.nome_tipo?.trim()
+                                ? 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500'
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
                     >
-                        {isEdit ? 'Confirmar Edição' : 'Adicionar Tipo de Atividade'}
+                        {isEdit ? 'Confirmar Edição' : 'Adicionar'}
                     </button>
                 </div>
                 </form>

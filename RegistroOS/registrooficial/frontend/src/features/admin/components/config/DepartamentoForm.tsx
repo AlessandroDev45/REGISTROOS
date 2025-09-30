@@ -1,6 +1,7 @@
 // frontend/src/features/admin/components/config/DepartamentoForm.tsx
 import React, { useState, useEffect } from 'react';
-import { StyledInput } from '../../../../components/UIComponents'; // Assuming StyledInput exists
+import { StyledInput } from '../../../../components/UIComponents';
+import { useClickOutside } from '../../../../hooks/useClickOutside'; // Assuming StyledInput exists
 import { DepartamentoData } from '../../../../services/adminApi';
 
 interface DepartamentoFormData {
@@ -33,14 +34,21 @@ const DepartamentoForm: React.FC<DepartamentoFormProps> = ({
         ativo: initialData?.ativo ?? true,
     });
     const [errors, setErrors] = useState<DepartamentoFormErrors>({});
+    const formRef = useClickOutside<HTMLDivElement>(onCancel);
 
     useEffect(() => {
-        setFormData({
-            nome: initialData?.nome || '',
-            descricao: initialData?.descricao || '',
-            ativo: initialData?.ativo ?? true,
-        });
-        setErrors({});
+        // Só atualizar se initialData mudou e não é null/undefined
+        if (initialData !== undefined) {
+            const newFormData = {
+                nome: initialData?.nome || '',
+                descricao: initialData?.descricao || '',
+                ativo: initialData?.ativo ?? true,
+            };
+            console.log('🏢 [DEPARTAMENTO FORM] useEffect - initialData:', initialData);
+            console.log('🏢 [DEPARTAMENTO FORM] useEffect - newFormData:', newFormData);
+            setFormData(newFormData);
+            setErrors({});
+        }
     }, [initialData]);
 
     const handleInputChange = (
@@ -49,10 +57,16 @@ const DepartamentoForm: React.FC<DepartamentoFormProps> = ({
         const { name, value, type } = e.target;
         const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
 
-        setFormData((prev) => ({
-            ...prev,
-            [name]: type === 'checkbox' ? checked : value,
-        }));
+        console.log('🏢 [DEPARTAMENTO FORM] Input change:', { name, value, type, checked });
+
+        setFormData((prev) => {
+            const newData = {
+                ...prev,
+                [name]: type === 'checkbox' ? checked : value,
+            };
+            console.log('🏢 [DEPARTAMENTO FORM] FormData atualizado:', newData);
+            return newData;
+        });
 
         if (errors[name as keyof DepartamentoFormErrors]) {
             setErrors((prev) => ({ ...prev, [name]: undefined }));
@@ -60,24 +74,41 @@ const DepartamentoForm: React.FC<DepartamentoFormProps> = ({
     };
 
     const validateForm = (): boolean => {
+        console.log('🏢 [DEPARTAMENTO FORM] Validando form:', formData);
         const newErrors: DepartamentoFormErrors = {};
         if (!formData.nome.trim()) {
+            console.log('🏢 [DEPARTAMENTO FORM] Erro: nome vazio');
             newErrors.nome = 'Nome do departamento é obrigatório';
+        } else {
+            console.log('🏢 [DEPARTAMENTO FORM] Nome OK:', formData.nome);
         }
         setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
+        const isValid = Object.keys(newErrors).length === 0;
+        console.log('🏢 [DEPARTAMENTO FORM] Validação resultado:', { isValid, errors: newErrors });
+        return isValid;
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        console.log('🏢 [DEPARTAMENTO FORM] Submit chamado:', { formData, isEdit });
         if (validateForm()) {
-            onSubmit(formData, isEdit);
+            // Mapear 'nome' para 'nome_tipo' que o backend espera
+            const dataToSubmit = {
+                nome_tipo: formData.nome,  // Backend espera nome_tipo
+                nome: formData.nome,       // Manter nome também para compatibilidade
+                descricao: formData.descricao,
+                ativo: formData.ativo
+            };
+            console.log('🏢 [DEPARTAMENTO FORM] Validação OK, enviando dados:', dataToSubmit);
+            onSubmit(dataToSubmit, isEdit);
+        } else {
+            console.log('🏢 [DEPARTAMENTO FORM] Validação falhou');
         }
     };
 
     return (
         <div className="mt-6">
-            <div className="p-6 bg-white rounded-lg shadow-md">
+            <div ref={formRef} className="p-6 bg-white rounded-lg shadow-md">
                 <div className="mb-6">
                     <h2 className="text-2xl font-semibold text-gray-700">
                         {isEdit ? 'Editar Departamento' : 'Adicionar Novo Departamento'}
@@ -87,19 +118,32 @@ const DepartamentoForm: React.FC<DepartamentoFormProps> = ({
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                    <label htmlFor="nome" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="nome" className="block text-sm font-medium text-gray-700 mb-2">
                         Nome do Departamento *
                     </label>
-                    <StyledInput
+                    <input
+                        type="text"
                         id="nome"
                         name="nome"
                         value={formData.nome}
                         onChange={handleInputChange}
                         placeholder="Ex: MOTORES"
-                        error={errors.nome}
                         required
+                        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors ${
+                            errors.nome
+                                ? 'border-red-500 focus:ring-red-500'
+                                : formData.nome.trim()
+                                    ? 'border-green-500 focus:ring-green-500'
+                                    : 'border-gray-300 focus:ring-blue-500'
+                        }`}
                     />
                     {errors.nome && <p className="mt-1 text-sm text-red-600">{errors.nome}</p>}
+                    {!errors.nome && !formData.nome.trim() && (
+                        <p className="mt-1 text-sm text-gray-500">Digite o nome do departamento para habilitar o botão</p>
+                    )}
+                    {!errors.nome && formData.nome.trim() && (
+                        <p className="mt-1 text-sm text-green-600">✓ Nome válido</p>
+                    )}
                 </div>
 
                 <div>
@@ -141,7 +185,20 @@ const DepartamentoForm: React.FC<DepartamentoFormProps> = ({
                     </button>
                     <button
                         type="submit"
-                        className="px-6 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={!formData.nome.trim()}
+                        onClick={(e) => {
+                            console.log('🏢 [DEPARTAMENTO FORM] Botão submit clicado, formData atual:', formData);
+                            if (!formData.nome.trim()) {
+                                e.preventDefault();
+                                console.log('🏢 [DEPARTAMENTO FORM] Botão desabilitado - campo vazio');
+                                return;
+                            }
+                        }}
+                        className={`px-6 py-3 font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-200 ${
+                            formData.nome.trim()
+                                ? 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500'
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
                     >
                         {isEdit ? 'Confirmar Edição' : 'Adicionar Departamento'}
                     </button>

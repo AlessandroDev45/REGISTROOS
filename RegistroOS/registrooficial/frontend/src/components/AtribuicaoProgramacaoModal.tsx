@@ -105,7 +105,8 @@ const AtribuicaoProgramacaoModal: React.FC<AtribuicaoProgramacaoModalProps> = ({
 
             // 3. Buscar dados de setores para obter nomes corretos
             try {
-                const setoresRes = await api.get('/admin/setores');
+                // Usar endpoint público de setores ao invés do admin
+                const setoresRes = await api.get('/setores');
                 const setores = setoresRes.data || [];
 
                 // Encontrar o setor do usuário logado

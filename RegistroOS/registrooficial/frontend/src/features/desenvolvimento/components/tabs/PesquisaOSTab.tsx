@@ -75,10 +75,42 @@ const PesquisaOSTab: React.FC<PesquisaOSTabProps> = ({ setorFiltro, onVerOS }) =
         has_prev: false
     });
 
+    // Função para aplicar filtros localmente
+    const aplicarFiltrosLocais = (osArray: any[]) => {
+        return osArray.filter(os => {
+            // Filtro por número OS
+            if (filtros.numeroOS && !os.numero_os?.toString().includes(filtros.numeroOS)) {
+                return false;
+            }
+
+            // Filtro por cliente
+            if (filtros.cliente && !os.cliente?.toLowerCase().includes(filtros.cliente.toLowerCase())) {
+                return false;
+            }
+
+            // Filtro por departamento
+            if (filtros.departamento && os.departamento !== filtros.departamento) {
+                return false;
+            }
+
+            // Filtro por setor
+            if (filtros.setor && os.setor !== filtros.setor) {
+                return false;
+            }
+
+            // Filtro por colaborador/técnico
+            if (filtros.colaborador && !os.colaboradores?.toLowerCase().includes(filtros.colaborador.toLowerCase())) {
+                return false;
+            }
+
+            return true;
+        });
+    };
+
     const handlePesquisa = async (page: number = 1) => {
         setLoading(true);
         try {
-            console.log('🔍 Buscando apontamentos detalhados...', { filtros, page, user });
+            console.log('🔍 [GESTÃO] Buscando apontamentos detalhados...', { filtros, page, user });
 
             // Buscar apontamentos detalhados reais
             const params: any = {};
@@ -95,18 +127,26 @@ const PesquisaOSTab: React.FC<PesquisaOSTabProps> = ({ setorFiltro, onVerOS }) =
             if (filtros.setor) params.setor = filtros.setor;
             if (filtros.colaborador) params.nome_tecnico = filtros.colaborador;
 
-            // Filtros baseados no privilégio do usuário
+            // Filtros baseados no privilégio do usuário (apenas se não houver filtros manuais)
             if (user?.privilege_level === 'USER') {
+                // Usuários normais só veem seus próprios apontamentos
                 params.nome_tecnico = user.nome_completo;
             } else if (user?.privilege_level === 'SUPERVISOR') {
-                params.setor = user.setor;
+                // Supervisores veem do seu setor, mas podem filtrar por outros setores se especificado
+                if (!filtros.setor && user.setor) {
+                    params.setor = user.setor;
+                }
             } else if (user?.privilege_level === 'GESTAO') {
-                params.departamento = user.departamento;
+                // Gestão vê do seu departamento, mas pode filtrar por outros departamentos se especificado
+                if (!filtros.departamento && user.departamento) {
+                    params.departamento = user.departamento;
+                }
             }
-            // ADMIN vê todos
+            // ADMIN vê todos sem restrições
 
+            console.log('🚀 [GESTÃO] Fazendo requisição para /apontamentos-detalhados com params:', params);
             const response = await api.get('/apontamentos-detalhados', { params });
-            console.log('📊 Resposta da API:', response.data);
+            console.log('📊 [GESTÃO] Resposta da API:', response.data);
 
             // Os dados já vêm no formato correto da API
             const apontamentosData: ApontamentoDetalhado[] = Array.isArray(response.data) ? response.data : [];
@@ -182,21 +222,27 @@ const PesquisaOSTab: React.FC<PesquisaOSTabProps> = ({ setorFiltro, onVerOS }) =
                 console.error('Erro ao buscar IDs das OSs:', error);
             }
 
-            setOsAgrupadas(osArray);
+            // Aplicar filtros localmente também (para garantir que funcionem)
+            const osArrayFiltrado = aplicarFiltrosLocais(osArray);
+            console.log(`🔍 [GESTÃO] Filtros aplicados: ${osArray.length} -> ${osArrayFiltrado.length} resultados`);
+
+            setOsAgrupadas(osArrayFiltrado);
 
             // Simular paginação no frontend
             setPagination({
                 page: 1,
                 per_page: 50,
-                total: osArray.length,
-                total_pages: Math.ceil(osArray.length / 50),
+                total: osArrayFiltrado.length,
+                total_pages: Math.ceil(osArrayFiltrado.length / 50),
                 has_next: false,
                 has_prev: false
             });
 
         } catch (error) {
-            console.error('❌ Erro ao buscar apontamentos:', error);
+            console.error('❌ [GESTÃO] Erro ao buscar apontamentos:', error);
+            console.error('❌ [GESTÃO] Detalhes do erro:', error.response?.data || error.message);
             setApontamentos([]);
+            setOsAgrupadas([]);
         } finally {
             setLoading(false);
         }
@@ -211,7 +257,26 @@ const PesquisaOSTab: React.FC<PesquisaOSTabProps> = ({ setorFiltro, onVerOS }) =
     // Carregar dados dinâmicos para filtros
     const carregarDadosFiltros = async () => {
         try {
-            // 🔧 USAR VALORES PADRÃO DIRETO (não precisa de endpoint admin)
+            // Carregar departamentos da API
+            try {
+                console.log('🏢 [GESTÃO] Carregando departamentos...');
+                const deptResponse = await api.get('/admin/departamentos');
+                console.log('🏢 [GESTÃO] Resposta departamentos:', deptResponse.data);
+                if (deptResponse.data && Array.isArray(deptResponse.data)) {
+                    const departamentos = deptResponse.data.map((dept: any) => dept.nome || dept.nome_departamento).filter(Boolean);
+                    setDepartamentosDisponiveis(departamentos);
+                    console.log('✅ [GESTÃO] Departamentos carregados:', departamentos);
+                } else {
+                    console.warn('⚠️ [GESTÃO] Resposta de departamentos não é um array:', deptResponse.data);
+                    setDepartamentosDisponiveis(['MOTORES', 'GERADORES', 'TRANSFORMADORES']);
+                }
+            } catch (deptError) {
+                console.error('❌ [GESTÃO] Erro ao carregar departamentos:', deptError);
+                console.error('❌ [GESTÃO] Detalhes do erro departamentos:', deptError.response?.data || deptError.message);
+                // Fallback para departamentos padrão
+                setDepartamentosDisponiveis(['MOTORES', 'GERADORES', 'TRANSFORMADORES']);
+            }
+
             // Status padrão do sistema
             setStatusDisponiveis([
                 'PROGRAMADA',
@@ -230,10 +295,11 @@ const PesquisaOSTab: React.FC<PesquisaOSTabProps> = ({ setorFiltro, onVerOS }) =
                 'BAIXA'
             ]);
 
-            console.log('✅ Dados dos filtros carregados com valores padrão');
+            console.log('✅ Dados dos filtros carregados');
         } catch (error) {
             console.error('Erro ao carregar dados dos filtros:', error);
             // Fallback para valores padrão
+            setDepartamentosDisponiveis(['MOTORES', 'GERADORES', 'TRANSFORMADORES']);
             setStatusDisponiveis(['FINALIZADA', 'EM_ANDAMENTO', 'PENDENTE']);
             setPrioridadesDisponiveis(['URGENTE', 'ALTA', 'NORMAL', 'BAIXA']);
         }
@@ -252,10 +318,75 @@ const PesquisaOSTab: React.FC<PesquisaOSTabProps> = ({ setorFiltro, onVerOS }) =
     }, [setorAtivo]);
 
     const handleFiltroChange = (campo: string, valor: string) => {
+        console.log(`🔧 [GESTÃO] Filtro alterado - ${campo}: ${valor}`);
         setFiltros(prev => ({ ...prev, [campo]: valor }));
     };
 
+    // Função para reaplicar filtros sem nova requisição à API
+    const reaplicarFiltros = () => {
+        if (apontamentos.length > 0) {
+            console.log('🔄 [GESTÃO] Reaplicando filtros localmente...');
+
+            // Reagrupar dados originais
+            const osGrouped = apontamentos.reduce((acc: any, apontamento: ApontamentoDetalhado) => {
+                const osNum = apontamento.numero_os;
+                if (!acc[osNum]) {
+                    acc[osNum] = {
+                        numero_os: osNum,
+                        id_os: null,
+                        cliente: apontamento.cliente,
+                        equipamento: apontamento.equipamento,
+                        departamento: apontamento.departamento,
+                        setor: apontamento.setor,
+                        total_apontamentos: 0,
+                        total_horas: 0,
+                        colaboradores: new Set(),
+                        status_geral: 'EM ANDAMENTO',
+                        data_inicio: apontamento.data_hora_inicio,
+                        data_fim: null,
+                        apontamentos: []
+                    };
+                }
+
+                acc[osNum].total_apontamentos += 1;
+                acc[osNum].total_horas += apontamento.tempo_trabalhado || 0;
+                acc[osNum].colaboradores.add(apontamento.nome_tecnico);
+                acc[osNum].apontamentos.push(apontamento);
+
+                if (apontamento.data_hora_fim && (!acc[osNum].data_fim || apontamento.data_hora_fim > acc[osNum].data_fim)) {
+                    acc[osNum].data_fim = apontamento.data_hora_fim;
+                }
+
+                if (apontamento.aprovado_supervisor) {
+                    acc[osNum].status_geral = 'APROVADO';
+                } else if (apontamento.status_apontamento === 'FINALIZADO') {
+                    acc[osNum].status_geral = 'FINALIZADO';
+                }
+
+                return acc;
+            }, {});
+
+            const osArray = Object.values(osGrouped).map((os: any) => ({
+                ...os,
+                colaboradores: Array.from(os.colaboradores).join(', ')
+            }));
+
+            // Aplicar filtros
+            const osArrayFiltrado = aplicarFiltrosLocais(osArray);
+            console.log(`🔍 [GESTÃO] Filtros reaplicados: ${osArray.length} -> ${osArrayFiltrado.length} resultados`);
+
+            setOsAgrupadas(osArrayFiltrado);
+
+            setPagination(prev => ({
+                ...prev,
+                total: osArrayFiltrado.length,
+                total_pages: Math.ceil(osArrayFiltrado.length / 50)
+            }));
+        }
+    };
+
     const handleLimparFiltros = () => {
+        console.log('🧹 [GESTÃO] Limpando filtros...');
         setFiltros({
             numeroOS: '',
             cliente: '',
@@ -271,7 +402,11 @@ const PesquisaOSTab: React.FC<PesquisaOSTabProps> = ({ setorFiltro, onVerOS }) =
             prioridade: '',
             responsavel: ''
         });
-        handlePesquisa();
+
+        // Reaplicar filtros (agora vazios) para mostrar todos os dados
+        setTimeout(() => {
+            reaplicarFiltros();
+        }, 100); // Pequeno delay para garantir que o estado foi atualizado
     };
 
 
@@ -348,13 +483,18 @@ const PesquisaOSTab: React.FC<PesquisaOSTabProps> = ({ setorFiltro, onVerOS }) =
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Departamento
                             </label>
-                            <input
-                                type="text"
+                            <select
                                 value={filtros.departamento}
                                 onChange={(e) => handleFiltroChange('departamento', e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="Nome do departamento"
-                            />
+                            >
+                                <option value="">Todos os departamentos</option>
+                                {departamentosDisponiveis.map((dept) => (
+                                    <option key={dept} value={dept}>
+                                        {dept}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -463,11 +603,30 @@ const PesquisaOSTab: React.FC<PesquisaOSTabProps> = ({ setorFiltro, onVerOS }) =
 
                     <div className="mt-4 flex space-x-2">
                         <button
-                            onClick={() => handlePesquisa(1)}
+                            onClick={() => {
+                                console.log('🔍 [GESTÃO] Botão Pesquisar clicado!');
+                                if (apontamentos.length > 0) {
+                                    console.log('🔄 [GESTÃO] Reaplicando filtros...');
+                                    reaplicarFiltros();
+                                } else {
+                                    console.log('🚀 [GESTÃO] Fazendo nova busca...');
+                                    handlePesquisa(1);
+                                }
+                            }}
                             disabled={loading}
                             className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {loading ? '🔄 Buscando...' : '🔍 Pesquisar'}
+                        </button>
+                        <button
+                            onClick={() => {
+                                console.log('🔄 [GESTÃO] Recarregando dados da API...');
+                                handlePesquisa(1);
+                            }}
+                            disabled={loading}
+                            className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            🔄 Recarregar Dados
                         </button>
                         <button
                             onClick={handleLimparFiltros}

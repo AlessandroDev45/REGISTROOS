@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useClickOutside } from '../../../../hooks/useClickOutside';
 import { StyledInput, SelectField } from '../../../../components/UIComponents';
 import { CausaRetrabalhoData, departamentoService, setorService } from '../../../../services/adminApi';
 
@@ -44,9 +45,12 @@ const CausaRetrabalhoForm: React.FC<CausaRetrabalhoFormProps> = ({
     const [departamentos, setDepartamentos] = useState<any[]>([]);
     const [setores, setSetores] = useState<any[]>([]);
 
+    // Hook para fechar ao clicar fora
+    const formRef = useClickOutside<HTMLDivElement>(onCancel);
+
     // Atualizar formulário quando initialData muda (para edição)
     useEffect(() => {
-        if (initialData) {
+        if (initialData && isEdit) {
             setFormData({
                 codigo: initialData?.codigo || '',
                 descricao: initialData?.descricao || '',
@@ -56,7 +60,7 @@ const CausaRetrabalhoForm: React.FC<CausaRetrabalhoFormProps> = ({
             });
             setErrors({});
         }
-    }, [initialData]);
+    }, [initialData, isEdit]);
 
     useEffect(() => {
         const fetchDepartamentos = async () => {
@@ -79,7 +83,7 @@ const CausaRetrabalhoForm: React.FC<CausaRetrabalhoFormProps> = ({
             ativo: initialData?.ativo ?? true,
         });
         setErrors({});
-    }, [initialData]);
+    }, [initialData, isEdit]);
 
     // Carregar setores quando departamento mudar
     useEffect(() => {
@@ -151,7 +155,7 @@ const CausaRetrabalhoForm: React.FC<CausaRetrabalhoFormProps> = ({
 
     return (
         <div className="mt-6">
-            <div className="p-6 bg-white rounded-lg shadow-md">
+            <div ref={formRef} className="p-6 bg-white rounded-lg shadow-md">
                 <div className="mb-6">
                     <h2 className="text-2xl font-semibold text-gray-700">
                         {isEdit ? 'Editar Causa de Retrabalho' : 'Adicionar Nova Causa de Retrabalho'}
@@ -253,9 +257,14 @@ const CausaRetrabalhoForm: React.FC<CausaRetrabalhoFormProps> = ({
                     </button>
                     <button
                         type="submit"
-                        className="px-6 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={!formData.codigo?.trim()}
+                        className={`px-6 py-3 font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-200 ${
+                            formData.codigo?.trim()
+                                ? 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500'
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
                     >
-                        {isEdit ? 'Confirmar Edição' : 'Adicionar Causa de Retrabalho'}
+                        {isEdit ? 'Confirmar Edição' : 'Adicionar'}
                     </button>
                 </div>
                 </form>

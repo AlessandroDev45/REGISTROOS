@@ -476,6 +476,8 @@ async def get_programacoes_pcp(
 ):
     """Obter todas as programações para PCP"""
     try:
+        print(f"🏭 [PCP] Buscando programações para usuário: {current_user.nome_completo}")
+        print(f"🔍 [PCP] Executando query para buscar programações...")
         sql = text("""
             SELECT p.id, p.id_ordem_servico, p.responsavel_id, p.inicio_previsto,
                    p.fim_previsto, p.status, p.criado_por_id, p.observacoes,
@@ -496,6 +498,15 @@ async def get_programacoes_pcp(
 
         result = db.execute(sql)
         programacoes = result.fetchall()
+
+        print(f"📊 [PCP] Encontradas {len(programacoes)} programações no banco")
+
+        # Log das programações com status APROVADA para debug
+        programacoes_aprovadas = [p for p in programacoes if p[5] == 'APROVADA']
+        if programacoes_aprovadas:
+            print(f"✅ [PCP] {len(programacoes_aprovadas)} programações APROVADAS encontradas:")
+            for p in programacoes_aprovadas:
+                print(f"   - ID: {p[0]}, OS: {p[11]}, Status: {p[5]}")
 
         return [
             {

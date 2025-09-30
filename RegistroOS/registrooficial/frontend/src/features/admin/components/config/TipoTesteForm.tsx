@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { StyledInput, SelectField } from '../../../../components/UIComponents';
 import { TipoTesteData, DepartamentoData, TipoMaquinaData, SetorData, departamentoService, setorService, tipoMaquinaService } from '../../../../services/adminApi';
+import { useClickOutside } from '../../../../hooks/useClickOutside';
 
 interface TipoTesteFormData {
     nome: string;
@@ -59,6 +60,9 @@ const TipoTesteForm: React.FC<TipoTesteFormProps> = ({
     const [setores, setSetores] = useState<SetorData[]>([]);
     const [tiposMaquina, setTiposMaquina] = useState<TipoMaquinaData[]>([]);
 
+    // Hook para fechar ao clicar fora
+    const formRef = useClickOutside<HTMLDivElement>(onCancel);
+
     useEffect(() => {
         const fetchData = async () => {
             try {
@@ -77,14 +81,10 @@ const TipoTesteForm: React.FC<TipoTesteFormProps> = ({
         fetchData();
     }, []);
 
-    useEffect(() => {
-        if (formData.departamento) {
-            const filteredSetores = setores.filter(setor => 
-                setor.departamento === formData.departamento
-            );
-            setSetores(filteredSetores);
-        }
-    }, [formData.departamento, setores]);
+    // Criar setores filtrados sem modificar o estado original
+    const setoresFiltrados = formData.departamento
+        ? setores.filter(setor => setor.departamento === formData.departamento)
+        : setores;
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value, type } = e.target;
@@ -136,7 +136,7 @@ const TipoTesteForm: React.FC<TipoTesteFormProps> = ({
 
     return (
         <div className="mt-6">
-            <div className="p-6 bg-white rounded-lg shadow-md">
+            <div ref={formRef} className="p-6 bg-white rounded-lg shadow-md">
                 <div className="mb-6">
                     <h2 className="text-2xl font-semibold text-gray-700">
                         {isEdit ? 'Editar Tipo de Teste' : 'Adicionar Novo Tipo de Teste'}
@@ -172,7 +172,7 @@ const TipoTesteForm: React.FC<TipoTesteFormProps> = ({
                             error={errors.setor}
                         >
                             <option value="">Selecione um setor</option>
-                            {setores.map((setor) => (
+                            {setoresFiltrados.map((setor) => (
                                 <option key={setor.id} value={setor.nome}>
                                     {setor.nome}
                                 </option>
@@ -184,15 +184,29 @@ const TipoTesteForm: React.FC<TipoTesteFormProps> = ({
                         <label htmlFor="nome" className="block text-sm font-medium text-gray-700">
                             Nome do Tipo de Teste *
                         </label>
-                        <StyledInput
+                        <input
+                            type="text"
                             id="nome"
                             name="nome"
                             value={formData.nome}
                             onChange={handleInputChange}
                             placeholder="Ex: Teste de Tensão"
-                            error={errors.nome}
                             required
+                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 transition-colors ${
+                                errors.nome
+                                    ? 'border-red-500 focus:ring-red-500'
+                                    : formData.nome.trim()
+                                        ? 'border-green-500 focus:ring-green-500'
+                                        : 'border-gray-300 focus:ring-blue-500'
+                            }`}
                         />
+                        {errors.nome && <p className="mt-1 text-sm text-red-600">{errors.nome}</p>}
+                        {!errors.nome && !formData.nome.trim() && (
+                            <p className="mt-1 text-sm text-gray-500">Digite o nome do tipo de teste para habilitar o botão</p>
+                        )}
+                        {!errors.nome && formData.nome.trim() && (
+                            <p className="mt-1 text-sm text-green-600">✓ Nome válido</p>
+                        )}
                     </div>
 
                     <div>
@@ -333,7 +347,12 @@ const TipoTesteForm: React.FC<TipoTesteFormProps> = ({
                         </button>
                         <button
                             type="submit"
-                            className="px-6 py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={!formData.nome.trim() || !formData.departamento.trim()}
+                            className={`px-6 py-3 font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-200 ${
+                                (formData.nome.trim() && formData.departamento.trim())
+                                    ? 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500'
+                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            }`}
                         >
                             {isEdit ? 'Confirmar Edição' : 'Adicionar Tipo de Teste'}
                         </button>

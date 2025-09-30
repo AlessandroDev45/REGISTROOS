@@ -13,6 +13,33 @@ interface TipoTesteListProps {
 const TipoTesteList: React.FC<TipoTesteListProps> = ({ data: tiposTeste = [], onEdit, onDelete, onCreateNew, loading, error }) => {
     const [deletingId, setDeletingId] = useState<number | null>(null);
 
+    // Função para quebrar texto se maior que 15 caracteres
+    const formatTextWithBreak = (text: string, maxLength: number = 15) => {
+        if (!text || text.length <= maxLength) return text;
+
+        // Quebrar em palavras para evitar cortar no meio de uma palavra
+        const words = text.split(' ');
+        let result = '';
+        let currentLine = '';
+
+        for (const word of words) {
+            if ((currentLine + word).length <= maxLength) {
+                currentLine += (currentLine ? ' ' : '') + word;
+            } else {
+                if (result) result += '\n';
+                result += currentLine;
+                currentLine = word;
+            }
+        }
+
+        if (currentLine) {
+            if (result) result += '\n';
+            result += currentLine;
+        }
+
+        return result;
+    };
+
     const handleDeleteClick = async (tipo: TipoTesteData) => {
         if (!window.confirm(`Tem certeza de que deseja deletar o tipo de teste "${tipo.nome}"?`)) {
             return;
@@ -77,8 +104,16 @@ const TipoTesteList: React.FC<TipoTesteListProps> = ({ data: tiposTeste = [], on
                                             {tipo.subcategoria === 1 ? 'Especiais' : 'Padrão'}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{tipo.departamento}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{tipo.setor || '-'}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-500">
+                                        <div className="whitespace-pre-line">
+                                            {formatTextWithBreak(tipo.departamento || '-')}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-500">
+                                        <div className="whitespace-pre-line">
+                                            {formatTextWithBreak(tipo.setor || '-')}
+                                        </div>
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                         {tipo.ativo ? (
                                             <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">

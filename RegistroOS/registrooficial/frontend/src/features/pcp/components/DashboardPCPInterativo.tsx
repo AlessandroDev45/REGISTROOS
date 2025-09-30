@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getDashboardAvancado, getAlertasPCP } from '../../../services/api';
-import { setorService } from '../../../services/adminApi';
+import { getDashboardAvancado, getAlertasPCP, publicSetorService } from '../../../services/api';
 
 interface MetricasGerais {
   os_por_status: Array<{ status: string; total: number }>;
@@ -76,7 +75,7 @@ const DashboardPCPInterativo: React.FC<DashboardPCPInterativoProps> = ({
 
   const carregarSetores = async () => {
     try {
-      const setoresData = await setorService.getSetores();
+      const setoresData = await publicSetorService.getSetores();
       setSetores(setoresData);
     } catch (error) {
       console.error('Erro ao carregar setores:', error);
