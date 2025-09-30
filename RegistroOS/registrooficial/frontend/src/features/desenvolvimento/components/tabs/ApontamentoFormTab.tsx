@@ -20,10 +20,12 @@ interface ApontamentoFormTabProps {
     handleSupervisorTestesFinaisChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     handleSaveApontamento: () => Promise<void>;
 
-    // Novas props para resolução de pendências
+    // Novas props para resolução de pendências e programações
     dadosPreenchidos?: any;
     pendenciaParaResolver?: any;
+    programacaoParaIniciar?: any;
     onPendenciaResolvida?: () => void;
+    onProgramacaoIniciada?: () => void;
 }
 const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
     formData,
@@ -39,7 +41,9 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
     handleSupervisorTestesFinaisChange,
     dadosPreenchidos,
     pendenciaParaResolver,
-    onPendenciaResolvida
+    programacaoParaIniciar,
+    onPendenciaResolvida,
+    onProgramacaoIniciada
 }) => {
     const [searchParams] = useSearchParams();
     const { configuracaoAtual, setorAtivo } = useSetor();
@@ -957,10 +961,38 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                 ...dadosPreenchidos
             }));
 
+            // Buscar dados completos da OS automaticamente
+            if (dadosPreenchidos.inpNumOS) {
+                console.log('🔍 Buscando dados completos da OS:', dadosPreenchidos.inpNumOS);
+                buscarOS(dadosPreenchidos.inpNumOS);
+            }
+
             // Mostrar notificação
             alert(`📋 Formulário preenchido com dados da pendência #${pendenciaParaResolver.id}\n\nOS: ${dadosPreenchidos.inpNumOS}\nCliente: ${dadosPreenchidos.inpCliente}\n\nProssiga com o apontamento para resolver a pendência.`);
         }
     }, [dadosPreenchidos, pendenciaParaResolver]);
+
+    // 🎯 USEEFFECT PARA PREENCHER DADOS DA PROGRAMAÇÃO
+    useEffect(() => {
+        if (dadosPreenchidos && programacaoParaIniciar) {
+            console.log('📋 Preenchendo formulário com dados da programação:', dadosPreenchidos);
+
+            // Preencher campos do formulário
+            setFormData(prevData => ({
+                ...prevData,
+                ...dadosPreenchidos
+            }));
+
+            // Buscar dados completos da OS automaticamente
+            if (dadosPreenchidos.inpNumOS) {
+                console.log('🔍 Buscando dados completos da OS:', dadosPreenchidos.inpNumOS);
+                buscarOS(dadosPreenchidos.inpNumOS);
+            }
+
+            // Mostrar notificação
+            alert(`🚀 Formulário preenchido com dados da programação #${programacaoParaIniciar.id}\n\nOS: ${dadosPreenchidos.inpNumOS}\nCliente: ${dadosPreenchidos.inpCliente}\n\nProssiga com o apontamento para executar a programação.`);
+        }
+    }, [dadosPreenchidos, programacaoParaIniciar]);
 
     // 🎯 FUNÇÃO PARA VERIFICAR PROGRAMAÇÃO ATIVA POR OS
     const verificarProgramacaoPorOS = async (numeroOS: string) => {
@@ -1187,6 +1219,21 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                 }
             }
 
+            // Se estava executando uma programação, marcar como em andamento
+            if (programacaoParaIniciar) {
+                try {
+                    console.log('🚀 Marcando programação como em andamento...');
+
+                    // Chamar callback para limpar estado
+                    if (onProgramacaoIniciada) {
+                        onProgramacaoIniciada();
+                    }
+                } catch (errorProgramacao) {
+                    console.error('❌ Erro ao processar programação:', errorProgramacao);
+                    // Não bloquear o fluxo se o processamento da programação falhar
+                }
+            }
+
             // Se vem de uma programação via URL, finalizar a programação
             if (programacaoId && !response.data.programacao_finalizada) {
                 try {
@@ -1225,6 +1272,10 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
 
             if (pendenciaParaResolver) {
                 mensagem += `\n📋 Pendência #${pendenciaParaResolver.id} resolvida!`;
+            }
+
+            if (programacaoParaIniciar) {
+                mensagem += `\n🚀 Programação #${programacaoParaIniciar.id} iniciada!`;
             }
 
             alert(mensagem);

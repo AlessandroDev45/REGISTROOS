@@ -97,13 +97,20 @@ async def get_users_root(current_user: Usuario = Depends(get_current_user), db: 
 
 @router.get("/pending-approval", response_model=List[UsuarioResponse])
 async def get_pending_approval_users(current_user: Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Get users pending approval"""
+    """Get users pending approval - supervisors only see users from their sector"""
     try:
         # Verificar se o usuário tem privilégios para ver aprovações
         if current_user.privilege_level not in ["ADMIN", "SUPERVISOR", "GESTAO", "PCP"]:
             raise HTTPException(status_code=403, detail="Acesso negado")
 
-        pending_users = db.query(Usuario).filter(Usuario.is_approved == False).all()
+        # Query base para usuários pendentes
+        query = db.query(Usuario).filter(Usuario.is_approved == False)
+
+        # Se for supervisor, filtrar apenas usuários do mesmo setor
+        if current_user.privilege_level == "SUPERVISOR":
+            query = query.filter(Usuario.id_setor == current_user.id_setor)
+
+        pending_users = query.all()
         return pending_users
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar usuários pendentes: {str(e)}")
@@ -146,6 +153,11 @@ async def approve_user(
     # Verifica se o usuário já está aprovado
     if user_to_approve.is_approved is True:
         raise HTTPException(status_code=400, detail="Usuário já está aprovado")
+
+    # Se for supervisor, verificar se o usuário a ser aprovado é do mesmo setor
+    if current_user.privilege_level == "SUPERVISOR":
+        if user_to_approve.id_setor != current_user.id_setor:
+            raise HTTPException(status_code=403, detail="Supervisores só podem aprovar usuários do mesmo setor")
 
     # Valida se o privilégio é USER para setores de produção
     # Lista de setores de produção (motores e transformadores)
@@ -214,6 +226,11 @@ async def reject_user(
     # Verifica se o usuário já foi aprovado
     if user_to_reject.is_approved is True:
         raise HTTPException(status_code=400, detail="Usuário já está aprovado, não pode ser reprovado.")
+
+    # Se for supervisor, verificar se o usuário a ser rejeitado é do mesmo setor
+    if current_user.privilege_level == "SUPERVISOR":
+        if user_to_reject.id_setor != current_user.id_setor:
+            raise HTTPException(status_code=403, detail="Supervisores só podem rejeitar usuários do mesmo setor")
 
     # Marca o usuário como reprovado
     user_to_reject.is_approved = False # type: ignore # Garante que fique como False

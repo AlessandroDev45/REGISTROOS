@@ -151,15 +151,27 @@ const AtribuicaoProgramacaoModal: React.FC<AtribuicaoProgramacaoModalProps> = ({
         }
     };
 
+    // Função para converter data para formato datetime-local brasileiro
+    const formatDateTimeLocal = (dateString: string) => {
+        if (!dateString) return '';
+
+        const date = new Date(dateString);
+        // Ajustar para timezone local brasileiro
+        const offset = date.getTimezoneOffset();
+        const localDate = new Date(date.getTime() - (offset * 60 * 1000));
+
+        return localDate.toISOString().slice(0, 16);
+    };
+
     const preencherFormulario = () => {
         if (programacaoData) {
             setFormData(prev => ({
                 ...prev,
                 responsavel_id: programacaoData.responsavel_id || '',
                 data_inicio: programacaoData.inicio_previsto ?
-                    new Date(programacaoData.inicio_previsto).toISOString().slice(0, 16) : '',
+                    formatDateTimeLocal(programacaoData.inicio_previsto) : '',
                 data_fim: programacaoData.fim_previsto ?
-                    new Date(programacaoData.fim_previsto).toISOString().slice(0, 16) : '',
+                    formatDateTimeLocal(programacaoData.fim_previsto) : '',
                 observacoes: programacaoData.observacoes || ''
                 // Manter setor_destino e departamento_destino já definidos
             }));

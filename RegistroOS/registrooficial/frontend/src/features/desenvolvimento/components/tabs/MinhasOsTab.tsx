@@ -43,7 +43,11 @@ interface Programacao {
     updated_at: string;
 }
 
-const MinhasOsTab: React.FC = () => {
+interface MinhasOsTabProps {
+    onIniciarExecucao?: (programacao: any) => void;
+}
+
+const MinhasOsTab: React.FC<MinhasOsTabProps> = ({ onIniciarExecucao }) => {
     const navigate = useNavigate();
     const { setorAtivo } = useSetor();
     const { user } = useAuth();
@@ -157,11 +161,16 @@ const MinhasOsTab: React.FC = () => {
         }
     };
 
-    // Carregar programações quando a aba for selecionada
+    // Carregar programações sempre que o usuário mudar (para mostrar contador correto)
     useEffect(() => {
-        if (activeInternalTab === 'programacoes') {
+        if (user) {
             fetchProgramacoes();
+        }
+    }, [user]);
 
+    // Atualizar programações automaticamente quando na aba de programações
+    useEffect(() => {
+        if (activeInternalTab === 'programacoes' && user) {
             // Atualizar automaticamente a cada 30 segundos quando na aba de programações
             const interval = setInterval(() => {
                 fetchProgramacoes();
@@ -187,15 +196,18 @@ const MinhasOsTab: React.FC = () => {
 
             console.log('✅ Status da programação atualizado');
 
-            // Redirecionar para página de apontamento com OS pré-preenchida
-            // Usar o setor ativo atual
-            const setorSlug = setorAtivo?.chave || 'laboratorio-eletrico';
-            const targetUrl = `/desenvolvimento/${setorSlug}?tab=apontamento&os=${programacao.os_numero}&programacao_id=${programacao.id}`;
+            // Se há callback para iniciar execução, usar ele (redirecionamento interno)
+            if (onIniciarExecucao) {
+                console.log('🔄 Usando redirecionamento interno para apontamento');
+                onIniciarExecucao(programacao);
+            } else {
+                // Fallback: redirecionar para página de apontamento com OS pré-preenchida
+                const setorSlug = setorAtivo?.chave || 'laboratorio-eletrico';
+                const targetUrl = `/desenvolvimento/${setorSlug}?tab=apontamento&os=${programacao.os_numero}&programacao_id=${programacao.id}`;
 
-            console.log('🔗 Redirecionando para:', targetUrl);
-
-            // Navegar para apontamento com parâmetros da programação
-            navigate(targetUrl);
+                console.log('🔗 Redirecionando para:', targetUrl);
+                navigate(targetUrl);
+            }
 
         } catch (error) {
             console.error('Erro ao iniciar execução:', error);

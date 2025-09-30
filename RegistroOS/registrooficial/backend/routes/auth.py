@@ -109,6 +109,41 @@ class ChangePasswordRequest(BaseModel):
     senha_atual: str
     nova_senha: str
 
+@router.get("/public/setores")
+async def get_public_setores(db: Session = Depends(get_db)):
+    """
+    Endpoint público para buscar setores (para página de cadastro).
+    Não requer autenticação.
+    """
+    try:
+        # Query otimizada com JOIN para evitar múltiplas consultas
+        query = db.query(
+            Setor,
+            Departamento.nome_tipo.label('departamento_nome')
+        ).outerjoin(
+            Departamento, Setor.id_departamento == Departamento.id
+        ).filter(Setor.ativo.is_(True))
+
+        setores_result = query.all()
+
+        result = []
+        for setor, departamento_nome in setores_result:
+            result.append({
+                "id": setor.id,
+                "nome": setor.nome,
+                "descricao": setor.descricao,
+                "id_departamento": setor.id_departamento,
+                "departamento": departamento_nome,
+                "ativo": setor.ativo,
+                "permite_apontamento": setor.permite_apontamento,
+                "area_tipo": setor.area_tipo,
+                "data_criacao": setor.data_criacao
+            })
+
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar setores: {str(e)}")
+
 @router.post("/register", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
     """

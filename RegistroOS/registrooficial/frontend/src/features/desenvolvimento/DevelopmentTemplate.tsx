@@ -182,8 +182,9 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
   const [relatorioModalOpen, setRelatorioModalOpen] = useState(false);
   const [selectedOsId, setSelectedOsId] = useState<number | null>(null);
 
-  // Estados para comunicação entre abas (resolução de pendências)
+  // Estados para comunicação entre abas (resolução de pendências e programações)
   const [pendenciaParaResolver, setPendenciaParaResolver] = useState<any>(null);
+  const [programacaoParaIniciar, setProgramacaoParaIniciar] = useState<any>(null);
   const [dadosPreenchidosApontamento, setDadosPreenchidosApontamento] = useState<any>(null);
 
   // Pré-preencher formData quando vem de uma programação
@@ -210,10 +211,20 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
       const buscarDadosOS = async () => {
         try {
           console.log('🔍 [DevelopmentTemplate] Buscando dados da OS:', osFormatted);
-          const response = await api.get(`/desenvolvimento/os/${osFormatted}`);
+
+          // Usar o endpoint correto que faz scraping se necessário
+          const response = await api.get(`/desenvolvimento/formulario/buscar-os/${osFormatted}`, {
+            timeout: 300000 // 5 minutos para permitir scraping
+          });
 
           if (response.data) {
-            console.log('✅ [DevelopmentTemplate] OS encontrada, preenchendo status:', response.data.status);
+            console.log('✅ [DevelopmentTemplate] OS encontrada, preenchendo campos:', {
+              status: response.data.status,
+              cliente: response.data.cliente,
+              equipamento: response.data.equipamento,
+              fonte: response.data.fonte
+            });
+
             setFormDataWithStorage(prev => ({
               ...prev,
               statusOS: response.data.status || '',
@@ -223,6 +234,21 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
           }
         } catch (error) {
           console.log('⚠️ [DevelopmentTemplate] Erro ao buscar OS:', error);
+          // Tentar endpoint alternativo se o principal falhar
+          try {
+            const fallbackResponse = await api.get(`/desenvolvimento/os/${osFormatted}`);
+            if (fallbackResponse.data) {
+              console.log('✅ [DevelopmentTemplate] OS encontrada via fallback');
+              setFormDataWithStorage(prev => ({
+                ...prev,
+                statusOS: fallbackResponse.data.status || '',
+                inpCliente: fallbackResponse.data.cliente || '',
+                inpEquipamento: fallbackResponse.data.equipamento || ''
+              }));
+            }
+          } catch (fallbackError) {
+            console.log('⚠️ [DevelopmentTemplate] Fallback também falhou:', fallbackError);
+          }
         }
       };
 
@@ -257,8 +283,8 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
       );
     }
 
-    // Adicionar aba de aprovação apenas para admins
-    if (user?.privilege_level === 'ADMIN') {
+    // Adicionar aba de aprovação para admins e supervisores
+    if (user?.privilege_level === 'ADMIN' || user?.privilege_level === 'SUPERVISOR') {
       baseTabs.push(
         { id: 'aprovacao', label: 'Aprovação Usuários', icon: '👥' }
       );
@@ -275,18 +301,47 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
 
   // Função para resolver pendência via apontamento
   const handleResolverPendenciaViaApontamento = (pendencia: any) => {
+    console.log('📋 [DevelopmentTemplate] Resolvendo pendência via apontamento:', pendencia);
+
     // Preparar dados para preencher no formulário de apontamento
     const dadosApontamento = {
       inpNumOS: pendencia.numero_os,
-      inpCliente: pendencia.cliente,
-      inpEquipamento: pendencia.descricao_maquina || pendencia.equipamento,
+      // Não preencher cliente e equipamento aqui - deixar para busca automática da OS
+      // inpCliente: pendencia.cliente,
+      // inpEquipamento: pendencia.descricao_maquina || pendencia.equipamento,
       selMaq: pendencia.tipo_maquina,
       observacao: `RESOLUÇÃO DE PENDÊNCIA #${pendencia.id}: ${pendencia.descricao_pendencia || pendencia.descricao}`,
       pendencia_origem_id: pendencia.id
     };
 
+    console.log('📋 [DevelopmentTemplate] Dados preparados para apontamento:', dadosApontamento);
+
     // Armazenar dados para usar na aba de apontamento
     setPendenciaParaResolver(pendencia);
+    setDadosPreenchidosApontamento(dadosApontamento);
+
+    // Mudar para a aba de apontamento
+    setActiveTab('apontamento');
+  };
+
+  // Função para iniciar execução de programação via apontamento
+  const handleIniciarExecucaoProgramacao = (programacao: any) => {
+    console.log('🚀 [DevelopmentTemplate] Iniciando execução de programação:', programacao);
+
+    // Preparar dados para preencher no formulário de apontamento
+    const dadosApontamento = {
+      inpNumOS: programacao.os_numero,
+      // Não preencher cliente e equipamento aqui - deixar para busca automática da OS
+      // inpCliente: programacao.cliente_nome,
+      // inpEquipamento: programacao.equipamento_descricao,
+      observacao: `EXECUÇÃO DE PROGRAMAÇÃO #${programacao.id}: ${programacao.observacoes || 'Execução da programação'}`,
+      programacao_origem_id: programacao.id
+    };
+
+    console.log('📋 [DevelopmentTemplate] Dados preparados para apontamento:', dadosApontamento);
+
+    // Armazenar dados para usar na aba de apontamento
+    setProgramacaoParaIniciar(programacao);
     setDadosPreenchidosApontamento(dadosApontamento);
 
     // Mudar para a aba de apontamento
@@ -358,13 +413,18 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
           handleSaveApontamento={handleSaveApontamento}
           dadosPreenchidos={dadosPreenchidosApontamento}
           pendenciaParaResolver={pendenciaParaResolver}
+          programacaoParaIniciar={programacaoParaIniciar}
           onPendenciaResolvida={() => {
             setPendenciaParaResolver(null);
             setDadosPreenchidosApontamento(null);
           }}
+          onProgramacaoIniciada={() => {
+            setProgramacaoParaIniciar(null);
+            setDadosPreenchidosApontamento(null);
+          }}
         />;
       case 'minhas-os':
-        return <MinhasOsTab />;
+        return <MinhasOsTab onIniciarExecucao={handleIniciarExecucaoProgramacao} />;
       case 'programacao':
         return <ProgramacaoTab />;
       case 'pendencias':
