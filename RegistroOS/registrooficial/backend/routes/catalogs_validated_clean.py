@@ -7,7 +7,7 @@ Mapeamento correto entre tabelas e colunas existentes.
 Campos duplicados removidos conforme análise.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from datetime import datetime
@@ -576,14 +576,34 @@ async def get_clientes(
 
 @router.get("/equipamentos")
 async def get_equipamentos(
+    q: Optional[str] = Query(None, description="Termo de busca para descrição do equipamento"),
+    limit: Optional[int] = Query(None, ge=1, le=100, description="Limite de resultados"),
     current_user: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all equipment from Equipamento model"""
+    """Get all equipment from Equipamento model with optional search"""
     try:
-        equipamentos = db.query(Equipamento).all()
-        
-        return [
+        print(f"🔍 [EQUIPAMENTOS] === ENDPOINT CHAMADO ===")
+        print(f"🔍 [EQUIPAMENTOS] Query: {q}")
+        print(f"🔍 [EQUIPAMENTOS] Limit: {limit}")
+        print(f"🔍 [EQUIPAMENTOS] User: {current_user.email if current_user else 'None'}")
+
+        query = db.query(Equipamento)
+
+        # Se há termo de busca, filtrar pela descrição
+        if q:
+            print(f"🔍 [EQUIPAMENTOS] Aplicando filtro na coluna 'descricao': {q}")
+            query = query.filter(Equipamento.descricao.ilike(f"%{q}%"))
+
+        # Se há limite, aplicar
+        if limit:
+            print(f"🔍 [EQUIPAMENTOS] Aplicando limite: {limit}")
+            query = query.limit(limit)
+
+        equipamentos = query.all()
+        print(f"📦 [EQUIPAMENTOS] Encontrados: {len(equipamentos)} equipamentos")
+
+        result = [
             {
                 "id": equip.id,
                 "descricao": equip.descricao,
@@ -594,8 +614,75 @@ async def get_equipamentos(
             }
             for equip in equipamentos
         ]
+
+        print(f"📋 [EQUIPAMENTOS] Retornando {len(result)} equipamentos")
+        print(f"📋 [EQUIPAMENTOS] Dados: {result}")
+        return result
+
     except Exception as e:
+        print(f"❌ [EQUIPAMENTOS] Erro: {str(e)}")
+        import traceback
+        print(f"❌ [EQUIPAMENTOS] Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Erro ao buscar equipamentos: {str(e)}")
+
+@router.get("/equipamentos-teste")
+async def get_equipamentos_teste():
+    """Endpoint de teste sem autenticação"""
+    try:
+        print(f"🧪 [TESTE] Endpoint de teste chamado")
+        return [
+            {"id": 1, "descricao": "TESTE EQUIPAMENTO 1"},
+            {"id": 2, "descricao": "TESTE EQUIPAMENTO 2"},
+            {"id": 3, "descricao": "MOTOR TESTE"}
+        ]
+    except Exception as e:
+        print(f"❌ [TESTE] Erro: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro: {str(e)}")
+
+@router.get("/equipamentos-sem-auth")
+async def get_equipamentos_sem_auth(
+    q: Optional[str] = Query(None, description="Termo de busca"),
+    limit: Optional[int] = Query(None, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """Endpoint de equipamentos SEM autenticação para teste"""
+    try:
+        print(f"🔓 [SEM-AUTH] === ENDPOINT CHAMADO SEM AUTENTICAÇÃO ===")
+        print(f"🔓 [SEM-AUTH] Query: {q}")
+        print(f"🔓 [SEM-AUTH] Limit: {limit}")
+
+        query = db.query(Equipamento)
+
+        if q:
+            print(f"🔓 [SEM-AUTH] Aplicando filtro: {q}")
+            query = query.filter(Equipamento.descricao.ilike(f"%{q}%"))
+
+        if limit:
+            query = query.limit(limit)
+
+        equipamentos = query.all()
+        print(f"🔓 [SEM-AUTH] Encontrados: {len(equipamentos)} equipamentos")
+
+        result = [
+            {
+                "id": equip.id,
+                "descricao": equip.descricao,
+                "tipo": equip.tipo,
+                "fabricante": equip.fabricante,
+                "modelo": equip.modelo,
+                "numero_serie": equip.numero_serie
+            }
+            for equip in equipamentos
+        ]
+
+        print(f"🔓 [SEM-AUTH] Retornando: {result}")
+        return result
+
+    except Exception as e:
+        print(f"❌ [SEM-AUTH] Erro: {str(e)}")
+        import traceback
+        print(f"❌ [SEM-AUTH] Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Erro: {str(e)}")
 
 @router.get("/usuarios")
 async def get_usuarios(

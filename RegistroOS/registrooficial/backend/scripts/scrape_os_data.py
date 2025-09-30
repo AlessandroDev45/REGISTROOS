@@ -463,28 +463,77 @@ def scrape_os_details_data_only(driver, wait):
                 else: # Se não encontrou nem <b> nem ':'
                     pass # Ignora parágrafos que não se encaixam no padrão chave:valor
 
+                # Lógica especial para detectar "TIPO DO EQUIPAMENTO" com variações
+                if not label or not value:
+                    # Tentar detectar variações do campo "TIPO DO EQUIPAMENTO"
+                    equipamento_patterns = [
+                        r"TIPO\s+DO?\s+EQUIPAMENTO\s*:?\s*(.+)",
+                        r"TIPO\s+EQUIPAMENTO\s*:?\s*(.+)",
+                        r"EQUIPAMENTO\s*:?\s*(.+)",
+                        r"TIPO\s*:?\s*(.+)"
+                    ]
+
+                    for pattern in equipamento_patterns:
+                        match = re.search(pattern, full_text, re.IGNORECASE)
+                        if match:
+                            potential_value = match.group(1).strip()
+                            # Verificar se não é um valor inválido comum
+                            invalid_values = ["STATUS DA OS", "TERMINADA", "EM ANDAMENTO", "PENDENTE", "CANCELADA"]
+                            if potential_value and not any(inv.upper() in potential_value.upper() for inv in invalid_values):
+                                label = "TIPO DO EQUIPAMENTO"
+                                value = potential_value
+                                print(f"   🔧 Detectado TIPO DO EQUIPAMENTO via pattern: '{value}'")
+                                break
+
                 # Limpeza de caracteres especiais e valores placeholders
-                placeholders = ["*", "***", "SELECIONE", "Nº", "*DESCRIÇÃ",
-                                "SIMCLASSIFICACAO", "ARQUIVAR", "SIM", "NAO",
-                                "OS", "LTDA", "- ITABIRITO", "ITABIRITO", "-", "EQUIPAMENTO SEM PLACA IDENTIFICAÇÃO."]
+                exact_placeholders = ["*", "***", "SELECIONE", "*DESCRIÇÃ", "SIMCLASSIFICACAO", "ARQUIVAR", "EQUIPAMENTO SEM PLACA IDENTIFICAÇÃO."]
+                partial_placeholders = ["- ITABIRITO", "ITABIRITO"] # Só remove se for parte do valor, não o valor inteiro
 
                 original_value = value
                 cleaned_value = value
 
                 if cleaned_value: # Só tenta limpar se o valor não estiver vazio
-                    for ph in placeholders:
-                        # Se o valor é exatamente um placeholder (ignoring case)
+                    # Primeiro, verificar placeholders exatos (valor deve ser exatamente igual)
+                    for ph in exact_placeholders:
                         if cleaned_value.strip().upper() == ph.upper():
                             cleaned_value = ""
                             break
-                        # Se o placeholder faz parte do valor (ex: "AIR LIQUIDE BRASIL LTDA - ITABIRITO"), remove-o.
-                        # Exceção para datas ou CNPJ que podem conter '-' e não devem ter partes removidas arbitrariamente.
-                        if "DATA" not in label.upper() and "CNPJ" not in label.upper() and ph.strip() != "-": # Ignorar '-' como placeholder para evitar quebrar datas/CNPJ
-                            cleaned_value = cleaned_value.replace(ph, "").strip()
-                            # Limpeza adicional para evitar múltiplos espaços e hifens soltos
-                            cleaned_value = re.sub(r'\s{2,}', ' ', cleaned_value).strip()
-                            cleaned_value = re.sub(r'-\s*-', '-', cleaned_value).strip('-').strip() # Limpa múltiplos hifens e hifens no início/fim
+
+                    # Se ainda tem valor, aplicar limpeza parcial apenas para campos específicos
+                    if cleaned_value and label.upper() not in ["TIPO DO EQUIPAMENTO", "EQUIPAMENTO", "MODELO", "FABRICANTE"]:
+                        for ph in partial_placeholders:
+                            if "DATA" not in label.upper() and "CNPJ" not in label.upper():
+                                cleaned_value = cleaned_value.replace(ph, "").strip()
+
+                    # Limpeza final de espaços múltiplos
+                    if cleaned_value:
+                        cleaned_value = re.sub(r'\s{2,}', ' ', cleaned_value).strip()
+                        # Só remove hifens soltos se não for um campo importante
+                        if label.upper() not in ["TIPO DO EQUIPAMENTO", "EQUIPAMENTO", "MODELO", "FABRICANTE"]:
+                            cleaned_value = re.sub(r'-\s*-', '-', cleaned_value).strip('-').strip()
+
                 value = cleaned_value
+
+                # Validação adicional para evitar vazamento de dados entre campos
+                if value and label:
+                    # Detectar se o valor contém status da OS que não deveria estar em outros campos
+                    status_keywords = ["TERMINADA", "EM ANDAMENTO", "PENDENTE", "CANCELADA", "APROVADA", "REPROVADA"]
+                    if label.upper() != "STATUS DA OS" and any(status in value.upper() for status in status_keywords):
+                        # Se detectou status em campo que não deveria ter, tentar extrair apenas a parte relevante
+                        if label.upper() in ["TIPO DO EQUIPAMENTO", "EQUIPAMENTO", "MODELO", "FABRICANTE"]:
+                            # Para campos de equipamento, tentar extrair apenas a parte antes do status
+                            for status in status_keywords:
+                                if status in value.upper():
+                                    parts = value.split(status, 1)
+                                    if len(parts) > 1 and parts[0].strip():
+                                        value = parts[0].strip()
+                                        print(f"   🔧 Corrigido vazamento de status em {label}: '{value}'")
+                                        break
+                                    else:
+                                        # Se não sobrou nada válido, limpar o valor
+                                        value = ""
+                                        print(f"   ⚠️ Removido valor inválido de {label} (apenas status)")
+                                        break
 
                 # Mapeamento e preenchimento dos dados
                 json_key = label_to_json_key.get(label)

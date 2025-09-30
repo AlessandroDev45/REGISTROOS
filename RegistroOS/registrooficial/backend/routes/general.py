@@ -5,9 +5,10 @@ from typing import Dict, Any, Optional
 from datetime import datetime as dt
 import sys
 import os
+import json
 from pathlib import Path
 from pydantic import BaseModel
-from app.database_models import Usuario, OrdemServico, ApontamentoDetalhado, ResultadoTeste, Pendencia, TipoTeste, Cliente
+from app.database_models import Usuario, OrdemServico, ApontamentoDetalhado, ResultadoTeste, Pendencia, TipoTeste, Cliente, Programacao, Equipamento
 from config.database_config import get_db
 from app.dependencies import get_current_user
 
@@ -139,9 +140,60 @@ async def save_apontamento(
         db.add(apontamento)
         db.flush()  # Get the ID for test results
 
+        # Processar configurações do supervisor (etapas e horas orçadas)
+        supervisor_config = apontamento_data.get("supervisor_config", {})
+        if supervisor_config and current_user.privilege_level in ['SUPERVISOR', 'ADMIN']:
+            # Atualizar etapas da OS se marcadas
+            if supervisor_config.get("testes_iniciais"):
+                ordem_servico.testes_iniciais_finalizados = True
+                ordem_servico.data_testes_iniciais_finalizados = dt.now()
+                ordem_servico.id_usuario_testes_iniciais = current_user.id
+                print(f"[DEBUG] Etapa Inicial finalizada para OS {ordem_servico.os_numero}")
+
+            if supervisor_config.get("testes_parciais"):
+                ordem_servico.testes_parciais_finalizados = True
+                ordem_servico.data_testes_parciais_finalizados = dt.now()
+                ordem_servico.id_usuario_testes_parciais = current_user.id
+                print(f"[DEBUG] Etapa Parcial finalizada para OS {ordem_servico.os_numero}")
+
+            if supervisor_config.get("testes_finais"):
+                ordem_servico.testes_finais_finalizados = True
+                ordem_servico.data_testes_finais_finalizados = dt.now()
+                ordem_servico.id_usuario_testes_finais = current_user.id
+                print(f"[DEBUG] Etapa Final finalizada para OS {ordem_servico.os_numero}")
+
+            # Processar horas orçadas por setor
+            horas_orcadas = supervisor_config.get("horas_orcadas")
+            if horas_orcadas and horas_orcadas > 0:
+                setor_usuario = current_user.setor
+                if setor_usuario:
+                    # Obter horas orçadas existentes (JSON) ou criar novo
+                    horas_existentes = {}
+                    if ordem_servico.horas_orcadas:
+                        try:
+                            horas_existentes = json.loads(ordem_servico.horas_orcadas)
+                        except:
+                            horas_existentes = {}
+
+                    # Atualizar horas do setor atual
+                    horas_existentes[setor_usuario] = float(horas_orcadas)
+                    ordem_servico.horas_orcadas = json.dumps(horas_existentes)
+                    print(f"[DEBUG] Horas orçadas atualizadas para setor {setor_usuario}: {horas_orcadas}h")
+
         # Save test results if provided with validation
         testes = apontamento_data.get("testes", {})
         observacoes_testes = apontamento_data.get("observacoes_testes", {})
+
+        # Processar testes_selecionados do frontend (novo formato)
+        testes_selecionados = apontamento_data.get("testes_selecionados", {})
+        subcategorias_selecionadas = apontamento_data.get("subcategorias_selecionadas", [])
+        subcategorias_contexto = ",".join(subcategorias_selecionadas) if subcategorias_selecionadas else ""
+
+        if testes_selecionados:
+            for teste_id, teste_data in testes_selecionados.items():
+                if teste_data.get("selecionado") and teste_data.get("resultado"):
+                    testes[teste_id] = teste_data.get("resultado")
+                    observacoes_testes[teste_id] = teste_data.get("observacao", "")
 
         for teste_id, resultado in testes.items():
             # Validação: Se teste selecionado, resultado é obrigatório
@@ -164,14 +216,14 @@ async def save_apontamento(
                 id_apontamento=apontamento.id,
                 id_teste=teste_id,
                 resultado=resultado,
-                observacao=observacao
+                observacao=observacao,
+                data_registro=dt.now()
             )
             db.add(resultado_teste)
 
         # Processar testes exclusivos selecionados
         testes_exclusivos_selecionados = apontamento_data.get("testes_exclusivos_selecionados", {})
         if testes_exclusivos_selecionados:
-            import json
             from datetime import datetime
 
             # Buscar testes exclusivos selecionados
@@ -364,15 +416,67 @@ async def save_apontamento_with_pendencia(
         testes = apontamento_data.get("testes", {})
         observacoes_testes = apontamento_data.get("observacoes_testes", {})
 
+        # Processar testes_selecionados do frontend (novo formato)
+        testes_selecionados = apontamento_data.get("testes_selecionados", {})
+        subcategorias_selecionadas = apontamento_data.get("subcategorias_selecionadas", [])
+        subcategorias_contexto = ",".join(subcategorias_selecionadas) if subcategorias_selecionadas else ""
+
+        if testes_selecionados:
+            for teste_id, teste_data in testes_selecionados.items():
+                if teste_data.get("selecionado") and teste_data.get("resultado"):
+                    testes[teste_id] = teste_data.get("resultado")
+                    observacoes_testes[teste_id] = teste_data.get("observacao", "")
+
         for teste_id, resultado in testes.items():
             observacao = observacoes_testes.get(teste_id, "")
             resultado_teste = ResultadoTeste(
                 id_apontamento=apontamento.id,
                 id_teste=teste_id,
                 resultado=resultado,
-                observacao=observacao
+                observacao=observacao,
+                data_registro=dt.now()
             )
             db.add(resultado_teste)
+
+        # Processar configurações do supervisor (etapas e horas orçadas)
+        supervisor_config = apontamento_data.get("supervisor_config", {})
+        if supervisor_config and current_user.privilege_level in ['SUPERVISOR', 'ADMIN']:
+            # Atualizar etapas da OS se marcadas
+            if supervisor_config.get("testes_iniciais"):
+                ordem_servico.testes_iniciais_finalizados = True
+                ordem_servico.data_testes_iniciais_finalizados = dt.now()
+                ordem_servico.id_usuario_testes_iniciais = current_user.id
+                print(f"[DEBUG] Etapa Inicial finalizada para OS {ordem_servico.os_numero}")
+
+            if supervisor_config.get("testes_parciais"):
+                ordem_servico.testes_parciais_finalizados = True
+                ordem_servico.data_testes_parciais_finalizados = dt.now()
+                ordem_servico.id_usuario_testes_parciais = current_user.id
+                print(f"[DEBUG] Etapa Parcial finalizada para OS {ordem_servico.os_numero}")
+
+            if supervisor_config.get("testes_finais"):
+                ordem_servico.testes_finais_finalizados = True
+                ordem_servico.data_testes_finais_finalizados = dt.now()
+                ordem_servico.id_usuario_testes_finais = current_user.id
+                print(f"[DEBUG] Etapa Final finalizada para OS {ordem_servico.os_numero}")
+
+            # Processar horas orçadas por setor
+            horas_orcadas = supervisor_config.get("horas_orcadas")
+            if horas_orcadas and horas_orcadas > 0:
+                setor_usuario = current_user.setor
+                if setor_usuario:
+                    # Obter horas orçadas existentes (JSON) ou criar novo
+                    horas_existentes = {}
+                    if ordem_servico.horas_orcadas:
+                        try:
+                            horas_existentes = json.loads(ordem_servico.horas_orcadas)
+                        except:
+                            horas_existentes = {}
+
+                    # Atualizar horas do setor atual
+                    horas_existentes[setor_usuario] = float(horas_orcadas)
+                    ordem_servico.horas_orcadas = json.dumps(horas_existentes)
+                    print(f"[DEBUG] Horas orçadas atualizadas para setor {setor_usuario}: {horas_orcadas}h")
 
         # Create Pendencia
         pendencia_descricao = apontamento_data.get("pendencia_descricao", "Pendência criada a partir do apontamento")
@@ -418,7 +522,6 @@ async def save_apontamento_with_pendencia(
         # Processar testes exclusivos selecionados
         testes_exclusivos_selecionados = apontamento_data.get("testes_exclusivos_selecionados", {})
         if testes_exclusivos_selecionados:
-            import json
             from datetime import datetime
 
             # Buscar testes exclusivos selecionados
@@ -1068,3 +1171,219 @@ async def get_relatorio_completo_apontamento(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao gerar relatório: {str(e)}")
+
+
+@router.get("/os/{os_numero}/dados-completos")
+async def get_dados_completos_os(
+    os_numero: str,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Buscar todos os dados relacionados a uma Ordem de Serviço:
+    - Apontamentos
+    - Resultados de Teste
+    - Programações
+    - Pendências
+    """
+    try:
+        print(f"[DEBUG] Buscando dados completos para OS: {os_numero}")
+
+        # Buscar a OS
+        print(f"[DEBUG] Buscando OS com número: '{os_numero}'")
+        os = db.query(OrdemServico).filter(OrdemServico.os_numero == os_numero).first()
+
+        if not os:
+            # Verificar se existem OS no banco
+            total_os = db.query(OrdemServico).count()
+            print(f"[DEBUG] OS '{os_numero}' não encontrada. Total de OS no banco: {total_os}")
+
+            # Listar algumas OS para debug
+            if total_os > 0:
+                algumas_os = db.query(OrdemServico.os_numero).limit(5).all()
+                print(f"[DEBUG] Algumas OS existentes: {[os.os_numero for os in algumas_os]}")
+
+            raise HTTPException(status_code=404, detail=f"OS {os_numero} não encontrada")
+
+        print(f"[DEBUG] OS encontrada: {os.os_numero} (ID: {os.id})")
+
+        # Buscar apontamentos da OS
+        apontamentos = db.query(ApontamentoDetalhado).filter(
+            ApontamentoDetalhado.id_os == os.id
+        ).order_by(ApontamentoDetalhado.data_hora_inicio.desc()).all()
+
+        # Buscar resultados de teste de todos os apontamentos
+        apontamentos_ids = [apt.id for apt in apontamentos]
+        resultados_teste = []
+        if apontamentos_ids:
+            resultados_teste = db.query(ResultadoTeste, TipoTeste).join(
+                TipoTeste, ResultadoTeste.id_teste == TipoTeste.id
+            ).filter(ResultadoTeste.id_apontamento.in_(apontamentos_ids)).all()
+
+        # Buscar programações da OS
+        programacoes = db.query(Programacao).filter(
+            Programacao.id_ordem_servico == os.id
+        ).order_by(Programacao.created_at.desc()).all()
+
+        # Buscar pendências relacionadas à OS (tanto por apontamento quanto por OS diretamente)
+        pendencias = []
+        try:
+            # Buscar pendências por apontamento
+            if apontamentos_ids:
+                pendencias_por_apontamento = db.query(Pendencia).filter(
+                    Pendencia.id_apontamento_origem.in_(apontamentos_ids)
+                ).all()
+                pendencias.extend(pendencias_por_apontamento)
+
+            # Buscar pendências diretamente relacionadas à OS
+            pendencias_por_os = db.query(Pendencia).filter(
+                Pendencia.numero_os == os_numero
+            ).all()
+            pendencias.extend(pendencias_por_os)
+
+            # Remover duplicatas
+            pendencias_ids = set()
+            pendencias_unicas = []
+            for p in pendencias:
+                if p.id not in pendencias_ids:
+                    pendencias_ids.add(p.id)
+                    pendencias_unicas.append(p)
+            pendencias = pendencias_unicas
+
+        except Exception as e:
+            print(f"[WARNING] Erro ao buscar pendências: {e}")
+            pendencias = []
+
+        # Organizar dados dos apontamentos
+        apontamentos_data = []
+        for apt in apontamentos:
+            # Buscar resultados de teste específicos deste apontamento
+            testes_apontamento = [
+                {
+                    "id": resultado.id,
+                    "teste_nome": tipo_teste.nome,
+                    "teste_categoria": tipo_teste.categoria,
+                    "teste_tipo": tipo_teste.tipo_teste,
+                    "resultado": resultado.resultado,
+                    "observacao": resultado.observacao,
+                    "data_registro": resultado.data_registro.isoformat() if resultado.data_registro else None
+                }
+                for resultado, tipo_teste in resultados_teste
+                if resultado.id_apontamento == apt.id
+            ]
+
+            apontamentos_data.append({
+                "id": apt.id,
+                "data_hora_inicio": apt.data_hora_inicio.isoformat() if apt.data_hora_inicio else None,
+                "data_hora_fim": apt.data_hora_fim.isoformat() if apt.data_hora_fim else None,
+                "status": apt.status_apontamento,
+                "tipo_maquina": getattr(apt, 'tipo_maquina', 'N/A'),
+                "tipo_atividade": getattr(apt, 'tipo_atividade', 'N/A'),
+                "descricao_atividade": getattr(apt, 'descricao_atividade', 'N/A'),
+                "categoria": getattr(apt, 'categoria_maquina', 'N/A'),
+                "subcategoria": getattr(apt, 'subcategorias_maquina', 'N/A'),
+                "observacao_os": apt.observacao_os,
+                "observacoes_gerais": apt.observacoes_gerais,
+                "foi_retrabalho": apt.foi_retrabalho,
+                "criado_por": apt.criado_por,
+                "criado_por_email": apt.criado_por_email,
+                "resultados_teste": testes_apontamento,
+                "total_testes": len(testes_apontamento)
+            })
+
+        # Organizar dados das programações
+        programacoes_data = [
+            {
+                "id": prog.id,
+                "descricao_atividade": getattr(prog, 'descricao_atividade', 'N/A'),
+                "data_inicio": prog.inicio_previsto.isoformat() if prog.inicio_previsto else None,
+                "data_fim": prog.fim_previsto.isoformat() if prog.fim_previsto else None,
+                "status": prog.status,
+                "prioridade": getattr(prog, 'prioridade', 'N/A'),
+                "setor": getattr(prog.setor_obj, 'nome', 'N/A') if hasattr(prog, 'setor_obj') and prog.setor_obj else 'N/A',
+                "observacoes": prog.observacoes,
+                "criado_por_id": prog.criado_por_id,
+                "responsavel_id": prog.responsavel_id,
+                "data_criacao": prog.created_at.isoformat() if prog.created_at else None
+            }
+            for prog in programacoes
+        ]
+
+        # Organizar dados das pendências
+        pendencias_data = [
+            {
+                "id": pend.id,
+                "numero_os": pend.numero_os,
+                "cliente": pend.cliente,
+                "tipo_maquina": pend.tipo_maquina,
+                "descricao_maquina": pend.descricao_maquina,
+                "descricao_pendencia": pend.descricao_pendencia,
+                "status": pend.status,
+                "prioridade": pend.prioridade,
+                "data_inicio": pend.data_inicio.isoformat() if pend.data_inicio else None,
+                "data_fechamento": pend.data_fechamento.isoformat() if pend.data_fechamento else None,
+                "solucao_aplicada": pend.solucao_aplicada,
+                "observacoes_fechamento": pend.observacoes_fechamento,
+                "id_responsavel_inicio": pend.id_responsavel_inicio,
+                "id_responsavel_fechamento": pend.id_responsavel_fechamento,
+                "id_apontamento_origem": pend.id_apontamento_origem,
+                "id_apontamento_fechamento": pend.id_apontamento_fechamento
+            }
+            for pend in pendencias
+        ]
+
+        # Calcular estatísticas
+        total_testes = sum(len(apt["resultados_teste"]) for apt in apontamentos_data)
+        testes_aprovados = sum(
+            1 for apt in apontamentos_data
+            for teste in apt["resultados_teste"]
+            if teste["resultado"] == "APROVADO"
+        )
+        testes_reprovados = sum(
+            1 for apt in apontamentos_data
+            for teste in apt["resultados_teste"]
+            if teste["resultado"] == "REPROVADO"
+        )
+        testes_inconclusivos = sum(
+            1 for apt in apontamentos_data
+            for teste in apt["resultados_teste"]
+            if teste["resultado"] == "INCONCLUSIVO"
+        )
+
+        return {
+            "os_info": {
+                "numero": os.os_numero,
+                "status": os.status_os,
+                "descricao_maquina": os.descricao_maquina,
+                "prioridade": os.prioridade,
+                "data_criacao": os.data_criacao.isoformat() if os.data_criacao else None,
+                "observacoes_gerais": os.observacoes_gerais,
+                "horas_orcadas": os.horas_orcadas,
+                "testes_iniciais_finalizados": os.testes_iniciais_finalizados,
+                "testes_parciais_finalizados": os.testes_parciais_finalizados,
+                "testes_finais_finalizados": os.testes_finais_finalizados,
+                "data_testes_iniciais_finalizados": os.data_testes_iniciais_finalizados.isoformat() if os.data_testes_iniciais_finalizados else None,
+                "data_testes_parciais_finalizados": os.data_testes_parciais_finalizados.isoformat() if os.data_testes_parciais_finalizados else None,
+                "data_testes_finais_finalizados": os.data_testes_finais_finalizados.isoformat() if os.data_testes_finais_finalizados else None
+            },
+            "apontamentos": apontamentos_data,
+            "programacoes": programacoes_data,
+            "pendencias": pendencias_data,
+            "estatisticas": {
+                "total_apontamentos": len(apontamentos_data),
+                "total_programacoes": len(programacoes_data),
+                "total_pendencias": len(pendencias_data),
+                "total_testes": total_testes,
+                "testes_aprovados": testes_aprovados,
+                "testes_reprovados": testes_reprovados,
+                "testes_inconclusivos": testes_inconclusivos
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Erro ao buscar dados completos da OS: {e}")
+        import traceback
+        print(f"[ERROR] Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="Erro interno do servidor")

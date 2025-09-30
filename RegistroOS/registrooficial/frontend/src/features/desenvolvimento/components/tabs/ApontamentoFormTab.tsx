@@ -1,9 +1,139 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useSetor } from '../../../../contexts/SetorContext';
 import { useAuth } from '../../../../contexts/AuthContext';
 import api from '../../../../services/api';
 import { formatarTextoInput, criarHandlerTextoValidado } from '../../../../utils/textValidation';
+
+// Componente de Autocomplete para Equipamentos
+interface EquipamentoAutocompleteProps {
+    value: string;
+    onChange: (value: string) => void;
+    placeholder?: string;
+}
+
+const EquipamentoAutocomplete: React.FC<EquipamentoAutocompleteProps> = ({ value, onChange, placeholder }) => {
+    const [suggestions, setSuggestions] = useState<any[]>([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const timeoutRef = useRef<number | null>(null);
+
+    const buscarEquipamentos = async (query: string) => {
+        if (query.length < 2) {
+            setSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+
+        setLoading(true);
+        try {
+            console.log('🔍 Buscando equipamentos com query:', query);
+            console.log('🔍 URL completa:', `/equipamentos?q=${encodeURIComponent(query)}&limit=10`);
+
+            // Primeiro testar endpoint sem autenticação
+            try {
+                const testResponse = await fetch('/api/equipamentos-teste');
+                console.log('🧪 Teste sem auth - Status:', testResponse.status);
+                if (testResponse.ok) {
+                    const testData = await testResponse.json();
+                    console.log('🧪 Teste sem auth - Dados:', testData);
+                }
+            } catch (testError) {
+                console.log('🧪 Teste sem auth - Erro:', testError);
+            }
+
+            // Testar primeiro sem autenticação
+            const response = await fetch(`http://localhost:8000/api/equipamentos-sem-auth?q=${encodeURIComponent(query)}&limit=10`);
+            console.log('🔓 Resposta sem auth - Status:', response.status);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            console.log('🔓 Dados sem auth:', data);
+
+            setSuggestions(data || []);
+            setShowSuggestions(true);
+            return; // Usar só o endpoint sem auth por enquanto
+        } catch (error: any) {
+            console.error('❌ Erro ao buscar equipamentos:', error);
+            console.error('❌ Erro response:', error.response);
+            console.error('❌ Erro status:', error.response?.status);
+            console.error('❌ Erro data:', error.response?.data);
+            setSuggestions([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newValue = e.target.value;
+        onChange(newValue);
+
+        // Debounce da busca
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+        }
+        timeoutRef.current = setTimeout(() => {
+            buscarEquipamentos(newValue);
+        }, 300);
+    };
+
+    const handleSuggestionClick = (equipamento: any) => {
+        onChange(equipamento.descricao);
+        setShowSuggestions(false);
+        setSuggestions([]);
+    };
+
+    const handleBlur = () => {
+        // Delay para permitir clique nas sugestões
+        setTimeout(() => {
+            setShowSuggestions(false);
+        }, 200);
+    };
+
+    return (
+        <div className="relative">
+            <input
+                type="text"
+                value={value}
+                onChange={handleInputChange}
+                onBlur={handleBlur}
+                onFocus={() => value.length >= 2 && suggestions.length > 0 && setShowSuggestions(true)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder={placeholder}
+            />
+
+            {loading && (
+                <div className="absolute right-3 top-3">
+                    <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                </div>
+            )}
+
+            {showSuggestions && suggestions.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                    {suggestions.map((equipamento, index) => (
+                        <div
+                            key={equipamento.id || index}
+                            onClick={() => handleSuggestionClick(equipamento)}
+                            className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                        >
+                            <div className="font-medium text-gray-900 truncate">
+                                {equipamento.descricao}
+                            </div>
+                            {(equipamento.tipo || equipamento.fabricante) && (
+                                <div className="text-sm text-gray-500 truncate">
+                                    {[equipamento.tipo, equipamento.fabricante].filter(Boolean).join(' • ')}
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 interface ApontamentoFormTabProps {
     formData: any;
@@ -57,7 +187,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
     console.log('🔍 Parâmetros da URL detectados:', {
         osFromUrl,
         programacaoId,
-        allParams: Object.fromEntries(searchParams.entries())
+        allParams: (Object as any).fromEntries(searchParams.entries())
     });
 
     // Estados para dropdowns
@@ -517,6 +647,48 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
 
     // Função confirmarFinalizacaoTeste removida - sistema simplificado
 
+    // Função para buscar dados adicionais da OS (horas orçadas e etapas)
+    const buscarDadosAdicionaisOS = async (numeroOS: string) => {
+        try {
+            console.log('🔍 Buscando dados adicionais da OS:', numeroOS);
+            const response = await api.get(`/os/${numeroOS}/dados-completos`);
+
+            if (response.data && response.data.os_info) {
+                const osInfo = response.data.os_info;
+
+                // Processar horas orçadas por setor
+                if (osInfo.horas_orcadas && user?.setor) {
+                    try {
+                        const horasOrcadas = JSON.parse(osInfo.horas_orcadas);
+                        const horasSetor = horasOrcadas[user.setor] || 0;
+
+                        setFormData((prev: any) => ({
+                            ...prev,
+                            supervisor_horas_orcadas: horasSetor
+                        }));
+
+                        console.log(`✅ Horas orçadas para setor ${user.setor}: ${horasSetor}h`);
+                    } catch (e) {
+                        console.warn('⚠️ Erro ao processar horas orçadas:', e);
+                    }
+                }
+
+                // Processar status das etapas
+                setFormData((prev: any) => ({
+                    ...prev,
+                    supervisor_testes_iniciais: osInfo.testes_iniciais_finalizados || false,
+                    supervisor_testes_parciais: osInfo.testes_parciais_finalizados || false,
+                    supervisor_testes_finais: osInfo.testes_finais_finalizados || false
+                }));
+
+                console.log('✅ Dados adicionais da OS carregados');
+            }
+        } catch (error) {
+            console.warn('⚠️ Erro ao buscar dados adicionais da OS:', error);
+            // Não bloquear o fluxo se houver erro
+        }
+    };
+
     // Função para buscar OS na base de dados
     const buscarOS = async (numeroOS: string) => {
         if (!numeroOS || numeroOS.trim() === '') {
@@ -549,6 +721,9 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                 }));
 
                 setOsEncontrada(true);
+
+                // Buscar dados adicionais da OS (horas orçadas e etapas)
+                await buscarDadosAdicionaisOS(numeroOS);
 
                 // Verificar se a OS está bloqueada para apontamentos
                 const statusFinalizados = [
@@ -956,7 +1131,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
             console.log('📋 Preenchendo formulário com dados da pendência:', dadosPreenchidos);
 
             // Preencher campos do formulário
-            setFormData(prevData => ({
+            setFormData((prevData: any) => ({
                 ...prevData,
                 ...dadosPreenchidos
             }));
@@ -978,7 +1153,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
             console.log('📋 Preenchendo formulário com dados da programação:', dadosPreenchidos);
 
             // Preencher campos do formulário
-            setFormData(prevData => ({
+            setFormData((prevData: any) => ({
                 ...prevData,
                 ...dadosPreenchidos
             }));
@@ -1185,6 +1360,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                 setor: user?.setor,
                 testes_selecionados: testesSelecionados,
                 testes_exclusivos_selecionados: testesExclusivosSelecionados,
+                subcategorias_selecionadas: formData.subcategoriasSelecionadas,
                 tipo_salvamento: 'APONTAMENTO',
                 supervisor_config: {
                     horas_orcadas: formData.supervisor_horas_orcadas,
@@ -1338,6 +1514,7 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                 setor: user?.setor,
                 testes_selecionados: testesSelecionados,
                 testes_exclusivos_selecionados: testesExclusivosSelecionados,
+                subcategorias_selecionadas: formData.subcategoriasSelecionadas,
                 tipo_salvamento: 'APONTAMENTO_COM_PENDENCIA',
                 supervisor_config: {
                     horas_orcadas: formData.supervisor_horas_orcadas,
@@ -1601,11 +1778,9 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                                 {formData.inpEquipamento || 'Equipamento não informado'}
                                             </div>
                                         ) : (
-                                            <input
-                                                type="text"
+                                            <EquipamentoAutocomplete
                                                 value={formData.inpEquipamento || ''}
-                                                onChange={(e) => setFormData({ ...formData, inpEquipamento: e.target.value })}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                onChange={(value) => setFormData({ ...formData, inpEquipamento: value })}
                                                 placeholder="Descrição do equipamento"
                                             />
                                         )}
@@ -2949,9 +3124,20 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                         type="checkbox"
                                         checked={formData.supervisor_testes_iniciais || false}
                                         onChange={handleSupervisorTestesIniciaisChange}
-                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                        disabled={formData.supervisor_testes_iniciais}
+                                        className={`h-4 w-4 focus:ring-blue-500 border-gray-300 rounded ${
+                                            formData.supervisor_testes_iniciais
+                                                ? 'text-green-600 bg-green-100 cursor-not-allowed'
+                                                : 'text-blue-600'
+                                        }`}
                                     />
-                                    <span className="text-xs font-medium text-gray-700">Etapa Inicial</span>
+                                    <span className={`text-xs font-medium ${
+                                        formData.supervisor_testes_iniciais
+                                            ? 'text-green-700'
+                                            : 'text-gray-700'
+                                    }`}>
+                                        Etapa Inicial {formData.supervisor_testes_iniciais ? '✅' : ''}
+                                    </span>
                                 </label>
                             </div>
                             <div>
@@ -2960,9 +3146,20 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                         type="checkbox"
                                         checked={formData.supervisor_testes_parciais || false}
                                         onChange={handleSupervisorTestesParciaisChange}
-                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                        disabled={formData.supervisor_testes_parciais}
+                                        className={`h-4 w-4 focus:ring-blue-500 border-gray-300 rounded ${
+                                            formData.supervisor_testes_parciais
+                                                ? 'text-green-600 bg-green-100 cursor-not-allowed'
+                                                : 'text-blue-600'
+                                        }`}
                                     />
-                                    <span className="text-xs font-medium text-gray-700">Etapa Parcial</span>
+                                    <span className={`text-xs font-medium ${
+                                        formData.supervisor_testes_parciais
+                                            ? 'text-green-700'
+                                            : 'text-gray-700'
+                                    }`}>
+                                        Etapa Parcial {formData.supervisor_testes_parciais ? '✅' : ''}
+                                    </span>
                                 </label>
                             </div>
                             <div>
@@ -2971,9 +3168,20 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                         type="checkbox"
                                         checked={formData.supervisor_testes_finais || false}
                                         onChange={handleSupervisorTestesFinaisChange}
-                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                        disabled={formData.supervisor_testes_finais}
+                                        className={`h-4 w-4 focus:ring-blue-500 border-gray-300 rounded ${
+                                            formData.supervisor_testes_finais
+                                                ? 'text-green-600 bg-green-100 cursor-not-allowed'
+                                                : 'text-blue-600'
+                                        }`}
                                     />
-                                    <span className="text-xs font-medium text-gray-700">Etapa Final</span>
+                                    <span className={`text-xs font-medium ${
+                                        formData.supervisor_testes_finais
+                                            ? 'text-green-700'
+                                            : 'text-gray-700'
+                                    }`}>
+                                        Etapa Final {formData.supervisor_testes_finais ? '✅' : ''}
+                                    </span>
                                 </label>
                             </div>
                         </div>

@@ -14,6 +14,7 @@ import ProgramacaoTab from './components/tabs/ProgramacaoTab';
 import PendenciasTab from './components/tabs/PendenciasTab';
 import GerenciarTab from './components/tabs/GerenciarTab';
 import AprovacaoUsuariosTab from './components/tabs/AprovacaoUsuariosTab';
+import ConsultaOSTab from './components/tabs/ConsultaOSTab';
 import RelatorioCompletoModal from '../../components/RelatorioCompletoModal';
 
 interface DevelopmentTemplateProps {
@@ -263,6 +264,7 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
       { id: 'dashboard', label: 'Dashboard', icon: '📊' },
       { id: 'apontamento', label: 'Apontamento', icon: '📝' },
       { id: 'minhas-os', label: 'Meu Dashboard', icon: '📋' },
+      { id: 'consulta-os', label: 'Consulta OS', icon: '🔍' },
       { id: 'pendencias', label: 'Pendências', icon: '⚠️' }
     ];
 
@@ -425,6 +427,8 @@ const DevelopmentTemplate: React.FC<DevelopmentTemplateProps> = ({ sectorConfig,
         />;
       case 'minhas-os':
         return <MinhasOsTab onIniciarExecucao={handleIniciarExecucaoProgramacao} />;
+      case 'consulta-os':
+        return <ConsultaOSTab />;
       case 'programacao':
         return <ProgramacaoTab />;
       case 'pendencias':

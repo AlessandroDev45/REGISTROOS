@@ -1808,31 +1808,38 @@ async def get_detalhes_os_formulario(
             tipo_maquina_nome = None
 
             # Buscar cliente usando relacionamento FK conforme hierarquia
-            if len(result) > 32 and result[32]:
+            # Posição 31: id_cliente
+            if len(result) > 31 and result[31]:
                 try:
-                    cliente_obj = db.query(Cliente).filter(Cliente.id == result[32]).first()
+                    cliente_obj = db.query(Cliente).filter(Cliente.id == result[31]).first()
                     if cliente_obj:
                         cliente_nome = cliente_obj.razao_social  # Campo correto conforme hierarquia
+                        logger.info(f"✅ Cliente encontrado: {cliente_nome}")
                 except Exception as e:
                     logger.warning(f"Erro ao buscar cliente: {e}")
 
             # Buscar equipamento usando relacionamento FK conforme hierarquia
-            if len(result) > 33 and result[33]:
+            # Posição 32: id_equipamento
+            if len(result) > 32 and result[32]:
                 try:
-                    equipamento_obj = db.query(Equipamento).filter(Equipamento.id == result[33]).first()
+                    equipamento_obj = db.query(Equipamento).filter(Equipamento.id == result[32]).first()
                     if equipamento_obj:
                         equipamento_nome = equipamento_obj.descricao  # Campo correto conforme hierarquia
+                        logger.info(f"✅ Equipamento encontrado: {equipamento_nome}")
                 except Exception as e:
                     logger.warning(f"Erro ao buscar equipamento: {e}")
-            elif len(result) > 38 and result[38]:  # descricao_maquina como fallback
-                equipamento_nome = result[38]
+            elif len(result) > 37 and result[37]:  # descricao_maquina como fallback (posição 37)
+                equipamento_nome = result[37]
+                logger.info(f"✅ Equipamento via fallback: {equipamento_nome}")
 
             # Buscar tipo de máquina usando relacionamento FK conforme hierarquia
-            if len(result) > 34 and result[34]:
+            # Posição 15: id_tipo_maquina
+            if len(result) > 15 and result[15]:
                 try:
-                    tipo_maquina_obj = db.query(TipoMaquina).filter(TipoMaquina.id == result[34]).first()
+                    tipo_maquina_obj = db.query(TipoMaquina).filter(TipoMaquina.id == result[15]).first()
                     if tipo_maquina_obj:
                         tipo_maquina_nome = tipo_maquina_obj.nome_tipo  # Campo correto conforme hierarquia
+                        logger.info(f"✅ Tipo de máquina encontrado: {tipo_maquina_nome}")
                 except Exception as e:
                     logger.warning(f"Erro ao buscar tipo de máquina: {e}")
 
@@ -1842,11 +1849,11 @@ async def get_detalhes_os_formulario(
                 "status": result[2] or "ABERTA",
                 "status_os": result[2] or "ABERTA",
                 "equipamento": equipamento_nome,
-                "horas_orcadas": float(result[21]) if len(result) > 21 and result[21] else 0.0,  # horas_orcadas está na posição 21
-                "testes_exclusivo_os": result[31] if len(result) > 31 else False,  # testes_exclusivo_os está na posição 31
+                "horas_orcadas": float(result[20]) if len(result) > 20 and result[20] else 0.0,  # horas_orcadas está na posição 20
+                "testes_exclusivo_os": result[30] if len(result) > 30 else False,  # testes_exclusivo_os está na posição 30
                 "cliente": cliente_nome,
-                "tipo_maquina": tipo_maquina_nome, # Pode precisar de um SELECT para o nome se id_tipo_maquina estiver disponível
-                "tipo_maquina_id": result[16] if len(result) > 16 and result[16] else None,  # id_tipo_maquina está na posição 16
+                "tipo_maquina": tipo_maquina_nome,
+                "tipo_maquina_id": result[15] if len(result) > 15 and result[15] else None,  # id_tipo_maquina está na posição 15
                 "fonte": "banco"
             }
 
