@@ -64,26 +64,11 @@ async def save_apontamento(
 
         ordem_servico = db.query(OrdemServico).filter(OrdemServico.os_numero == os_numero).first()
         if not ordem_servico:
-            # Criar OS automaticamente se não existir
-            ordem_servico = OrdemServico(
-                os_numero=os_numero,
-                status_os="AGUARDANDO",
-                prioridade="NORMAL",
-                descricao_maquina=f"OS criada automaticamente via apontamento - {apontamento_data.get('inpCliente', 'Cliente não informado')}",
-                id_setor=current_user.id_setor if hasattr(current_user, 'id_setor') else 1,
-                id_departamento=current_user.id_departamento if hasattr(current_user, 'id_departamento') else 1,
-                criado_por=current_user.id,
-                id_responsavel_registro=current_user.id,
-                data_criacao=dt.now(),
-                # Campos específicos da OS
-                horas_orcadas=float(apontamento_data.get("horasOrcadas", 0)) if apontamento_data.get("horasOrcadas") else 0
-            )
-            db.add(ordem_servico)
-            db.flush()  # Get the ID
+            raise HTTPException(status_code=400, detail="OS deve existir antes de salvar apontamento. Crie a OS primeiro.")
         else:
             # Se OS existe, atualizar campos específicos se fornecidos
-            if "horasOrcadas" in apontamento_data and apontamento_data.get("horasOrcadas"):
-                ordem_servico.horas_orcadas = float(apontamento_data.get("horasOrcadas", 0))  # type: ignore
+            # Legacy horasOrcadas removed, use supervisor_config logic
+            pass
 
         # Processar data/hora de início
         data_hora_inicio = dt.now()
@@ -145,40 +130,41 @@ async def save_apontamento(
         if supervisor_config and current_user.privilege_level in ['SUPERVISOR', 'ADMIN']:
             # Atualizar etapas da OS se marcadas
             if supervisor_config.get("testes_iniciais"):
-                ordem_servico.testes_iniciais_finalizados = True
-                ordem_servico.data_testes_iniciais_finalizados = dt.now()
-                ordem_servico.id_usuario_testes_iniciais = current_user.id
+                setattr(ordem_servico, 'testes_iniciais_finalizados', True)
+                setattr(ordem_servico, 'data_testes_iniciais_finalizados', dt.now())
+                setattr(ordem_servico, 'id_usuario_testes_iniciais', current_user.id)
                 print(f"[DEBUG] Etapa Inicial finalizada para OS {ordem_servico.os_numero}")
 
             if supervisor_config.get("testes_parciais"):
-                ordem_servico.testes_parciais_finalizados = True
-                ordem_servico.data_testes_parciais_finalizados = dt.now()
-                ordem_servico.id_usuario_testes_parciais = current_user.id
+                setattr(ordem_servico, 'testes_parciais_finalizados', True)
+                setattr(ordem_servico, 'data_testes_parciais_finalizados', dt.now())
+                setattr(ordem_servico, 'id_usuario_testes_parciais', current_user.id)
                 print(f"[DEBUG] Etapa Parcial finalizada para OS {ordem_servico.os_numero}")
 
             if supervisor_config.get("testes_finais"):
-                ordem_servico.testes_finais_finalizados = True
-                ordem_servico.data_testes_finais_finalizados = dt.now()
-                ordem_servico.id_usuario_testes_finais = current_user.id
+                setattr(ordem_servico, 'testes_finais_finalizados', True)
+                setattr(ordem_servico, 'data_testes_finais_finalizados', dt.now())
+                setattr(ordem_servico, 'id_usuario_testes_finais', current_user.id)
                 print(f"[DEBUG] Etapa Final finalizada para OS {ordem_servico.os_numero}")
 
             # Processar horas orçadas por setor
-            horas_orcadas = supervisor_config.get("horas_orcadas")
-            if horas_orcadas and horas_orcadas > 0:
-                setor_usuario = current_user.setor
+            horas_orcadas_val = supervisor_config.get("horas_orcadas")
+            if horas_orcadas_val and float(horas_orcadas_val) > 0:
+                setor_usuario = str(current_user.setor) if current_user.setor is not None else None
                 if setor_usuario:
                     # Obter horas orçadas existentes (JSON) ou criar novo
+                    horas_orcadas_str = ordem_servico.__dict__.get('horas_orcadas')
                     horas_existentes = {}
-                    if ordem_servico.horas_orcadas:
+                    if horas_orcadas_str is not None and str(horas_orcadas_str):
                         try:
-                            horas_existentes = json.loads(ordem_servico.horas_orcadas)
-                        except:
+                            horas_existentes = json.loads(str(horas_orcadas_str))
+                        except (json.JSONDecodeError, TypeError):
                             horas_existentes = {}
 
                     # Atualizar horas do setor atual
-                    horas_existentes[setor_usuario] = float(horas_orcadas)
-                    ordem_servico.horas_orcadas = json.dumps(horas_existentes)
-                    print(f"[DEBUG] Horas orçadas atualizadas para setor {setor_usuario}: {horas_orcadas}h")
+                    horas_existentes[setor_usuario] = float(horas_orcadas_val)
+                    setattr(ordem_servico, 'horas_orcadas', json.dumps(horas_existentes))
+                    print(f"[DEBUG] Horas orçadas atualizadas para setor {setor_usuario}: {horas_orcadas_val}h")
 
         # Save test results if provided with validation
         testes = apontamento_data.get("testes", {})
@@ -296,22 +282,11 @@ async def save_apontamento_with_pendencia(
 
         ordem_servico = db.query(OrdemServico).filter(OrdemServico.os_numero == os_numero).first()
         if not ordem_servico:
-            # Criar OS automaticamente se não existir
-            ordem_servico = OrdemServico(
-                os_numero=os_numero,
-                status_os="AGUARDANDO",
-                prioridade="NORMAL",
-                descricao_maquina=f"OS criada automaticamente via apontamento - {apontamento_data.get('inpCliente', 'Cliente não informado')}",
-                id_setor=current_user.id_setor if hasattr(current_user, 'id_setor') else 1,
-                id_departamento=current_user.id_departamento if hasattr(current_user, 'id_departamento') else 1,
-                criado_por=current_user.id,
-                id_responsavel_registro=current_user.id,
-                data_criacao=dt.now(),
-                # Campos específicos da OS
-                horas_orcadas=float(apontamento_data.get("horasOrcadas", 0)) if apontamento_data.get("horasOrcadas") else 0
-            )
-            db.add(ordem_servico)
-            db.flush()  # Para obter o ID
+            raise HTTPException(status_code=400, detail="OS deve existir antes de salvar apontamento. Crie a OS primeiro.")
+        else:
+            # Se OS existe, atualizar campos específicos se fornecidos
+            # Legacy horasOrcadas removed, use supervisor_config logic
+            pass
 
         # Processar data/hora de início para pendência
         data_hora_inicio = dt.now()
@@ -443,40 +418,41 @@ async def save_apontamento_with_pendencia(
         if supervisor_config and current_user.privilege_level in ['SUPERVISOR', 'ADMIN']:
             # Atualizar etapas da OS se marcadas
             if supervisor_config.get("testes_iniciais"):
-                ordem_servico.testes_iniciais_finalizados = True
-                ordem_servico.data_testes_iniciais_finalizados = dt.now()
-                ordem_servico.id_usuario_testes_iniciais = current_user.id
+                setattr(ordem_servico, 'testes_iniciais_finalizados', True)
+                setattr(ordem_servico, 'data_testes_iniciais_finalizados', dt.now())
+                setattr(ordem_servico, 'id_usuario_testes_iniciais', current_user.id)
                 print(f"[DEBUG] Etapa Inicial finalizada para OS {ordem_servico.os_numero}")
 
             if supervisor_config.get("testes_parciais"):
-                ordem_servico.testes_parciais_finalizados = True
-                ordem_servico.data_testes_parciais_finalizados = dt.now()
-                ordem_servico.id_usuario_testes_parciais = current_user.id
+                setattr(ordem_servico, 'testes_parciais_finalizados', True)
+                setattr(ordem_servico, 'data_testes_parciais_finalizados', dt.now())
+                setattr(ordem_servico, 'id_usuario_testes_parciais', current_user.id)
                 print(f"[DEBUG] Etapa Parcial finalizada para OS {ordem_servico.os_numero}")
 
             if supervisor_config.get("testes_finais"):
-                ordem_servico.testes_finais_finalizados = True
-                ordem_servico.data_testes_finais_finalizados = dt.now()
-                ordem_servico.id_usuario_testes_finais = current_user.id
+                setattr(ordem_servico, 'testes_finais_finalizados', True)
+                setattr(ordem_servico, 'data_testes_finais_finalizados', dt.now())
+                setattr(ordem_servico, 'id_usuario_testes_finais', current_user.id)
                 print(f"[DEBUG] Etapa Final finalizada para OS {ordem_servico.os_numero}")
 
             # Processar horas orçadas por setor
-            horas_orcadas = supervisor_config.get("horas_orcadas")
-            if horas_orcadas and horas_orcadas > 0:
-                setor_usuario = current_user.setor
+            horas_orcadas_val = supervisor_config.get("horas_orcadas")
+            if horas_orcadas_val and float(horas_orcadas_val) > 0:
+                setor_usuario = str(current_user.setor) if current_user.setor is not None else None
                 if setor_usuario:
                     # Obter horas orçadas existentes (JSON) ou criar novo
+                    horas_orcadas_str = ordem_servico.__dict__.get('horas_orcadas')
                     horas_existentes = {}
-                    if ordem_servico.horas_orcadas:
+                    if horas_orcadas_str is not None and str(horas_orcadas_str):
                         try:
-                            horas_existentes = json.loads(ordem_servico.horas_orcadas)
-                        except:
+                            horas_existentes = json.loads(str(horas_orcadas_str))
+                        except (json.JSONDecodeError, TypeError):
                             horas_existentes = {}
 
                     # Atualizar horas do setor atual
-                    horas_existentes[setor_usuario] = float(horas_orcadas)
-                    ordem_servico.horas_orcadas = json.dumps(horas_existentes)
-                    print(f"[DEBUG] Horas orçadas atualizadas para setor {setor_usuario}: {horas_orcadas}h")
+                    horas_existentes[setor_usuario] = float(horas_orcadas_val)
+                    setattr(ordem_servico, 'horas_orcadas', json.dumps(horas_existentes))
+                    print(f"[DEBUG] Horas orçadas atualizadas para setor {setor_usuario}: {horas_orcadas_val}h")
 
         # Create Pendencia
         pendencia_descricao = apontamento_data.get("pendencia_descricao", "Pendência criada a partir do apontamento")
@@ -1274,8 +1250,8 @@ async def get_dados_completos_os(
 
             apontamentos_data.append({
                 "id": apt.id,
-                "data_hora_inicio": apt.data_hora_inicio.isoformat() if apt.data_hora_inicio else None,
-                "data_hora_fim": apt.data_hora_fim.isoformat() if apt.data_hora_fim else None,
+                "data_hora_inicio": apt.data_hora_inicio.isoformat() if apt.data_hora_inicio is not None else None,
+                "data_hora_fim": apt.data_hora_fim.isoformat() if apt.data_hora_fim is not None else None,
                 "status": apt.status_apontamento,
                 "tipo_maquina": getattr(apt, 'tipo_maquina', 'N/A'),
                 "tipo_atividade": getattr(apt, 'tipo_atividade', 'N/A'),
@@ -1296,15 +1272,15 @@ async def get_dados_completos_os(
             {
                 "id": prog.id,
                 "descricao_atividade": getattr(prog, 'descricao_atividade', 'N/A'),
-                "data_inicio": prog.inicio_previsto.isoformat() if prog.inicio_previsto else None,
-                "data_fim": prog.fim_previsto.isoformat() if prog.fim_previsto else None,
+                "data_inicio": prog.inicio_previsto.isoformat() if prog.inicio_previsto is not None else None,
+                "data_fim": prog.fim_previsto.isoformat() if prog.fim_previsto is not None else None,
                 "status": prog.status,
                 "prioridade": getattr(prog, 'prioridade', 'N/A'),
                 "setor": getattr(prog.setor_obj, 'nome', 'N/A') if hasattr(prog, 'setor_obj') and prog.setor_obj else 'N/A',
                 "observacoes": prog.observacoes,
                 "criado_por_id": prog.criado_por_id,
                 "responsavel_id": prog.responsavel_id,
-                "data_criacao": prog.created_at.isoformat() if prog.created_at else None
+                "data_criacao": prog.created_at.isoformat() if prog.created_at is not None else None
             }
             for prog in programacoes
         ]
@@ -1350,21 +1326,48 @@ async def get_dados_completos_os(
             if teste["resultado"] == "INCONCLUSIVO"
         )
 
+        numero_os = os.os_numero
+        status_os = os.status_os
+        descricao_maquina = os.descricao_maquina
+        prioridade = os.prioridade
+        data_criacao = os.data_criacao
+        data_criacao_str = data_criacao.isoformat() if data_criacao is not None else None
+        observacoes_gerais = os.observacoes_gerais
+        horas_orcadas = os.horas_orcadas
+        testes_iniciais_finalizados = os.testes_iniciais_finalizados
+        testes_parciais_finalizados = os.testes_parciais_finalizados
+        testes_finais_finalizados = os.testes_finais_finalizados
+        data_testes_iniciais_finalizados = os.data_testes_iniciais_finalizados
+        if data_testes_iniciais_finalizados is not None:
+            data_testes_iniciais_str = data_testes_iniciais_finalizados.isoformat()
+        else:
+            data_testes_iniciais_str = None
+        data_testes_parciais_finalizados = os.data_testes_parciais_finalizados
+        if data_testes_parciais_finalizados is not None:
+            data_testes_parciais_str = data_testes_parciais_finalizados.isoformat()
+        else:
+            data_testes_parciais_str = None
+        data_testes_finais_finalizados = os.data_testes_finais_finalizados
+        if data_testes_finais_finalizados is not None:
+            data_testes_finais_str = data_testes_finais_finalizados.isoformat()
+        else:
+            data_testes_finais_str = None
+
         return {
             "os_info": {
-                "numero": os.os_numero,
-                "status": os.status_os,
-                "descricao_maquina": os.descricao_maquina,
-                "prioridade": os.prioridade,
-                "data_criacao": os.data_criacao.isoformat() if os.data_criacao else None,
-                "observacoes_gerais": os.observacoes_gerais,
-                "horas_orcadas": os.horas_orcadas,
-                "testes_iniciais_finalizados": os.testes_iniciais_finalizados,
-                "testes_parciais_finalizados": os.testes_parciais_finalizados,
-                "testes_finais_finalizados": os.testes_finais_finalizados,
-                "data_testes_iniciais_finalizados": os.data_testes_iniciais_finalizados.isoformat() if os.data_testes_iniciais_finalizados else None,
-                "data_testes_parciais_finalizados": os.data_testes_parciais_finalizados.isoformat() if os.data_testes_parciais_finalizados else None,
-                "data_testes_finais_finalizados": os.data_testes_finais_finalizados.isoformat() if os.data_testes_finais_finalizados else None
+                "numero": numero_os,
+                "status": status_os,
+                "descricao_maquina": descricao_maquina,
+                "prioridade": prioridade,
+                "data_criacao": data_criacao_str,
+                "observacoes_gerais": observacoes_gerais,
+                "horas_orcadas": horas_orcadas,
+                "testes_iniciais_finalizados": testes_iniciais_finalizados,
+                "testes_parciais_finalizados": testes_parciais_finalizados,
+                "testes_finais_finalizados": testes_finais_finalizados,
+                "data_testes_iniciais_finalizados": data_testes_iniciais_str,
+                "data_testes_parciais_finalizados": data_testes_parciais_str,
+                "data_testes_finais_finalizados": data_testes_finais_str
             },
             "apontamentos": apontamentos_data,
             "programacoes": programacoes_data,

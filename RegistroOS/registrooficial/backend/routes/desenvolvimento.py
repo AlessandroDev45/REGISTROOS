@@ -1783,7 +1783,6 @@ async def get_detalhes_os_formulario(
     logger.info(f"🎯 ROTA CORRETA CHAMADA - numero_os: {numero_os}")
     logger.info(f"🎯 FUNÇÃO get_detalhes_os_formulario CHAMADA! numero_os={numero_os}")
 
-    from sqlalchemy import text
     import ast # Importar ast para literal_eval
 
     logger.info(f"🚀 INICIANDO BUSCA DA OS: {numero_os}")
@@ -1828,8 +1827,8 @@ async def get_detalhes_os_formulario(
                         logger.info(f"✅ Equipamento encontrado: {equipamento_nome}")
                 except Exception as e:
                     logger.warning(f"Erro ao buscar equipamento: {e}")
-            elif len(result) > 37 and result[37]:  # descricao_maquina como fallback (posição 37)
-                equipamento_nome = result[37]
+            elif len(result) > 36 and result[36]:  # descricao_maquina como fallback (posição 36)
+                equipamento_nome = result[36]
                 logger.info(f"✅ Equipamento via fallback: {equipamento_nome}")
 
             # Buscar tipo de máquina usando relacionamento FK conforme hierarquia
@@ -1856,7 +1855,6 @@ async def get_detalhes_os_formulario(
                 "tipo_maquina_id": result[15] if len(result) > 15 and result[15] else None,  # id_tipo_maquina está na posição 15
                 "fonte": "banco"
             }
-
     except Exception as db_error:
         logger.error(f"❌ Erro na consulta do banco para OS {numero_os}: {db_error}")
 
@@ -1872,9 +1870,7 @@ async def get_detalhes_os_formulario(
         scrap_path = r"C:\Users\Alessandro\OneDrive\Desktop\RegistroOS\RegistroOS\registrooficial\backend\scripts\scrape_os_data.py"
         
         # Usar sys.executable para garantir que o mesmo interpretador Python seja usado
-        # Ou especificar o caminho completo para o interpretador Python do seu venv
         python_executable = sys.executable 
-        # python_executable = r"C:\path\to\your\venv\Scripts\python.exe" # Exemplo de caminho absoluto
 
         logger.info(f"🔍 Caminho do script: {scrap_path}")
         logger.info(f"🔍 Script existe: {os.path.exists(scrap_path)}")
@@ -1893,11 +1889,11 @@ async def get_detalhes_os_formulario(
         env['PYTHONIOENCODING'] = 'utf-8'
 
         result_scraping = subprocess.run(
-            [python_executable, scrap_path, numero_os], # Usar python_executable
+            [python_executable, scrap_path, numero_os],
             capture_output=True,
-            text=True, # ALTERADO: Definido como True para obter stdout/stderr como strings
-            encoding='utf-8',  # Forçar UTF-8 para suportar emojis
-            env=env,  # Usar ambiente com UTF-8
+            text=True,
+            encoding='utf-8',
+            env=env,
             timeout=60
         )
         logger.info(f"📊 Código de retorno: {result_scraping.returncode}")
@@ -1905,7 +1901,7 @@ async def get_detalhes_os_formulario(
         logger.info(f"❌ Stderr: {result_scraping.stderr}")
         
         if result_scraping.returncode == 0:
-            stdout_text = result_scraping.stdout # Já é string por causa de text=True
+            stdout_text = result_scraping.stdout
 
             logger.info(f"✅ Scraping executado com sucesso para OS {numero_os}")
             logger.info(f"📄 Saída do scraping: {stdout_text}")
@@ -1936,23 +1932,23 @@ async def get_detalhes_os_formulario(
 
                         # 1. CRIAR/BUSCAR CLIENTE
                         cliente_id = None
-                        cliente_nome = os_data.get('CLIENTE', os_data.get('NOME CLIENTE', ''))
+                        cliente_nome_scraped = os_data.get('CLIENTE', os_data.get('NOME CLIENTE', ''))
                         cliente_cnpj = os_data.get('CNPJ', '')
 
-                        if cliente_nome and cliente_nome.strip():
+                        if cliente_nome_scraped and cliente_nome_scraped.strip():
                             # Buscar cliente existente
                             cliente_existente = db.query(Cliente).filter(
-                                Cliente.razao_social.ilike(f"%{cliente_nome.strip()}%")
+                                Cliente.razao_social.ilike(f"%{cliente_nome_scraped.strip()}%")
                             ).first()
 
                             if cliente_existente:
                                 cliente_id = cliente_existente.id
-                                logger.info(f"✅ Cliente existente encontrado: {cliente_nome} (ID: {cliente_id})")
+                                logger.info(f"✅ Cliente existente encontrado: {cliente_nome_scraped} (ID: {cliente_id})")
                             else:
                                 # Criar novo cliente
                                 novo_cliente = Cliente(
-                                    razao_social=cliente_nome.strip(),
-                                    nome_fantasia=cliente_nome.strip(),
+                                    razao_social=cliente_nome_scraped.strip(),
+                                    nome_fantasia=cliente_nome_scraped.strip(),
                                     cnpj_cpf=cliente_cnpj.strip() if cliente_cnpj else None,
                                     contato_principal="Contato via scraping",
                                     telefone_contato="",
@@ -1964,7 +1960,7 @@ async def get_detalhes_os_formulario(
                                 db.add(novo_cliente)
                                 db.flush()  # Para obter o ID
                                 cliente_id = novo_cliente.id
-                                logger.info(f"✅ Novo cliente criado: {cliente_nome} (ID: {cliente_id})")
+                                logger.info(f"✅ Novo cliente criado: {cliente_nome_scraped} (ID: {cliente_id})")
 
                         # 2. CRIAR/BUSCAR EQUIPAMENTO
                         equipamento_id = None
@@ -2010,7 +2006,7 @@ async def get_detalhes_os_formulario(
                         # Remover zeros à esquerda do número da OS
                         os_numero_limpo = os_data.get('OS', numero_os)
                         if isinstance(os_numero_limpo, str) and os_numero_limpo.startswith('000'):
-                            os_numero_limpo = os_numero_limpo.lstrip('0') or '0'  # Remove zeros à esquerda, mas mantém pelo menos um zero se for só zeros
+                            os_numero_limpo = os_numero_limpo.lstrip('0') or '0'  # Remove zeros à esquerda
 
                         db.execute(insert_sql, {
                             "os_numero": os_numero_limpo,
@@ -2019,7 +2015,7 @@ async def get_detalhes_os_formulario(
                             "status": os_data.get('STATUS DA OS', 'COLETADA VIA SCRAPING'),
                             "descricao": equipamento_desc[:200] if equipamento_desc else f"Equipamento da OS {numero_os}",
                             "prioridade": "MEDIA",
-                            "observacoes": f"OS criada via scraping - Cliente: {cliente_nome} - CNPJ: {cliente_cnpj}"
+                            "observacoes": f"OS criada via scraping - Cliente: {cliente_nome_scraped} - CNPJ: {cliente_cnpj}"
                         })
                         
                         db.commit()
@@ -2031,9 +2027,8 @@ async def get_detalhes_os_formulario(
 
             except Exception as parse_error:
                 logger.error(f"❌ Erro ao processar dados do scraping para OS {numero_os}: {parse_error}. Saída bruta: {stdout_text}")
-                # Não relança o erro, tenta buscar novamente no banco mesmo com erro no parsing inicial
 
-            # Tentar buscar novamente no banco após o scraping (mesmo que haja erro no parsing inicial)
+            # Tentar buscar novamente no banco após o scraping
             result_after_scraping = db.execute(sql, {
                 "numero_os": numero_os,
                 "numero_os_padded": f"000{numero_os}".zfill(9)
@@ -2042,64 +2037,50 @@ async def get_detalhes_os_formulario(
             if result_after_scraping:
                 logger.info(f"✅ OS encontrada no banco após scraping: {numero_os}")
 
-                # Processar os dados da OS encontrada após scraping (mesmo código de cima)
-                cliente_nome = None
-                equipamento_nome = ""
-                tipo_maquina_nome = None
+                # Processar os dados da OS encontrada após scraping
+                cliente_nome_after = None
+                equipamento_nome_after = ""
+                tipo_maquina_nome_after = None
 
-                # Buscar cliente usando relacionamento FK conforme hierarquia
-                if len(result_after_scraping) > 32 and result_after_scraping[32]:
+                # Buscar cliente
+                if len(result_after_scraping) > 31 and result_after_scraping[31]:
                     try:
-                        cliente_obj = db.query(Cliente).filter(Cliente.id == result_after_scraping[32]).first()
+                        cliente_obj = db.query(Cliente).filter(Cliente.id == result_after_scraping[31]).first()
                         if cliente_obj:
-                            cliente_nome = cliente_obj.razao_social  # Campo correto conforme hierarquia
+                            cliente_nome_after = cliente_obj.razao_social
                     except Exception as e:
                         logger.warning(f"Erro ao buscar cliente após scraping: {e}")
 
-                # Buscar equipamento usando relacionamento FK conforme hierarquia
-                if len(result_after_scraping) > 33 and result_after_scraping[33] is not None:
+                # Buscar equipamento
+                if len(result_after_scraping) > 32 and result_after_scraping[32] is not None:
                     try:
-                        equipamento_obj = db.query(Equipamento).filter(Equipamento.id == result_after_scraping[33]).first()
+                        equipamento_obj = db.query(Equipamento).filter(Equipamento.id == result_after_scraping[32]).first()
                         if equipamento_obj:
-                            equipamento_nome = equipamento_obj.descricao  # Campo correto conforme hierarquia
+                            equipamento_nome_after = equipamento_obj.descricao
                     except Exception as e:
                         logger.warning(f"Erro ao buscar equipamento após scraping: {e}")
-                elif len(result_after_scraping) > 38 and result_after_scraping[38] is not None:  # descricao_maquina como fallback
-                    equipamento_nome = result_after_scraping[38]
+                elif len(result_after_scraping) > 36 and result_after_scraping[36] is not None:
+                    equipamento_nome_after = result_after_scraping[36]
 
-                # Buscar tipo de máquina usando relacionamento FK conforme hierarquia
-                if len(result_after_scraping) > 16 and result_after_scraping[16]: # id_tipo_maquina
+                # Buscar tipo de máquina
+                if len(result_after_scraping) > 15 and result_after_scraping[15]:
                     try:
-                        tipo_maquina_obj = db.query(TipoMaquina).filter(TipoMaquina.id == result_after_scraping[16]).first()
+                        tipo_maquina_obj = db.query(TipoMaquina).filter(TipoMaquina.id == result_after_scraping[15]).first()
                         if tipo_maquina_obj:
-                            tipo_maquina_nome = tipo_maquina_obj.nome_tipo  # Campo correto conforme hierarquia
+                            tipo_maquina_nome_after = tipo_maquina_obj.nome_tipo
                     except Exception as e:
                         logger.warning(f"Erro ao buscar tipo de máquina após scraping: {e}")
                 
-                # Verificar se está bloqueada
-                status_finalizados = [
-                    'RECUSADA - CONFERIDA',
-                    'TERMINADA - CONFERIDA',
-                    'TERMINADA - EXPEDIDA',
-                    'TERMINADA - ARQUIVADA',
-                    'OS CANCELADA'
-                ]
-                status_atual = result_after_scraping[2] or ''
-                # bloqueada = status_atual in status_finalizados # Descomentar se for necessário
-                
-                # if bloqueada: # Descomentar se for necessário
-                #     logger.info(f"🚫 OS com status finalizado: {status_atual} - será bloqueada para apontamentos")
-
                 return {
                     "id": result_after_scraping[0],
                     "numero_os": result_after_scraping[1],
                     "status": result_after_scraping[2],
                     "status_os": result_after_scraping[2],
-                    "cliente": cliente_nome,
-                    "equipamento": equipamento_nome,
-                    "tipo_maquina": tipo_maquina_nome,
-                    "horas_orcadas": float(result_after_scraping[21] or 0) if len(result_after_scraping) > 21 else 0, # horas_orcadas está na posição 21
-                    "testes_exclusivo_os": bool(result_after_scraping[31] or False) if len(result_after_scraping) > 31 else False, # testes_exclusivo_os está na posição 31
+                    "cliente": cliente_nome_after,
+                    "equipamento": equipamento_nome_after,
+                    "tipo_maquina": tipo_maquina_nome_after,
+                    "horas_orcadas": float(result_after_scraping[20] or 0) if len(result_after_scraping) > 20 else 0,
+                    "testes_exclusivo_os": bool(result_after_scraping[30] or False) if len(result_after_scraping) > 30 else False,
                     "fonte": "scraping_e_banco"
                 }
             else:

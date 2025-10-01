@@ -37,7 +37,7 @@ class OrdemServico(Base):
     horas_previstas = Column(DECIMAL)
     horas_reais = Column(DECIMAL)
     data_programacao = Column(DateTime)
-    horas_orcadas = Column(DECIMAL(10,2), default=0)
+    horas_orcadas = Column(Text, default='{}')
     testes_iniciais_finalizados = Column(Boolean, default=0)
     testes_parciais_finalizados = Column(Boolean, default=0)
     testes_finais_finalizados = Column(Boolean, default=0)
