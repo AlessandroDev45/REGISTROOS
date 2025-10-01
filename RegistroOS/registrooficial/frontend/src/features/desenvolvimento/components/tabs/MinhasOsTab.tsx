@@ -4,6 +4,10 @@ import { useSetor } from '../../../../contexts/SetorContext';
 import { useAuth } from '../../../../contexts/AuthContext';
 import api from '../../../../services/api';
 import { getStatusColorClass } from '../../../../utils/statusColors';
+import FullCalendar from '@fullcalendar/react';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import timeGridPlugin from '@fullcalendar/timegrid';
+import interactionPlugin from '@fullcalendar/interaction';
 
 interface Apontamento {
     id: number;
@@ -68,6 +72,10 @@ const MinhasOsTab: React.FC<MinhasOsTabProps> = ({ onIniciarExecucao }) => {
     // Estados para programações
     const [programacoes, setProgramacoes] = useState<Programacao[]>([]);
     const [loadingProgramacoes, setLoadingProgramacoes] = useState(false);
+    const [selectedProgramacao, setSelectedProgramacao] = useState<Programacao | null>(null);
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const [calendarView, setCalendarView] = useState('dayGridMonth'); // 'dayGridMonth' or 'timeGridWeek'
+    const [viewType, setViewType] = useState<'table' | 'calendar'>('table');
 
     useEffect(() => {
         const fetchApontamentos = async () => {
@@ -416,16 +424,13 @@ const MinhasOsTab: React.FC<MinhasOsTabProps> = ({ onIniciarExecucao }) => {
                         {user && ['SUPERVISOR', 'ADMIN'].includes(user.privilege_level) && (
                             <div>
                                 <label className="text-xs font-medium text-gray-600 mb-1 block">Status</label>
-                                <select
+                                <input
+                                    type="text"
                                     value={filtroStatus}
                                     onChange={(e) => setFiltroStatus(e.target.value)}
+                                    placeholder="Digite status para filtrar"
                                     className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-slate-500 bg-white"
-                                >
-                                    <option value="">Todos</option>
-                                    <option value="EM_ANDAMENTO">Em Andamento</option>
-                                    <option value="FINALIZADO">Finalizado</option>
-                                    <option value="PAUSADO">Pausado</option>
-                                </select>
+                                />
                             </div>
                         )}
                     </div>
@@ -624,6 +629,33 @@ const MinhasOsTab: React.FC<MinhasOsTabProps> = ({ onIniciarExecucao }) => {
                 {/* Seção de Programações */}
                 {activeInternalTab === 'programacoes' && (
                 <div className="px-4 py-3">
+                    <div className="mb-4 flex justify-between items-center">
+                        <h3 className="text-sm font-semibold text-gray-900">Programações</h3>
+                        <div className="flex space-x-2">
+                            <button
+                                onClick={() => setViewType(viewType === 'table' ? 'calendar' : 'table')}
+                                className={`px-3 py-1 text-xs rounded text-white ${viewType === 'calendar' ? 'bg-blue-600' : 'bg-gray-300'}`}
+                            >
+                                {viewType === 'table' ? 'Calendário' : 'Lista'}
+                            </button>
+                            {viewType === 'calendar' && (
+                                <>
+                                    <button
+                                        onClick={() => setCalendarView(calendarView === 'dayGridMonth' ? 'timeGridWeek' : 'dayGridMonth')}
+                                        className="px-3 py-1 text-xs bg-gray-200 hover:bg-gray-300"
+                                    >
+                                        {calendarView === 'dayGridMonth' ? 'Semana' : 'Mês'}
+                                    </button>
+                                    <button
+                                        onClick={() => setCurrentDate(new Date())}
+                                        className="px-3 py-1 text-xs bg-blue-600 text-white rounded"
+                                    >
+                                        Hoje
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </div>
                     {loadingProgramacoes ? (
                         <div className="flex justify-center items-center h-32">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-600"></div>
@@ -638,7 +670,7 @@ const MinhasOsTab: React.FC<MinhasOsTabProps> = ({ onIniciarExecucao }) => {
                                 Sem programações atribuídas
                             </p>
                         </div>
-                    ) : (
+                    ) : viewType === 'table' ? (
                         <div className="space-y-2">
                             {programacoes.map((programacao) => (
                                 <div
@@ -654,7 +686,7 @@ const MinhasOsTab: React.FC<MinhasOsTabProps> = ({ onIniciarExecucao }) => {
                                                 {programacao.cliente_nome} - {programacao.equipamento_descricao}
                                             </p>
                                         </div>
-                                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(programacao.status)}`}>
+                                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColorClass(programacao.status)}`}>
                                             {getStatusIcon(programacao.status)} {programacao.status.replace('_', ' ')}
                                         </span>
                                     </div>
@@ -699,6 +731,94 @@ const MinhasOsTab: React.FC<MinhasOsTabProps> = ({ onIniciarExecucao }) => {
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                    ) : (
+                        <FullCalendar
+                            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+                            initialView={calendarView}
+                            events={programacoes.map(prog => ({
+                                id: prog.id.toString(),
+                                title: `OS ${prog.os_numero}`,
+                                start: prog.inicio_previsto,
+                                end: prog.fim_previsto,
+                                backgroundColor: getStatusColorClass(prog.status),
+                                borderColor: getStatusColorClass(prog.status),
+                                allDay: false,
+                                extendedProps: {
+                                    ...prog,
+                                    onClick: (info: any) => {
+                                        const clickedProgramacao = programacoes.find(p => p.id === parseInt(info.event.id));
+                                        if (clickedProgramacao) setSelectedProgramacao(clickedProgramacao);
+                                    }
+                                }
+                            }))}
+                            selectable={false}
+                            selectMirror={true}
+                            dayMaxEvents={true}
+                            weekends={true}
+                            editable={false}
+                            dateClick={(info: any) => setCurrentDate(info.date)}
+                            eventClick={(info: any) => {
+                                const clickedProgramacao = programacoes.find(p => p.id === parseInt(info.event.id));
+                                if (clickedProgramacao) {
+                                    const statusIcon = getStatusIcon(clickedProgramacao.status);
+                                    info.el.innerHTML = `
+                                        <div style="padding: 8px;">
+                                            <div><strong>${statusIcon} ${clickedProgramacao.status}</strong></div>
+                                            <div><strong>OS:</strong> ${clickedProgramacao.os_numero}</div>
+                                            <div><strong>Cliente:</strong> ${clickedProgramacao.cliente_nome}</div>
+                                            <div><strong>Equipamento:</strong> ${clickedProgramacao.equipamento_descricao}</div>
+                                            <div><strong>Período:</strong> ${new Date(clickedProgramacao.inicio_previsto).toLocaleString()} - ${new Date(clickedProgramacao.fim_previsto).toLocaleString()}</div>
+                                            ${clickedProgramacao.observacoes ? `<div><strong>Obs:</strong> ${clickedProgramacao.observacoes}</div>` : ''}
+                                        </div>
+                                    `;
+                                    setSelectedProgramacao(clickedProgramacao);
+                                }
+                            }}
+                            headerToolbar={{
+                                left: 'prev,next today',
+                                center: 'title',
+                                right: 'dayGridMonth,timeGridWeek'
+                            }}
+                            initialDate={currentDate}
+                            navLinks={true}
+                            dayPopoverFormat={{ year: 'numeric', month: 'short', day: 'numeric' }}
+                            eventTimeFormat={{
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false
+                            }}
+                            slotMinTime="08:00:00"
+                            slotMaxTime="18:00:00"
+                            buttonText={{
+                                time: 'Dia',
+                                dayGridMonth: 'Mês',
+                                weekGridMonth: 'Semana'
+                            }}
+                        />
+                    )}
+                    {selectedProgramacao && (
+                        <div className="mt-4 p-4 bg-white rounded border">
+                            <h4 className="text-sm font-semibold mb-2">Programação Selecionada</h4>
+                            <div className="text-xs">
+                                <p><strong>OS:</strong> {selectedProgramacao.os_numero}</p>
+                                <p><strong>Status:</strong> {selectedProgramacao.status}</p>
+                                <p><strong>Início:</strong> {new Date(selectedProgramacao.inicio_previsto).toLocaleString()}</p>
+                                <p><strong>Fim:</strong> {new Date(selectedProgramacao.fim_previsto).toLocaleString()}</p>
+                                <button
+                                    onClick={() => iniciarExecucao(selectedProgramacao!)}
+                                    className="mt-2 px-3 py-1 bg-green-600 text-white text-xs rounded"
+                                >
+                                    Iniciar Execução
+                                </button>
+                                <button
+                                    onClick={() => setSelectedProgramacao(null)}
+                                    className="ml-2 px-3 py-1 bg-gray-300 text-gray-700 text-xs rounded"
+                                >
+                                    Fechar
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>

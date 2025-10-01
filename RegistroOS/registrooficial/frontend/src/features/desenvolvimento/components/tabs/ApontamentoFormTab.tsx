@@ -1740,19 +1740,13 @@ const ApontamentoFormTab: React.FC<ApontamentoFormTabProps> = ({
                                             </>
                                         ) : (
                                             // Select normal quando OS não foi encontrada ou não tem status
-                                            <select
+                                            <input
+                                                type="text"
                                                 value={formData.statusOS || ''}
                                                 onChange={(e) => setFormData({ ...formData, statusOS: e.target.value })}
                                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            >
-                                                <option value="">Selecione o status</option>
-                                                <option value="ABERTA">Aberta</option>
-                                                <option value="EM_ANDAMENTO">Em Andamento</option>
-                                                <option value="AGUARDANDO_PECA">Aguardando Peça</option>
-                                                <option value="AGUARDANDO_CLIENTE">Aguardando Cliente</option>
-                                                <option value="FINALIZADA">Finalizada</option>
-                                                <option value="CANCELADA">Cancelada</option>
-                                            </select>
+                                                placeholder="Digite o status"
+                                            />
                                         )}
                                     </div>
                                     <div>
