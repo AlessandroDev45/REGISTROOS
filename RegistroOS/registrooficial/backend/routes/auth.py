@@ -150,6 +150,19 @@ async def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
     Endpoint para cadastro de novos usuários.
     Cria um novo usuário com is_approved=False e privilege_level='USER'.
     """
+    # Buscar departamento pelo nome
+    departamento_obj = db.query(Departamento).filter(Departamento.nome_tipo == user_data.departamento).first()
+    if not departamento_obj:
+        raise HTTPException(status_code=400, detail="Departamento inválido.")
+
+    # Buscar setor pelo nome e id_departamento
+    setor_obj = db.query(Setor).filter(
+        Setor.nome == user_data.setor_de_trabalho,
+        Setor.id_departamento == departamento_obj.id
+    ).first()
+    if not setor_obj:
+        raise HTTPException(status_code=400, detail="Setor de trabalho inválido para o departamento selecionado.")
+
     # Verificar se email já existe
     db_user_email = db.query(Usuario).filter(Usuario.email == user_data.email).first()
     if db_user_email:
@@ -170,14 +183,17 @@ async def register_user(user_data: UserRegister, db: Session = Depends(get_db)):
         "email": user_data.email,
         "senha_hash": hashed_password,
         "matricula": user_data.matricula,
-        "id_setor": 1,  # Padrão - ajustar conforme necessário
-        "id_departamento": 1,  # Padrão - ajustar conforme necessário
+        "id_setor": setor_obj.id,
+        "id_departamento": setor_obj.id_departamento,
+        "setor": setor_obj.nome,
+        "departamento": departamento_obj.nome_tipo,
         "cargo": user_data.cargo,
         "trabalha_producao": user_data.trabalha_producao,
         "privilege_level": "USER",  # Padrão
         "is_approved": False,       # Precisa de aprovação
         "data_criacao": datetime.datetime.now(),
-        "data_ultima_atualizacao": datetime.datetime.now()
+        "data_ultima_atualizacao": datetime.datetime.now(),
+        "primeiro_login": True
     }
 
     try:

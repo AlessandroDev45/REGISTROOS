@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from typing import List
 import datetime
@@ -103,14 +104,47 @@ async def get_pending_approval_users(current_user: Usuario = Depends(get_current
         if current_user.privilege_level not in ["ADMIN", "SUPERVISOR", "GESTAO", "PCP"]:
             raise HTTPException(status_code=403, detail="Acesso negado")
 
-        # Query base para usuários pendentes
-        query = db.query(Usuario).filter(Usuario.is_approved == False)
+        # Query base para usuários pendentes com JOIN para setor
+        from app.database_models import Setor
+        query = db.query(
+            Usuario,
+            Setor.nome.label('setor_name')
+        ).outerjoin(
+            Setor, Usuario.id_setor == Setor.id
+        ).filter(Usuario.is_approved == False)
 
-        # Se for supervisor, filtrar apenas usuários do mesmo setor
+        # Se for supervisor, filtrar apenas usuários do mesmo setor OU sem setor atribuído
         if current_user.privilege_level == "SUPERVISOR":
-            query = query.filter(Usuario.id_setor == current_user.id_setor)
+            query = query.filter(
+                or_(
+                    Usuario.id_setor == current_user.id_setor,
+                    Usuario.id_setor.is_(None)
+                )
+            )
 
-        pending_users = query.all()
+        results = query.all()
+
+        # Processar resultados para incluir setor
+        pending_users = []
+        for usuario, setor_name in results:
+            user_data = UsuarioResponse(
+                id=usuario.id,
+                nome_completo=usuario.nome_completo,
+                email=usuario.email,
+                matricula=usuario.matricula,
+                cargo=usuario.cargo,
+                privilege_level=usuario.privilege_level,
+                is_approved=usuario.is_approved,
+                trabalha_producao=usuario.trabalha_producao,
+                data_criacao=usuario.data_criacao,
+                id_setor=usuario.id_setor,
+                id_departamento=usuario.id_departamento
+            )
+            # Adicionar setor como string para compatibilidade com frontend
+            user_dict = user_data.model_dump()
+            user_dict['setor'] = setor_name or 'Não definido'
+            pending_users.append(user_dict)
+
         return pending_users
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar usuários pendentes: {str(e)}")
@@ -147,11 +181,11 @@ async def approve_user(
 
     # Busca o usuário a ser aprovado
     user_to_approve = db.query(Usuario).filter(Usuario.id == user_id).first()
-    if not user_to_approve:
+    if user_to_approve is None:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
 
     # Verifica se o usuário já está aprovado
-    if user_to_approve.is_approved is True:
+    if user_to_approve.is_approved == True:  # type: ignore
         raise HTTPException(status_code=400, detail="Usuário já está aprovado")
 
     # Se for supervisor, verificar se o usuário a ser aprovado é do mesmo setor
@@ -220,11 +254,11 @@ async def reject_user(
 
     # Busca o usuário a ser reprovado
     user_to_reject = db.query(Usuario).filter(Usuario.id == user_id).first()
-    if not user_to_reject:
+    if user_to_reject is None:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
 
     # Verifica se o usuário já foi aprovado
-    if user_to_reject.is_approved is True:
+    if user_to_reject.is_approved == True:  # type: ignore
         raise HTTPException(status_code=400, detail="Usuário já está aprovado, não pode ser reprovado.")
 
     # Se for supervisor, verificar se o usuário a ser rejeitado é do mesmo setor
@@ -270,7 +304,7 @@ async def create_user(
 
     # Verificar se email já existe
     db_user_email = db.query(Usuario).filter(Usuario.email == request.email).first()
-    if db_user_email:
+    if db_user_email is not None:
         raise HTTPException(status_code=400, detail="Email já está em uso.")
 
     # Hash da senha
