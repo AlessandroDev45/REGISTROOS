@@ -18,6 +18,7 @@ import CausaRetrabalhoList from './CausaRetrabalhoList';
 import DescricaoAtividadeForm from './DescricaoAtividadeForm';
 import DepartamentoForm from './DepartamentoForm';
 import HierarchicalSectorViewer from './HierarchicalSectorViewer';
+import AprovacaoColaboradoresTab from '../tabs/AprovacaoColaboradoresTab';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import {
@@ -132,7 +133,7 @@ interface DescricaoAtividadeData {
     ativo: boolean;
 }
 
-type ConfigTabKey = 'centro_custo' | 'setores' | 'tipos_maquina' | 'tipos_testes' | 'atividades' | 'descricao_atividades' | 'falhas' | 'causas_retrabalho' | 'hierarchy';
+type ConfigTabKey = 'centro_custo' | 'setores' | 'tipos_maquina' | 'tipos_testes' | 'atividades' | 'descricao_atividades' | 'falhas' | 'causas_retrabalho' | 'hierarchy' | 'aprovacao_colaboradores';
 
 interface AdminConfigContentProps {
     // Props para comunicação com o componente pai (administrador.tsx)
@@ -311,8 +312,8 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
 
     // Componente de filtros
     const renderFilters = () => {
-        // Mostrar filtros para todas as abas exceto hierarchy
-        const tabsWithoutFilters = ['hierarchy'];
+        // Mostrar filtros para todas as abas exceto hierarchy e aprovacao_colaboradores
+        const tabsWithoutFilters = ['hierarchy', 'aprovacao_colaboradores'];
 
         if (tabsWithoutFilters.includes(activeTab)) {
             return null;
@@ -602,6 +603,14 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
                     console.error('❌ Erro ao renderizar HierarchicalSectorViewer:', error);
                     return <div className="p-4 text-red-600">Erro ao carregar Estrutura Hierárquica: {(error as Error).message}</div>;
                 }
+            case 'aprovacao_colaboradores':
+                console.log('👥 Renderizando AprovacaoColaboradoresTab');
+                try {
+                    return <AprovacaoColaboradoresTab />;
+                } catch (error) {
+                    console.error('❌ Erro ao renderizar AprovacaoColaboradoresTab:', error);
+                    return <div className="p-4 text-red-600">Erro ao carregar Aprovação de Colaboradores: {(error as Error).message}</div>;
+                }
 
             default:
                 return null;
@@ -784,6 +793,15 @@ const AdminConfigContent: React.FC<AdminConfigContentProps> = ({
                             }`}
                     >
                         🌳 Estrutura Hierárquica
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('aprovacao_colaboradores')}
+                        className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${activeTab === 'aprovacao_colaboradores'
+                            ? 'border-green-500 text-green-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                            }`}
+                    >
+                        👥 Aprovação de Colaboradores
                     </button>
                 </nav>
             </div>

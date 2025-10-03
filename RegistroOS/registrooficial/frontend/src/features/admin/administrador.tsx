@@ -114,13 +114,29 @@ const Administrador: React.FC = () => {
                console.log('📋 Buscando usuários pendentes...');
                const pendingResponse = await api.get('/users/pending-approval');
                console.log('✅ Usuários pendentes encontrados:', pendingResponse.data.length);
-               setUsuariosPendentes(pendingResponse.data);
+
+               // Adicionar campo status baseado em is_approved
+               const usuariosComStatus = pendingResponse.data.map((usuario: any) => ({
+                   ...usuario,
+                   status: usuario.is_approved === false ? 'PENDENTE' :
+                          usuario.is_approved === true ? 'APROVADO' : 'PENDENTE'
+               }));
+
+               setUsuariosPendentes(usuariosComStatus);
 
                // Fetch all users
                console.log('👥 Buscando todos os usuários...');
                const allResponse = await api.get('/users/usuarios/');
                console.log('✅ Todos os usuários encontrados:', allResponse.data.length);
-               setTodosUsuarios(allResponse.data);
+
+               // Adicionar campo status baseado em is_approved para todos os usuários
+               const todosUsuariosComStatus = allResponse.data.map((usuario: any) => ({
+                   ...usuario,
+                   status: usuario.is_approved === false ? 'PENDENTE' :
+                          usuario.is_approved === true ? 'APROVADO' : 'APROVADO'
+               }));
+
+               setTodosUsuarios(todosUsuariosComStatus);
 
            } catch (error: any) {
                console.error('❌ Erro ao buscar dados:', error);
@@ -128,7 +144,15 @@ const Administrador: React.FC = () => {
                try {
                    console.log('🔄 Tentando endpoint alternativo para usuários pendentes...');
                    const altPendingResponse = await api.get('/admin/usuarios-pendentes');
-                   setUsuariosPendentes(altPendingResponse.data);
+
+                   // Adicionar campo status baseado em is_approved
+                   const usuariosComStatus = altPendingResponse.data.map((usuario: any) => ({
+                       ...usuario,
+                       status: usuario.is_approved === false ? 'PENDENTE' :
+                              usuario.is_approved === true ? 'APROVADO' : 'PENDENTE'
+                   }));
+
+                   setUsuariosPendentes(usuariosComStatus);
                    console.log('✅ Usuários pendentes encontrados via endpoint alternativo:', altPendingResponse.data.length);
                } catch (altError: any) {
                    console.error('❌ Erro no endpoint alternativo:', altError);
