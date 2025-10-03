@@ -13,7 +13,7 @@ from config.database_config import get_db
 from app.dependencies import get_current_user
 from app.database_models import Usuario, OrdemServico, ApontamentoDetalhado
 
-router = APIRouter(prefix="/api", tags=["relatorio-completo"])
+router = APIRouter(tags=["relatorio-completo"])
 logger = logging.getLogger(__name__)
 
 @router.get("/relatorio/completo")
@@ -284,32 +284,44 @@ def calcular_metricas_os(apontamentos: List[Dict], testes: List[Dict], pendencia
     for apt in apontamentos:
         # Calcular horas totais
         if apt['data_hora_inicio'] and apt['data_hora_fim']:
-            inicio = datetime.fromisoformat(str(apt['data_hora_inicio']).replace('Z', '+00:00'))
-            fim = datetime.fromisoformat(str(apt['data_hora_fim']).replace('Z', '+00:00'))
-            horas = (fim - inicio).total_seconds() / 3600
+            try:
+                inicio = datetime.fromisoformat(str(apt['data_hora_inicio']).replace('Z', '+00:00'))
+                fim = datetime.fromisoformat(str(apt['data_hora_fim']).replace('Z', '+00:00'))
+                horas = (fim - inicio).total_seconds() / 3600
 
-            horas_por_etapa["total"] += int(horas)
+                horas_por_etapa["total"] += int(horas)
 
-            setor = apt.get('setor_nome', 'Não informado')
-            if setor not in horas_por_setor:
-                horas_por_setor[setor] = 0
-            horas_por_setor[setor] += int(horas)
+                setor = apt.get('setor_nome', 'Não informado')
+                if setor not in horas_por_setor:
+                    horas_por_setor[setor] = 0
+                horas_por_setor[setor] += int(horas)
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Erro ao calcular horas para apontamento {apt.get('id')}: {e}")
 
         # Processar etapas específicas
         if apt.get('etapa_inicial'):
             etapas_realizadas["inicial"] += 1
-            horas_etapa = float(apt.get('horas_etapa_inicial', 0) or 0)
-            horas_por_etapa["inicial"] += int(horas_etapa)
+            try:
+                horas_etapa = float(apt.get('horas_etapa_inicial', 0) or 0)
+                horas_por_etapa["inicial"] += int(horas_etapa)
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Erro ao converter horas_etapa_inicial: {apt.get('horas_etapa_inicial')} - {e}")
 
         if apt.get('etapa_parcial'):
             etapas_realizadas["parcial"] += 1
-            horas_etapa = float(apt.get('horas_etapa_parcial', 0) or 0)
-            horas_por_etapa["parcial"] += int(horas_etapa)
+            try:
+                horas_etapa = float(apt.get('horas_etapa_parcial', 0) or 0)
+                horas_por_etapa["parcial"] += int(horas_etapa)
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Erro ao converter horas_etapa_parcial: {apt.get('horas_etapa_parcial')} - {e}")
 
         if apt.get('etapa_final'):
             etapas_realizadas["final"] += 1
-            horas_etapa = float(apt.get('horas_etapa_final', 0) or 0)
-            horas_por_etapa["final"] += int(horas_etapa)
+            try:
+                horas_etapa = float(apt.get('horas_etapa_final', 0) or 0)
+                horas_por_etapa["final"] += int(horas_etapa)
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Erro ao converter horas_etapa_final: {apt.get('horas_etapa_final')} - {e}")
     
     # Processar testes
     for teste in testes:
@@ -326,7 +338,31 @@ def calcular_metricas_os(apontamentos: List[Dict], testes: List[Dict], pendencia
     percentual_aprovacao = (testes_aprovados / total_testes * 100) if total_testes > 0 else 0
     
     # Horas orçadas vs realizadas
-    horas_orcadas = float(os_data.get('horas_orcadas', 0) or 0)
+    try:
+        horas_orcadas_raw = os_data.get('horas_orcadas', 0) or 0
+        if isinstance(horas_orcadas_raw, str):
+            # Se for string, pode ser JSON - tentar extrair valor numérico
+            import json
+            try:
+                horas_orcadas_json = json.loads(horas_orcadas_raw)
+                if isinstance(horas_orcadas_json, dict):
+                    # Se for dict, somar todos os valores
+                    horas_orcadas = sum(float(v) for v in horas_orcadas_json.values() if isinstance(v, (int, float)))
+                else:
+                    horas_orcadas = float(horas_orcadas_json)
+            except (json.JSONDecodeError, ValueError):
+                # Se não conseguir fazer parse, tentar converter diretamente
+                try:
+                    horas_orcadas = float(horas_orcadas_raw)
+                except ValueError:
+                    logger.warning(f"Não foi possível converter horas_orcadas: {horas_orcadas_raw}")
+                    horas_orcadas = 0
+        else:
+            horas_orcadas = float(horas_orcadas_raw)
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Erro ao processar horas_orcadas: {os_data.get('horas_orcadas')} - {e}")
+        horas_orcadas = 0
+
     horas_realizadas = horas_por_etapa["total"]
     desvio_horas = horas_realizadas - horas_orcadas
     percentual_desvio = (desvio_horas / horas_orcadas * 100) if horas_orcadas > 0 else 0

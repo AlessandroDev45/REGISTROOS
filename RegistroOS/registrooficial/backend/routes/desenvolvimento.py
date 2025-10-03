@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, desc, text, distinct # Importado 'distinct'
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any, Union, Callable
 from datetime import datetime, date, timedelta
 from pydantic import BaseModel
 import json
@@ -32,17 +32,54 @@ from app.dependencies import get_current_user
 from utils.validators import generate_next_os # Certifique-se de que este import está correto
 
 # Importar Celery para scraping assíncrono
+CELERY_AVAILABLE = False
+AsyncResult = None
+scrape_os_task = None
+scrape_batch_os_task = None
+get_queue_status = None
+get_scraping_statistics = None
+save_scraping_usage_stats = None
+
 try:
-    from tasks.scraping_tasks import scrape_os_task, get_queue_status
-    # from celery.result import AsyncResult # Movido para cá para ser definido se Celery estiver disponível
+    from tasks.scraping_tasks import scrape_os_task, scrape_batch_os_task, get_queue_status, get_scraping_statistics, save_scraping_usage_stats
     CELERY_AVAILABLE = True
+    print("✅ Tasks de scraping carregadas")
+except ImportError as e:
+    print(f"⚠️ Tasks de scraping não disponíveis: {e}")
+    save_scraping_usage_stats = None
+
+# Mock class para AsyncResult (sempre disponível)
+class MockAsyncResult:
+    def __init__(self, task_id):
+        self.task_id = task_id
+        self.state = 'PENDING'
+        self.info = {}
+        self.result = None
+
+# Tentar importar AsyncResult real, usar mock se falhar
+try:
+    from celery.result import AsyncResult as CeleryAsyncResult  # type: ignore
+    AsyncResult = CeleryAsyncResult
     print("✅ Celery disponível - Scraping assíncrono habilitado")
 except ImportError as e:
+    AsyncResult = MockAsyncResult
     CELERY_AVAILABLE = False
-    AsyncResult = None # Definir como None se Celery não estiver disponível
-    scrape_os_task = None
-    get_queue_status = None
-    print(f"⚠️ Celery não disponível - Scraping síncrono será usado: {e}")
+    print(f"⚠️ Celery não disponível - Usando mocks: {e}")
+
+# Funções auxiliares para type safety
+def safe_apply_async(task_func: Any, *args, **kwargs) -> Any:
+    """Aplica task assíncrona de forma segura com type checking"""
+    if task_func and hasattr(task_func, 'apply_async') and callable(getattr(task_func, 'apply_async')):
+        return task_func.apply_async(*args, **kwargs)
+    else:
+        raise AttributeError("Task não possui método apply_async válido")
+
+def safe_call_function(func: Any, *args, **kwargs) -> Any:
+    """Chama função de forma segura com type checking"""
+    if func and callable(func):
+        return func(*args, **kwargs)
+    else:
+        raise AttributeError("Função não é callable")
 
 print("🔧 Módulo desenvolvimento.py carregado")
 
@@ -1623,7 +1660,7 @@ async def buscar_os_async(numero_os: str, db: Session = Depends(get_db), current
         if not CELERY_AVAILABLE:
             logger.warning("⚠️ Celery não disponível - executando scraping síncrono")
             # Fallback para scraping síncrono
-            return await get_detalhes_os_formulario(numero_os, db)
+            return await get_detalhes_os_formulario(numero_os, current_user, db)
 
         # 3. Verificar se já existe task em andamento para esta OS
         task_id = f"scraping_{numero_os}"
@@ -1645,12 +1682,17 @@ async def buscar_os_async(numero_os: str, db: Session = Depends(get_db), current
         # 4. Iniciar nova task de scraping
         logger.info(f"🎯 Iniciando nova task de scraping para OS {numero_os}")
 
-        if CELERY_AVAILABLE and scrape_os_task and hasattr(scrape_os_task, 'apply_async'):
-            task = scrape_os_task.apply_async(  # type: ignore
-                args=[numero_os, current_user.id],
-                task_id=task_id,
-                priority=5  # Prioridade normal
-            )
+        if CELERY_AVAILABLE and scrape_os_task:
+            try:
+                task = safe_apply_async(
+                    scrape_os_task,
+                    args=[numero_os, current_user.id],
+                    task_id=task_id,
+                    priority=5  # Prioridade normal
+                )
+            except AttributeError as e:
+                # Fallback se apply_async não estiver disponível
+                return {"error": f"Celery task não configurada corretamente: {e}"}
         else:
             return {"error": "Celery não disponível para scraping assíncrono"}
 
@@ -1747,10 +1789,16 @@ async def get_queue_status_endpoint(current_user: Usuario = Depends(get_current_
             return {"error": "Celery não disponível", "queue_size": 0}
 
         try:
-            if hasattr(get_queue_status, 'delay'):
-                queue_info = get_queue_status.delay().get(timeout=10)  # type: ignore
+            if get_queue_status:
+                try:
+                    if hasattr(get_queue_status, 'delay'):
+                        queue_info = get_queue_status.delay().get(timeout=10) # type: ignore
+                    else:
+                        queue_info = safe_call_function(get_queue_status)
+                except AttributeError:
+                    return {"error": "Método get_queue_status não configurado corretamente", "queue_size": 0}
             else:
-                return {"error": "Método delay não disponível", "queue_size": 0}
+                return {"error": "Método get_queue_status não disponível", "queue_size": 0}
         except Exception as e:
             return {"error": f"Erro ao obter status da fila: {e}", "queue_size": 0}
 
@@ -1771,6 +1819,7 @@ async def get_queue_status_endpoint(current_user: Usuario = Depends(get_current_
 @router.get("/formulario/buscar-os/{numero_os}", operation_id="dev_get_formulario_os_detalhes")
 async def get_detalhes_os_formulario(
     numero_os: str,
+    current_user: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -1841,6 +1890,15 @@ async def get_detalhes_os_formulario(
                         logger.info(f"✅ Tipo de máquina encontrado: {tipo_maquina_nome}")
                 except Exception as e:
                     logger.warning(f"Erro ao buscar tipo de máquina: {e}")
+
+            # Salvar estatísticas de uso (busca no banco - não é scraping, mas é uso do sistema)
+            try:
+                if save_scraping_usage_stats:
+                    user_id = getattr(current_user, 'id', 0)
+                    save_scraping_usage_stats(user_id, numero_os, True, 0)
+                    logger.info(f"📊 Estatísticas de busca no banco salvas para usuário {current_user.id}")
+            except Exception as stats_error:
+                logger.warning(f"⚠️ Erro ao salvar estatísticas de busca: {stats_error}")
 
             return {
                 "id": result[0],
@@ -2020,6 +2078,15 @@ async def get_detalhes_os_formulario(
                         
                         db.commit()
                         logger.info(f"✅ OS {numero_os} salva no banco após scraping")
+
+                        # Salvar estatísticas de uso do scraping
+                        try:
+                            if save_scraping_usage_stats:
+                                user_id = getattr(current_user, 'id', 0)
+                                save_scraping_usage_stats(user_id, numero_os, True, 0)
+                                logger.info(f"📊 Estatísticas de scraping salvas para usuário {current_user.id}")
+                        except Exception as stats_error:
+                            logger.warning(f"⚠️ Erro ao salvar estatísticas de scraping: {stats_error}")
                     else:
                         logger.warning(f"⚠️ Scraping retornou dados vazios ou não processáveis para OS {numero_os}. Resultado: {scraped_data}")
                 else:
@@ -2089,12 +2156,42 @@ async def get_detalhes_os_formulario(
         else:
             logger.error(f"❌ Erro no scraping da OS {numero_os}: {result_scraping.stderr}")
 
+            # Salvar estatísticas de uso do scraping (falha)
+            try:
+                if save_scraping_usage_stats:
+                    user_id = getattr(current_user, 'id', 0)
+                    save_scraping_usage_stats(user_id, numero_os, False, 0)
+                    logger.info(f"📊 Estatísticas de scraping (falha) salvas para usuário {current_user.id}")
+            except Exception as stats_error:
+                logger.warning(f"⚠️ Erro ao salvar estatísticas de scraping: {stats_error}")
+
     except subprocess.TimeoutExpired:
         logger.error(f"⏰ Timeout no scraping da OS {numero_os}")
+        # Salvar estatísticas de uso do scraping (timeout)
+        try:
+            if save_scraping_usage_stats:
+                user_id = getattr(current_user, 'id', 0)
+                save_scraping_usage_stats(user_id, numero_os, False, 60)  # 60s timeout
+        except Exception:
+            pass
     except FileNotFoundError as fnf_error:
         logger.error(f"❌ Erro de arquivo não encontrado ao executar scraping para OS {numero_os}: {fnf_error}")
+        # Salvar estatísticas de uso do scraping (erro)
+        try:
+            if save_scraping_usage_stats:
+                user_id = getattr(current_user, 'id', 0)
+                save_scraping_usage_stats(user_id, numero_os, False, 0)
+        except Exception:
+            pass
     except Exception as scraping_error:
         logger.error(f"❌ Erro inesperado ao executar scraping para OS {numero_os}: {scraping_error}")
+        # Salvar estatísticas de uso do scraping (erro)
+        try:
+            if save_scraping_usage_stats:
+                user_id = getattr(current_user, 'id', 0)
+                save_scraping_usage_stats(user_id, numero_os, False, 0)
+        except Exception:
+            pass
 
     # Se chegou até aqui, a OS não foi encontrada nem via banco nem via scraping
     raise HTTPException(
@@ -3003,3 +3100,160 @@ async def criar_notificacao(
     except Exception as e:
         print(f"❌ Erro ao criar notificação: {e}")
         raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
+
+# ============================================================================
+# NOVOS ENDPOINTS PARA SCRAPING EM PRODUÇÃO - SEM ALTERAR CÓDIGO EXISTENTE
+# ============================================================================
+
+@router.post("/scraping-batch", operation_id="dev_scraping_batch")
+async def iniciar_scraping_lote(
+    request: dict,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Iniciar scraping em lote de múltiplas OS
+    Processa várias OS em paralelo com controle de concorrência
+    """
+    try:
+        os_numbers = request.get("os_numbers", [])
+        batch_name = request.get("batch_name", f"Lote_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+
+        if not os_numbers or len(os_numbers) == 0:
+            raise HTTPException(status_code=400, detail="Lista de OS é obrigatória")
+
+        if len(os_numbers) > 100:
+            raise HTTPException(status_code=400, detail="Máximo de 100 OS por lote")
+
+        logger.info(f"🚀 Iniciando scraping em lote: {batch_name} - {len(os_numbers)} OS - User: {current_user.id}")
+
+        if CELERY_AVAILABLE and scrape_batch_os_task:
+            try:
+                # Usar task assíncrona
+                task = safe_apply_async(
+                    scrape_batch_os_task,
+                    args=[os_numbers, current_user.id, batch_name],
+                    priority=3  # Prioridade menor que scraping individual
+                )
+            except AttributeError as e:
+                # Fallback se apply_async não estiver disponível
+                return {"error": f"Celery batch task não configurada corretamente: {e}"}
+
+            return {
+                "status": "queued",
+                "message": f"Lote {batch_name} adicionado à fila de processamento",
+                "task_id": task.id,
+                "batch_name": batch_name,
+                "total_os": len(os_numbers),
+                "estimated_time": f"{len(os_numbers) * 2}-{len(os_numbers) * 5} minutos",
+                "instructions": {
+                    "check_status": f"/api/desenvolvimento/scraping-batch-status/{task.id}",
+                    "polling_interval": "10 segundos"
+                }
+            }
+        else:
+            return {"error": "Celery não disponível para scraping em lote"}
+
+    except Exception as e:
+        logger.error(f"❌ Erro ao iniciar scraping em lote: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/scraping-batch-status/{task_id}", operation_id="dev_scraping_batch_status")
+async def obter_status_lote(
+    task_id: str,
+    current_user: Usuario = Depends(get_current_user)
+):
+    """
+    Obter status do processamento em lote
+    """
+    try:
+        if not CELERY_AVAILABLE:
+            return {"error": "Celery não disponível"}
+
+        if AsyncResult:
+            task_result = AsyncResult(task_id)
+        else:
+            return {"error": "AsyncResult não disponível"}
+
+        if task_result.state == 'PENDING':
+            return {
+                "status": "pending",
+                "message": "Lote aguardando processamento",
+                "progress": 0
+            }
+        elif task_result.state == 'PROGRESS':
+            return {
+                "status": "processing",
+                "message": "Lote em processamento",
+                "progress": task_result.info.get('progress', 0),
+                "details": task_result.info
+            }
+        elif task_result.state == 'SUCCESS':
+            return {
+                "status": "completed",
+                "message": "Lote processado com sucesso",
+                "progress": 100,
+                "result": task_result.result
+            }
+        elif task_result.state == 'FAILURE':
+            return {
+                "status": "failed",
+                "message": "Erro no processamento do lote",
+                "error": str(task_result.info)
+            }
+        else:
+            return {
+                "status": task_result.state.lower(),
+                "message": f"Status: {task_result.state}"
+            }
+
+    except Exception as e:
+        logger.error(f"❌ Erro ao obter status do lote: {e}")
+        return {"error": str(e)}
+
+@router.get("/scraping-statistics", operation_id="dev_scraping_statistics")
+async def obter_estatisticas_scraping(
+    days: int = Query(30, description="Número de dias para estatísticas"),
+    current_user: Usuario = Depends(get_current_user)
+):
+    """
+    Obter estatísticas detalhadas de uso do scraping
+    Apenas para administradores
+    """
+    try:
+        if current_user.privilege_level not in ['ADMIN', 'GESTAO']:
+            raise HTTPException(status_code=403, detail="Acesso restrito a administradores")
+
+        if get_scraping_statistics:
+            try:
+                stats = safe_call_function(get_scraping_statistics, days)
+                return stats
+            except AttributeError:
+                return {"error": "Função de estatísticas não configurada corretamente"}
+        else:
+            return {"error": "Função de estatísticas não disponível"}
+
+    except Exception as e:
+        logger.error(f"❌ Erro ao obter estatísticas: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/scraping-queue-status", operation_id="dev_scraping_queue_status")
+async def obter_status_fila(
+    current_user: Usuario = Depends(get_current_user)
+):
+    """
+    Obter status das filas de scraping
+    """
+    try:
+        if get_queue_status:
+            try:
+                status = safe_call_function(get_queue_status)
+                return status
+            except AttributeError:
+                return {"error": "Status da fila não configurado corretamente"}
+        else:
+            return {"error": "Status da fila não disponível"}
+
+    except Exception as e:
+        logger.error(f"❌ Erro ao obter status da fila: {e}")
+        return {"error": str(e)}

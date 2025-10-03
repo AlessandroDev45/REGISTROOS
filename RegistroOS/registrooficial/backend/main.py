@@ -63,7 +63,7 @@ try:
     app.include_router(gestao_router, prefix="/api/gestao", tags=["gestao"])
     app.include_router(admin_config_router, prefix="/api/admin", tags=["admin"])
     app.include_router(users_router, prefix="/api/users", tags=["users"])
-    app.include_router(relatorio_router, prefix="/api/reports", tags=["reports"])
+    app.include_router(relatorio_router, prefix="/api", tags=["reports"])
     app.include_router(general_router, prefix="/api", tags=["general"])
 
     print("✅ Todas as rotas carregadas com sucesso")

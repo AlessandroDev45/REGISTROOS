@@ -70,6 +70,7 @@ app.conf.update(
     # Configurações de performance
     task_routes={
         'scraping_tasks.scrape_os_task': {'queue': 'scraping'},
+        'scraping_tasks.scrape_batch_os_task': {'queue': 'scraping_batch'},
         'scraping_tasks.cleanup_task': {'queue': 'maintenance'},
     },
     
@@ -86,6 +87,9 @@ app.conf.update(
     task_annotations={
         'scraping_tasks.scrape_os_task': {
             'rate_limit': '10/h',  # 10 por hora por worker
+        },
+        'scraping_tasks.scrape_batch_os_task': {
+            'rate_limit': '2/h',  # 2 lotes por hora por worker
         }
     },
     

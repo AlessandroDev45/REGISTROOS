@@ -33,24 +33,49 @@ const RelatorioCompletoModal: React.FC<RelatorioCompletoModalProps> = ({
     const [error, setError] = useState('');
 
     useEffect(() => {
+        console.log(`🔍 [RELATÓRIO] useEffect triggered:`, { isOpen, osId });
         if (isOpen && osId) {
+            console.log(`🚀 [RELATÓRIO] Chamando fetchRelatorioCompleto para OS ${osId}`);
             fetchRelatorioCompleto();
+        } else {
+            console.log(`⏸️ [RELATÓRIO] Não executando fetch:`, { isOpen, osId });
         }
     }, [isOpen, osId]);
 
     const fetchRelatorioCompleto = async () => {
         try {
+            console.log(`🔄 [RELATÓRIO] Iniciando busca para OS ${osId}...`);
             setLoading(true);
             setError('');
-            
+
+            const startTime = Date.now();
             const response = await api.get(`/os/${osId}/relatorio-completo`);
+            const endTime = Date.now();
+
+            console.log(`✅ [RELATÓRIO] Resposta recebida em ${endTime - startTime}ms`);
+            console.log(`📊 [RELATÓRIO] Dados recebidos:`, {
+                status: response.status,
+                dataKeys: Object.keys(response.data),
+                hasResumo: !!response.data.resumo_gerencial,
+                hasApontamentos: !!response.data.apontamentos_detalhados,
+                hasTestes: !!response.data.resultados_testes
+            });
+
             setRelatorioData(response.data);
-            
+            console.log(`✅ [RELATÓRIO] Estado atualizado com sucesso`);
+
         } catch (err: any) {
-            console.error('Erro ao buscar relatório completo:', err);
+            console.error('❌ [RELATÓRIO] Erro ao buscar relatório completo:', err);
+            console.error('❌ [RELATÓRIO] Detalhes do erro:', {
+                status: err.response?.status,
+                statusText: err.response?.statusText,
+                data: err.response?.data,
+                message: err.message
+            });
             setError('Erro ao carregar relatório completo');
         } finally {
             setLoading(false);
+            console.log(`🏁 [RELATÓRIO] Processo finalizado`);
         }
     };
 
@@ -83,7 +108,17 @@ const RelatorioCompletoModal: React.FC<RelatorioCompletoModalProps> = ({
         }
     };
 
-    if (!isOpen) return null;
+    if (!isOpen) {
+        console.log(`🚫 [RELATÓRIO] Modal não está aberto`);
+        return null;
+    }
+
+    console.log(`🎭 [RELATÓRIO] Renderizando modal:`, {
+        loading,
+        error,
+        hasData: !!relatorioData,
+        activeTab
+    });
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">

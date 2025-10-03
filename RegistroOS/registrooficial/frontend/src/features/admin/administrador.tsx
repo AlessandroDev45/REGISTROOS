@@ -7,6 +7,7 @@ import { useCachedSetores } from '../../hooks/useCachedSetores';
 import { getStatusColorClass } from '../../utils/statusColors';
 import { formatarTextoInput, criarHandlerTextoValidado } from '../../utils/textValidation';
 import EditUserModal from './components/EditUserModal';
+import ScrapingMonitoringTab from './components/tabs/ScrapingMonitoringTab';
 
 interface UsuarioPendente {
    id: number;
@@ -66,7 +67,7 @@ const Administrador: React.FC = () => {
    const [todosUsuarios, setTodosUsuarios] = useState<Usuario[]>([]);
    const [loading, setLoading] = useState(true);
    const [processando, setProcessando] = useState<number | null>(null);
-   const [activeTab, setActiveTab] = useState<'aprovacao' | 'gerenciar' | 'novo'>('aprovacao');
+   const [activeTab, setActiveTab] = useState<'aprovacao' | 'gerenciar' | 'novo' | 'scraping'>('aprovacao');
    const [showForm, setShowForm] = useState(false);
    const [showEditModal, setShowEditModal] = useState(false);
    const [editingUser, setEditingUser] = useState<Usuario | null>(null);
@@ -418,6 +419,16 @@ const Administrador: React.FC = () => {
                            >
                                ➕ Novo Colaborador
                            </button>
+                           <button
+                               onClick={() => setActiveTab('scraping')}
+                               className={`py-4 px-6 border-b-2 font-medium text-sm ${
+                                   activeTab === 'scraping'
+                                       ? 'border-blue-500 text-blue-600'
+                                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                               }`}
+                           >
+                               📊 Monitoramento Scraping
+                           </button>
                        </nav>
                    </div>
 
@@ -648,6 +659,10 @@ const Administrador: React.FC = () => {
                                    </div>
                                </div>
                            </div>
+                       )}
+
+                       {activeTab === 'scraping' && (
+                           <ScrapingMonitoringTab />
                        )}
                    </div>
                </div>

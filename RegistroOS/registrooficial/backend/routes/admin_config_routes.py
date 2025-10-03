@@ -50,6 +50,15 @@ from app.utils.db_lookups import (
     get_departamento_nome_by_id
 )
 
+# Importar funções de scraping com fallback
+try:
+    from tasks.scraping_tasks import get_scraping_statistics, get_queue_status
+    SCRAPING_AVAILABLE = True
+except ImportError:
+    SCRAPING_AVAILABLE = False
+    get_scraping_statistics = None
+    get_queue_status = None
+
 router = APIRouter(tags=["admin-config"])
 
 # ============================================================================
@@ -2356,3 +2365,317 @@ async def get_admin_config_status(
             "privilege_level": current_user.privilege_level
         }
     }
+
+# ============================================================================
+# ENDPOINTS DE MONITORAMENTO DE SCRAPING - PAINEL ADMINISTRATIVO
+# ============================================================================
+
+@router.get("/scraping/dashboard", operation_id="admin_scraping_dashboard")
+async def get_scraping_dashboard(
+    days: int = 30,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Dashboard completo de monitoramento de scraping para administradores
+    Inclui estatísticas, gráficos e métricas de performance
+    """
+    # Verificar se é admin
+    if current_user.privilege_level not in ['ADMIN', 'GESTAO']:
+        raise HTTPException(status_code=403, detail="Acesso restrito a administradores")
+
+    try:
+        # Verificar se módulo de scraping está disponível
+        if not SCRAPING_AVAILABLE:
+            return {"error": "Módulo de estatísticas não disponível"}
+
+        # Obter estatísticas detalhadas
+        stats = {}
+        queue_status = {}
+
+        if get_scraping_statistics and callable(get_scraping_statistics):
+            try:
+                stats = get_scraping_statistics(days)
+            except Exception as e:
+                print(f"Erro ao obter estatísticas: {e}")
+                stats = {}
+
+        if get_queue_status and callable(get_queue_status):
+            try:
+                queue_status = get_queue_status()
+            except Exception as e:
+                print(f"Erro ao obter status da fila: {e}")
+                queue_status = {}
+
+        # Estatísticas adicionais do banco
+        from sqlalchemy import text
+
+        # Total de OS no sistema
+        total_os = db.execute(text("SELECT COUNT(*) FROM ordens_servico")).scalar() or 0
+
+        # OS criadas via scraping (últimos X dias)
+        try:
+            os_scraping_sql = text("""
+            SELECT COUNT(*) FROM ordens_servico
+            WHERE observacoes_gerais LIKE '%scraping%'
+            AND data_criacao >= datetime('now', '-{} days')
+            """.format(days))
+            os_via_scraping = db.execute(os_scraping_sql).scalar() or 0
+        except Exception as e:
+            print(f"Erro ao consultar OS via scraping: {e}")
+            os_via_scraping = 0
+
+        # Usuários mais ativos no scraping
+        try:
+            usuarios_ativos_sql = text("""
+            SELECT u.nome_completo, u.email, u.departamento, COUNT(s.id) as total_requests
+            FROM scraping_usage_stats s
+            JOIN usuarios u ON s.user_id = u.id
+            WHERE s.created_at >= datetime('now', '-{} days')
+            GROUP BY s.user_id, u.nome_completo, u.email, u.departamento
+            ORDER BY total_requests DESC
+            LIMIT 10
+            """.format(days))
+
+            usuarios_ativos = db.execute(usuarios_ativos_sql).fetchall()
+        except Exception as e:
+            print(f"Erro ao consultar usuários ativos: {e}")
+            usuarios_ativos = []
+
+        # Horários de maior uso
+        try:
+            horarios_uso_sql = text("""
+            SELECT strftime('%H', created_at) as hora, COUNT(*) as requests
+            FROM scraping_usage_stats
+            WHERE created_at >= datetime('now', '-{} days')
+            GROUP BY strftime('%H', created_at)
+            ORDER BY hora
+            """.format(days))
+
+            horarios_uso = db.execute(horarios_uso_sql).fetchall()
+        except Exception as e:
+            print(f"Erro ao consultar horários de uso: {e}")
+            horarios_uso = []
+
+        return {
+            "dashboard_data": {
+                "periodo_dias": days,
+                "timestamp": datetime.now().isoformat(),
+                "estatisticas_gerais": stats.get("general_stats", {
+                    "total_requests": 0,
+                    "successful_requests": 0,
+                    "failed_requests": 0,
+                    "success_rate": 0.0,
+                    "avg_processing_time": 0.0
+                }),
+                "status_fila": queue_status if queue_status else {
+                    "workers_online": 0,
+                    "active_tasks": 0,
+                    "scheduled_tasks": 0
+                },
+                "metricas_sistema": {
+                    "total_os_sistema": total_os,
+                    "os_via_scraping_periodo": os_via_scraping,
+                    "percentual_scraping": round((os_via_scraping / total_os * 100) if total_os > 0 else 0, 2)
+                },
+                "usuarios_mais_ativos": [
+                    {
+                        "nome": row[0],
+                        "email": row[1],
+                        "departamento": row[2],
+                        "total_requests": row[3]
+                    }
+                    for row in usuarios_ativos
+                ],
+                "horarios_maior_uso": [
+                    {
+                        "hora": f"{row[0]}:00",
+                        "requests": row[1]
+                    }
+                    for row in horarios_uso
+                ],
+                "estatisticas_usuarios": stats.get("user_stats", []),
+                "estatisticas_diarias": stats.get("daily_stats", []),
+                "estatisticas_lotes": stats.get("batch_stats", []),
+                "top_os_consultadas": stats.get("top_os", [])
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao obter dashboard: {str(e)}")
+
+@router.get("/scraping/users-ranking", operation_id="admin_scraping_users_ranking")
+async def get_users_scraping_ranking(
+    days: int = 30,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Ranking detalhado de usuários por uso do scraping
+    """
+    if current_user.privilege_level not in ['ADMIN', 'GESTAO']:
+        raise HTTPException(status_code=403, detail="Acesso restrito a administradores")
+
+    try:
+        from sqlalchemy import text
+
+        # Ranking completo de usuários
+        try:
+            ranking_sql = text("""
+            SELECT
+                u.nome_completo,
+                u.email,
+                u.departamento,
+                u.privilege_level,
+                COUNT(s.id) as total_requests,
+                SUM(CASE WHEN s.success = 1 THEN 1 ELSE 0 END) as successful_requests,
+                SUM(CASE WHEN s.success = 0 THEN 1 ELSE 0 END) as failed_requests,
+                AVG(s.processing_time) as avg_processing_time,
+                MAX(s.created_at) as last_usage,
+                MIN(s.created_at) as first_usage
+            FROM scraping_usage_stats s
+            JOIN tipo_usuarios u ON s.user_id = u.id
+            WHERE s.created_at >= datetime('now', '-{} days')
+            GROUP BY s.user_id, u.nome_completo, u.email, u.departamento, u.privilege_level
+            ORDER BY total_requests DESC
+            """.format(days))
+
+            ranking = db.execute(ranking_sql).fetchall()
+        except Exception as e:
+            print(f"Erro ao consultar ranking de usuários: {e}")
+            ranking = []
+
+        return {
+            "ranking_usuarios": [
+                {
+                    "posicao": idx + 1,
+                    "nome": row[0],
+                    "email": row[1],
+                    "departamento": row[2],
+                    "nivel_privilegio": row[3],
+                    "total_requests": row[4],
+                    "successful_requests": row[5],
+                    "failed_requests": row[6],
+                    "success_rate": round((row[5] / row[4] * 100) if row[4] > 0 else 0, 2),
+                    "avg_processing_time": round(row[7], 2) if row[7] else 0,
+                    "last_usage": row[8],
+                    "first_usage": row[9],
+                    "dias_usando": (datetime.now() - datetime.fromisoformat(row[9].replace('Z', '+00:00'))).days if row[9] else 0
+                }
+                for idx, row in enumerate(ranking)
+            ],
+            "periodo_dias": days,
+            "total_usuarios": len(ranking)
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao obter ranking: {str(e)}")
+
+@router.get("/scraping/performance-metrics", operation_id="admin_scraping_performance")
+async def get_scraping_performance_metrics(
+    days: int = 30,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Métricas detalhadas de performance do scraping
+    """
+    if current_user.privilege_level not in ['ADMIN', 'GESTAO']:
+        raise HTTPException(status_code=403, detail="Acesso restrito a administradores")
+
+    try:
+        from sqlalchemy import text
+
+        # Métricas de performance por hora do dia
+        performance_hora_sql = text("""
+        SELECT
+            strftime('%H', created_at) as hora,
+            COUNT(*) as total_requests,
+            AVG(processing_time) as avg_time,
+            MIN(processing_time) as min_time,
+            MAX(processing_time) as max_time,
+            SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success_count
+        FROM scraping_usage_stats
+        WHERE created_at >= datetime('now', '-{} days')
+        GROUP BY strftime('%H', created_at)
+        ORDER BY hora
+        """.format(days))
+
+        performance_hora = db.execute(performance_hora_sql).fetchall()
+
+        # Métricas de performance por dia da semana
+        performance_dia_sql = text("""
+        SELECT
+            CASE strftime('%w', created_at)
+                WHEN '0' THEN 'Domingo'
+                WHEN '1' THEN 'Segunda'
+                WHEN '2' THEN 'Terça'
+                WHEN '3' THEN 'Quarta'
+                WHEN '4' THEN 'Quinta'
+                WHEN '5' THEN 'Sexta'
+                WHEN '6' THEN 'Sábado'
+            END as dia_semana,
+            COUNT(*) as total_requests,
+            AVG(processing_time) as avg_time,
+            SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success_count
+        FROM scraping_usage_stats
+        WHERE created_at >= datetime('now', '-{} days')
+        GROUP BY strftime('%w', created_at)
+        ORDER BY strftime('%w', created_at)
+        """.format(days))
+
+        performance_dia = db.execute(performance_dia_sql).fetchall()
+
+        # OS com mais tentativas de scraping
+        os_mais_tentativas_sql = text("""
+        SELECT
+            os_number,
+            COUNT(*) as tentativas,
+            SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as sucessos,
+            AVG(processing_time) as avg_time
+        FROM scraping_usage_stats
+        WHERE created_at >= datetime('now', '-{} days')
+        GROUP BY os_number
+        HAVING tentativas > 1
+        ORDER BY tentativas DESC
+        LIMIT 20
+        """.format(days))
+
+        os_mais_tentativas = db.execute(os_mais_tentativas_sql).fetchall()
+
+        return {
+            "performance_por_hora": [
+                {
+                    "hora": f"{row[0]}:00",
+                    "total_requests": row[1],
+                    "avg_time": round(row[2], 2) if row[2] else 0,
+                    "min_time": round(row[3], 2) if row[3] else 0,
+                    "max_time": round(row[4], 2) if row[4] else 0,
+                    "success_rate": round((row[5] / row[1] * 100) if row[1] > 0 else 0, 2)
+                }
+                for row in performance_hora
+            ],
+            "performance_por_dia_semana": [
+                {
+                    "dia_semana": row[0],
+                    "total_requests": row[1],
+                    "avg_time": round(row[2], 2) if row[2] else 0,
+                    "success_rate": round((row[3] / row[1] * 100) if row[1] > 0 else 0, 2)
+                }
+                for row in performance_dia
+            ],
+            "os_mais_tentativas": [
+                {
+                    "os_number": row[0],
+                    "tentativas": row[1],
+                    "sucessos": row[2],
+                    "success_rate": round((row[2] / row[1] * 100) if row[1] > 0 else 0, 2),
+                    "avg_time": round(row[3], 2) if row[3] else 0
+                }
+                for row in os_mais_tentativas
+            ],
+            "periodo_dias": days
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao obter métricas: {str(e)}")

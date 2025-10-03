@@ -12,7 +12,7 @@ import json
 import logging
 import importlib.util
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 import os
 
@@ -55,7 +55,7 @@ except ImportError:
             return {}
 
     app = MockApp()
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, event
 from sqlalchemy.orm import sessionmaker
 
 # Configurar logging
@@ -68,17 +68,56 @@ DATABASE_URL = os.getenv(
     "sqlite:///C:/Users/Alessandro/OneDrive/Desktop/RegistroOS/RegistroOS/registrooficial/backend/registroos_new.db"
 )
 
-engine = create_engine(DATABASE_URL)
+# Configurar engine com WAL mode e timeout para evitar bloqueios
+engine = create_engine(
+    DATABASE_URL,
+    pool_timeout=20,
+    pool_recycle=300,
+    pool_pre_ping=True,
+    connect_args={
+        "timeout": 30,
+        "check_same_thread": False
+    }
+)
+
+# Configurar WAL mode para permitir leituras concorrentes
+@event.listens_for(engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    # WAL mode permite leituras concorrentes
+    cursor.execute("PRAGMA journal_mode=WAL")
+    # Timeout para escritas
+    cursor.execute("PRAGMA busy_timeout=30000")
+    # Otimizações
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA cache_size=10000")
+    cursor.close()
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def get_db():
-    """Obtém sessão do banco de dados"""
+    """Obtém sessão do banco de dados com timeout"""
     db = SessionLocal()
     try:
         return db
     except Exception as e:
         db.close()
         raise e
+
+def get_db_with_retry(max_retries=3):
+    """Obtém sessão do banco com retry em caso de bloqueio"""
+    for attempt in range(max_retries):
+        try:
+            db = SessionLocal()
+            # Testar conexão
+            db.execute(text("SELECT 1"))
+            return db
+        except Exception as e:
+            if db:
+                db.close()
+            if attempt == max_retries - 1:
+                raise e
+            time.sleep(0.5 * (attempt + 1))  # Backoff exponencial
 
 def import_scraping_module():
     """Importa dinamicamente o módulo de scraping"""
@@ -97,6 +136,29 @@ def import_scraping_module():
 
     spec.loader.exec_module(scrape_module)
     
+    return scrape_module
+
+def import_optimized_scraping_module():
+    """Importa dinamicamente o módulo de scraping otimizado"""
+    script_path = r"C:\Users\Alessandro\OneDrive\Desktop\RegistroOS\RegistroOS\registrooficial\backend\scripts\scrape_os_data_optimized.py"
+
+    if not os.path.exists(script_path):
+        # Fallback para o script original se otimizado não existir
+        logger.warning("Script otimizado não encontrado, usando script original")
+        return import_scraping_module()
+
+    spec = importlib.util.spec_from_file_location("scrape_os_data_optimized", script_path)
+    if spec is None:
+        logger.warning("Não foi possível carregar script otimizado, usando script original")
+        return import_scraping_module()
+
+    scrape_module = importlib.util.module_from_spec(spec)
+    if spec.loader is None:
+        logger.warning("Loader não encontrado para script otimizado, usando script original")
+        return import_scraping_module()
+
+    spec.loader.exec_module(scrape_module)
+
     return scrape_module
 
 def create_cliente_from_data(db, os_data: Dict[str, Any]) -> Optional[int]:
@@ -404,3 +466,436 @@ def get_queue_status():
     except Exception as e:
         logger.error(f"❌ Erro ao obter status da fila: {e}")
         return {"error": str(e)}
+
+# ============================================================================
+# NOVAS FUNCIONALIDADES PARA PRODUÇÃO - SEM ALTERAR CÓDIGO EXISTENTE
+# ============================================================================
+
+def save_batch_stats(task_id: str, user_id: int, batch_name: str, total_os: int, status: str, success: int = 0, errors: int = 0):
+    """Salva estatísticas do processamento em lote"""
+    try:
+        db = get_db_with_retry()
+
+        # Criar tabela de estatísticas se não existir
+        create_stats_table_sql = """
+        CREATE TABLE IF NOT EXISTS scraping_batch_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            batch_name TEXT NOT NULL,
+            total_os INTEGER NOT NULL,
+            success_count INTEGER DEFAULT 0,
+            error_count INTEGER DEFAULT 0,
+            status TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+        db.execute(text(create_stats_table_sql))
+
+        # Verificar se já existe registro
+        existing = db.execute(
+            text("SELECT id FROM scraping_batch_stats WHERE task_id = :task_id"),
+            {"task_id": task_id}
+        ).fetchone()
+
+        if existing:
+            # Atualizar registro existente
+            update_sql = """
+            UPDATE scraping_batch_stats
+            SET success_count = :success, error_count = :errors, status = :status, updated_at = CURRENT_TIMESTAMP
+            WHERE task_id = :task_id
+            """
+            db.execute(text(update_sql), {
+                "task_id": task_id,
+                "success": success,
+                "errors": errors,
+                "status": status
+            })
+        else:
+            # Inserir novo registro
+            insert_sql = """
+            INSERT INTO scraping_batch_stats (task_id, user_id, batch_name, total_os, success_count, error_count, status)
+            VALUES (:task_id, :user_id, :batch_name, :total_os, :success, :errors, :status)
+            """
+            db.execute(text(insert_sql), {
+                "task_id": task_id,
+                "user_id": user_id,
+                "batch_name": batch_name,
+                "total_os": total_os,
+                "success": success,
+                "errors": errors,
+                "status": status
+            })
+
+        db.commit()
+
+    except Exception as e:
+        if db:
+            db.rollback()
+        logger.error(f"❌ Erro ao salvar estatísticas do lote: {e}")
+    finally:
+        if db:
+            db.close()
+
+def save_scraping_usage_stats(user_id: int, os_number: str, success: bool, processing_time: float = 0):
+    """Salva estatísticas de uso individual do scraping"""
+    try:
+        db = get_db_with_retry()
+
+        # Criar tabela de uso se não existir
+        create_usage_table_sql = """
+        CREATE TABLE IF NOT EXISTS scraping_usage_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            os_number TEXT NOT NULL,
+            success BOOLEAN NOT NULL,
+            processing_time REAL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+        db.execute(text(create_usage_table_sql))
+
+        # Inserir registro de uso
+        insert_sql = """
+        INSERT INTO scraping_usage_stats (user_id, os_number, success, processing_time)
+        VALUES (:user_id, :os_number, :success, :processing_time)
+        """
+        db.execute(text(insert_sql), {
+            "user_id": user_id,
+            "os_number": os_number,
+            "success": success,
+            "processing_time": processing_time
+        })
+
+        db.commit()
+
+    except Exception as e:
+        if db:
+            db.rollback()
+        logger.error(f"❌ Erro ao salvar estatísticas de uso: {e}")
+    finally:
+        if db:
+            db.close()
+
+@app.task(bind=True, max_retries=3)
+def scrape_batch_os_task(self, os_numbers: List[str], user_id: int, batch_name: str = None) -> Dict[str, Any]:
+    """
+    Task assíncrona para scraping em lote de múltiplas OS
+    Processa várias OS em paralelo com controle de concorrência
+    """
+    task_id = self.request.id
+    batch_name = batch_name or f"Lote_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+    logger.info(f"🚀 Iniciando scraping em lote: {batch_name} - {len(os_numbers)} OS (Task: {task_id}, User: {user_id})")
+
+    # Salvar estatísticas do lote
+    save_batch_stats(task_id, user_id, batch_name, len(os_numbers), "INICIADO")
+
+    try:
+        db = get_db()
+
+        # Atualizar progresso inicial
+        self.update_state(
+            state='PROGRESS',
+            meta={
+                'progress': 0,
+                'status': f'Iniciando processamento de {len(os_numbers)} OS...',
+                'batch_name': batch_name,
+                'total_os': len(os_numbers),
+                'processed': 0,
+                'success': 0,
+                'errors': 0
+            }
+        )
+
+        results = []
+        success_count = 0
+        error_count = 0
+
+        # Processar OS em grupos menores para evitar sobrecarga
+        batch_size = 5  # Processar 5 OS por vez
+        total_batches = (len(os_numbers) + batch_size - 1) // batch_size
+
+        for batch_idx, i in enumerate(range(0, len(os_numbers), batch_size)):
+            batch_os = os_numbers[i:i + batch_size]
+
+            logger.info(f"📦 Processando lote {batch_idx + 1}/{total_batches}: {batch_os}")
+
+            # Processar lote atual
+            batch_results = []
+            for os_num in batch_os:
+                start_time = time.time()
+                try:
+                    # Executar scraping individual com versão otimizada
+                    scrape_module = import_optimized_scraping_module()
+
+                    # Usar função otimizada se disponível, senão usar original
+                    if hasattr(scrape_module, 'execute_scraping_optimized'):
+                        scraped_data = scrape_module.execute_scraping_optimized(os_num, f"batch_{task_id}")
+                    else:
+                        scraped_data = scrape_module.execute_scraping(os_num)
+
+                    processing_time = time.time() - start_time
+
+                    if scraped_data and len(scraped_data) > 0:
+                        # Salvar dados no banco
+                        if save_scraped_os_data(db, scraped_data[0], os_num):
+                            success_count += 1
+                            batch_results.append({"os": os_num, "status": "success", "data": scraped_data[0]})
+                            save_scraping_usage_stats(user_id, os_num, True, processing_time)
+                            logger.info(f"✅ OS {os_num} processada com sucesso em {processing_time:.2f}s")
+                        else:
+                            error_count += 1
+                            batch_results.append({"os": os_num, "status": "error", "message": "Erro ao salvar no banco"})
+                            save_scraping_usage_stats(user_id, os_num, False, processing_time)
+                    else:
+                        error_count += 1
+                        batch_results.append({"os": os_num, "status": "not_found", "message": "OS não encontrada"})
+                        save_scraping_usage_stats(user_id, os_num, False, processing_time)
+
+                except Exception as e:
+                    processing_time = time.time() - start_time
+                    error_count += 1
+                    batch_results.append({"os": os_num, "status": "error", "message": str(e)})
+                    save_scraping_usage_stats(user_id, os_num, False, processing_time)
+                    logger.error(f"❌ Erro ao processar OS {os_num}: {e}")
+
+                # Atualizar progresso
+                processed = success_count + error_count
+                progress = int((processed / len(os_numbers)) * 100)
+
+                self.update_state(
+                    state='PROGRESS',
+                    meta={
+                        'progress': progress,
+                        'status': f'Processando... {processed}/{len(os_numbers)}',
+                        'batch_name': batch_name,
+                        'total_os': len(os_numbers),
+                        'processed': processed,
+                        'success': success_count,
+                        'errors': error_count,
+                        'current_os': os_num
+                    }
+                )
+
+            results.extend(batch_results)
+
+            # Pequena pausa entre lotes para não sobrecarregar
+            if batch_idx < total_batches - 1:
+                time.sleep(2)
+
+        # Finalizar processamento
+        final_status = "CONCLUIDO" if error_count == 0 else "CONCLUIDO_COM_ERROS"
+        save_batch_stats(task_id, user_id, batch_name, len(os_numbers), final_status, success_count, error_count)
+
+        db.close()
+
+        logger.info(f"✅ Lote {batch_name} concluído: {success_count} sucessos, {error_count} erros")
+
+        return {
+            "status": "completed",
+            "batch_name": batch_name,
+            "total_os": len(os_numbers),
+            "success_count": success_count,
+            "error_count": error_count,
+            "results": results
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Erro crítico no processamento do lote {batch_name}: {e}")
+        save_batch_stats(task_id, user_id, batch_name, len(os_numbers), "ERRO", 0, len(os_numbers))
+
+        if self.request.retries < 3:
+            raise self.retry(countdown=60 * (2 ** self.request.retries))
+
+        return {
+            "status": "error",
+            "batch_name": batch_name,
+            "message": str(e),
+            "total_os": len(os_numbers)
+        }
+
+def get_scraping_statistics(days: int = 30) -> Dict[str, Any]:
+    """Obtém estatísticas detalhadas de uso do scraping"""
+    db = None
+    try:
+        db = get_db_with_retry()
+
+        # Criar tabelas se não existirem
+        create_usage_table_sql = """
+        CREATE TABLE IF NOT EXISTS scraping_usage_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            os_number TEXT NOT NULL,
+            success BOOLEAN NOT NULL,
+            processing_time REAL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+
+        create_batch_table_sql = """
+        CREATE TABLE IF NOT EXISTS scraping_batch_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            batch_name TEXT,
+            total_os INTEGER NOT NULL,
+            success_count INTEGER DEFAULT 0,
+            error_count INTEGER DEFAULT 0,
+            status TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+
+        db.execute(text(create_usage_table_sql))
+        db.execute(text(create_batch_table_sql))
+        db.commit()
+
+        # Estatísticas gerais dos últimos X dias
+        general_stats_sql = """
+        SELECT
+            COUNT(*) as total_requests,
+            SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful_requests,
+            SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as failed_requests,
+            AVG(processing_time) as avg_processing_time,
+            MAX(processing_time) as max_processing_time,
+            MIN(processing_time) as min_processing_time
+        FROM scraping_usage_stats
+        WHERE created_at >= datetime('now', '-{} days')
+        """.format(days)
+
+        general_stats = db.execute(text(general_stats_sql)).fetchone()
+
+        # Estatísticas por usuário
+        user_stats_sql = """
+        SELECT
+            u.nome_completo,
+            u.email,
+            u.departamento,
+            COUNT(s.id) as total_requests,
+            SUM(CASE WHEN s.success = 1 THEN 1 ELSE 0 END) as successful_requests,
+            AVG(s.processing_time) as avg_processing_time
+        FROM scraping_usage_stats s
+        JOIN tipo_usuarios u ON s.user_id = u.id
+        WHERE s.created_at >= datetime('now', '-{} days')
+        GROUP BY s.user_id, u.nome_completo, u.email, u.departamento
+        ORDER BY total_requests DESC
+        """.format(days)
+
+        user_stats = db.execute(text(user_stats_sql)).fetchall()
+
+        # Estatísticas por dia (últimos 30 dias)
+        daily_stats_sql = """
+        SELECT
+            DATE(created_at) as date,
+            COUNT(*) as total_requests,
+            SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful_requests,
+            AVG(processing_time) as avg_processing_time
+        FROM scraping_usage_stats
+        WHERE created_at >= datetime('now', '-30 days')
+        GROUP BY DATE(created_at)
+        ORDER BY date DESC
+        """
+
+        daily_stats = db.execute(text(daily_stats_sql)).fetchall()
+
+        # Estatísticas de lotes
+        batch_stats_sql = """
+        SELECT
+            batch_name,
+            total_os,
+            success_count,
+            error_count,
+            status,
+            created_at,
+            updated_at
+        FROM scraping_batch_stats
+        WHERE created_at >= datetime('now', '-{} days')
+        ORDER BY created_at DESC
+        LIMIT 20
+        """.format(days)
+
+        batch_stats = db.execute(text(batch_stats_sql)).fetchall()
+
+        # Top OS mais consultadas
+        top_os_sql = """
+        SELECT
+            os_number,
+            COUNT(*) as request_count,
+            SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success_count,
+            AVG(processing_time) as avg_processing_time
+        FROM scraping_usage_stats
+        WHERE created_at >= datetime('now', '-{} days')
+        GROUP BY os_number
+        ORDER BY request_count DESC
+        LIMIT 10
+        """.format(days)
+
+        top_os = db.execute(text(top_os_sql)).fetchall()
+
+        # Converter resultados para dicionários
+        return {
+            "general_stats": {
+                "total_requests": general_stats[0] if general_stats else 0,
+                "successful_requests": general_stats[1] if general_stats else 0,
+                "failed_requests": general_stats[2] if general_stats else 0,
+                "success_rate": round((general_stats[1] / general_stats[0] * 100) if general_stats and general_stats[0] > 0 else 0, 2),
+                "avg_processing_time": round(general_stats[3], 2) if general_stats and general_stats[3] else 0,
+                "max_processing_time": round(general_stats[4], 2) if general_stats and general_stats[4] else 0,
+                "min_processing_time": round(general_stats[5], 2) if general_stats and general_stats[5] else 0
+            },
+            "user_stats": [
+                {
+                    "name": row[0],
+                    "email": row[1],
+                    "department": row[2],
+                    "total_requests": row[3],
+                    "successful_requests": row[4],
+                    "success_rate": round((row[4] / row[3] * 100) if row[3] > 0 else 0, 2),
+                    "avg_processing_time": round(row[5], 2) if row[5] else 0
+                }
+                for row in user_stats
+            ],
+            "daily_stats": [
+                {
+                    "date": row[0],
+                    "total_requests": row[1],
+                    "successful_requests": row[2],
+                    "success_rate": round((row[2] / row[1] * 100) if row[1] > 0 else 0, 2),
+                    "avg_processing_time": round(row[3], 2) if row[3] else 0
+                }
+                for row in daily_stats
+            ],
+            "batch_stats": [
+                {
+                    "batch_name": row[0],
+                    "total_os": row[1],
+                    "success_count": row[2],
+                    "error_count": row[3],
+                    "status": row[4],
+                    "created_at": row[5],
+                    "updated_at": row[6],
+                    "success_rate": round((row[2] / row[1] * 100) if row[1] > 0 else 0, 2)
+                }
+                for row in batch_stats
+            ],
+            "top_os": [
+                {
+                    "os_number": row[0],
+                    "request_count": row[1],
+                    "success_count": row[2],
+                    "success_rate": round((row[2] / row[1] * 100) if row[1] > 0 else 0, 2),
+                    "avg_processing_time": round(row[3], 2) if row[3] else 0
+                }
+                for row in top_os
+            ]
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Erro ao obter estatísticas de scraping: {e}")
+        return {"error": str(e)}
+    finally:
+        if db:
+            db.close()
